@@ -8,8 +8,16 @@ published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 **Status: Phase 1 (core) in progress.** The GTK host runs React Native
 0.87.1 (Hermes, Fabric) and renders `<View>` and `<Text>`. Apps bundle for
 their own `linux` platform: `Platform.OS === 'linux'`, `.linux.js` files,
-and Linux `Platform.constants` (distro, GTK version, Wayland or X11).
-See [docs/building-react-native.md](docs/building-react-native.md).
+and Linux `Platform.constants` (distro, GTK version, Wayland or X11). In
+development the host loads from Metro, with reload, fast refresh, LogBox and
+React Native DevTools; `fetch`, `XMLHttpRequest` and `WebSocket` run on
+libsoup. See [docs/building-react-native.md](docs/building-react-native.md)
+and [docs/dev-loop.md](docs/dev-loop.md).
+
+```sh
+npm run start:hello-world   # terminal 1: Metro
+npm run dev:hello-world     # terminal 2: the app; Ctrl+R reloads, Ctrl+D dev menu
+```
 
 ![Hello World on GTK4 under Wayland](docs/images/hello-world-linux-wayland.png)
 
