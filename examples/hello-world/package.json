@@ -12,5 +12,8 @@
     "@react-native/babel-preset": "0.87.1",
     "@react-native/metro-config": "0.87.1",
     "metro": "^0.87.0"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }
