@@ -1,5 +1,7 @@
 #include "rn_view.h"
 
+#include "rn_text.h"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -17,6 +19,13 @@ struct Extras {
   std::vector<RNBoxShadow> shadows;
   std::vector<RNFilter> filters;
   std::vector<Gradient> gradients;
+  GdkTexture *image = nullptr;
+  float image_scale = 1;
+  RNImageFit image_fit = RN_IMAGE_COVER;
+  bool image_tinted = false;
+  GdkRGBA image_tint{};
+  float image_blur = 0;
+  ~Extras() { g_clear_object(&image); }
 };
 
 }  // namespace
@@ -370,6 +379,66 @@ void push_filter(GtkSnapshot *snapshot, const RNFilter &f) {
   }
 }
 
+// RN's resizeMode, in the padding box `box`.
+void append_image(GtkSnapshot *snapshot, const Extras &x,
+                  const graphene_rect_t &box) {
+  float iw = gdk_texture_get_width(x.image) / x.image_scale;
+  float ih = gdk_texture_get_height(x.image) / x.image_scale;
+  if (iw <= 0 || ih <= 0 || box.size.width <= 0 || box.size.height <= 0) return;
+  float bw = box.size.width, bh = box.size.height;
+  graphene_rect_t dest = box;
+  auto centred = [&](float w, float h) {
+    return GRAPHENE_RECT_INIT(box.origin.x + (bw - w) / 2,
+                              box.origin.y + (bh - h) / 2, w, h);
+  };
+  bool repeat = false;
+  switch (x.image_fit) {
+    case RN_IMAGE_STRETCH:
+      break;
+    case RN_IMAGE_CONTAIN: {
+      float s = std::min(bw / iw, bh / ih);
+      dest = centred(iw * s, ih * s);
+      break;
+    }
+    case RN_IMAGE_COVER: {
+      float s = std::max(bw / iw, bh / ih);
+      dest = centred(iw * s, ih * s);
+      break;
+    }
+    case RN_IMAGE_CENTER: {
+      // Natural size, scaled down (never up) to fit.
+      float s = std::min(1.0f, std::min(bw / iw, bh / ih));
+      dest = centred(iw * s, ih * s);
+      break;
+    }
+    case RN_IMAGE_REPEAT:
+      repeat = true;
+      dest = GRAPHENE_RECT_INIT(box.origin.x, box.origin.y, iw, ih);
+      break;
+    case RN_IMAGE_NONE:
+      dest = GRAPHENE_RECT_INIT(box.origin.x, box.origin.y, iw, ih);
+      break;
+  }
+  if (x.image_blur > 0) gtk_snapshot_push_blur(snapshot, x.image_blur);
+  if (x.image_tinted) {
+    // Every pixel takes the tint's color, keeping its own alpha.
+    const float m[16] = {0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, x.image_tint.alpha};
+    graphene_matrix_t matrix;
+    graphene_matrix_init_from_float(&matrix, m);
+    graphene_vec4_t off;
+    graphene_vec4_init(&off, x.image_tint.red, x.image_tint.green,
+                       x.image_tint.blue, 0);
+    gtk_snapshot_push_color_matrix(snapshot, &matrix, &off);
+  }
+  if (repeat) gtk_snapshot_push_repeat(snapshot, &box, &dest);
+  gtk_snapshot_append_scaled_texture(snapshot, x.image,
+                                     GSK_SCALING_FILTER_LINEAR, &dest);
+  if (repeat) gtk_snapshot_pop(snapshot);
+  if (x.image_tinted) gtk_snapshot_pop(snapshot);
+  if (x.image_blur > 0) gtk_snapshot_pop(snapshot);
+}
+
 }  // namespace
 
 static void rn_view_measure(GtkWidget *widget, GtkOrientation orientation,
@@ -441,6 +510,16 @@ static void rn_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
         append_gradient(snapshot, x->gradients[i], w, h);
       }
     }
+    gtk_snapshot_pop(snapshot);
+  }
+
+  if (x && x->image) {
+    // Inside the border, clipped to the rounded padding box.
+    GskRoundedRect padding = outline;
+    gsk_rounded_rect_shrink(&padding, s.border_widths[0], s.border_widths[1],
+                            s.border_widths[2], s.border_widths[3]);
+    push_clip(snapshot, padding, rounded);
+    append_image(snapshot, *x, padding.bounds);
     gtk_snapshot_pop(snapshot);
   }
 
@@ -540,6 +619,23 @@ void rn_view_set_background_gradients(RNView *self, const RNGradient *gradients,
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
+void rn_view_set_image(RNView *self, GdkTexture *texture, float scale,
+                       RNImageFit fit, const GdkRGBA *tint, float blur_radius) {
+  if (!texture && !self->extras) return;
+  Extras &x = extras(self);
+  g_set_object(&x.image, texture);
+  x.image_scale = scale > 0 ? scale : 1;
+  x.image_fit = fit;
+  x.image_tinted = tint && tint->alpha > 0;
+  if (x.image_tinted) x.image_tint = *tint;
+  x.image_blur = blur_radius;
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+GdkTexture *rn_view_get_image(RNView *self) {
+  return self->extras ? self->extras->image : nullptr;
+}
+
 void rn_view_insert_child(RNView *self, GtkWidget *child, int index) {
   GtkWidget *sibling = nullptr;
   if (index >= 0) {
@@ -572,6 +668,14 @@ static bool contains(GtkWidget *widget, graphene_point_t p) {
   return true;
 }
 
+// React's own widgets; GTK containers in between (a scroll view's
+// scrolled window and viewport) are passed through but never hit.
+static bool is_react_widget(GtkWidget *widget) {
+  return RN_IS_VIEW(widget) || RN_IS_TEXT(widget) ||
+         g_type_is_a(G_OBJECT_TYPE(widget),
+                     g_type_from_name("RNScrollView"));
+}
+
 static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
                        graphene_point_t *local) {
   if (!gtk_widget_get_visible(widget)) return nullptr;
@@ -581,20 +685,24 @@ static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
       !backface_visible(widget)) {
     return nullptr;
   }
+  bool react = is_react_widget(widget);
   bool inside = contains(widget, p);
-  bool clips = RN_IS_VIEW(widget) && RN_VIEW(widget)->style.clip_children;
+  // Scrollers clip their content.
+  bool clips = (RN_IS_VIEW(widget) && RN_VIEW(widget)->style.clip_children) ||
+               GTK_IS_VIEWPORT(widget) || (react && !RN_IS_VIEW(widget) &&
+                                           !RN_IS_TEXT(widget));
   if (clips && !inside) return nullptr;
   if (mode != RN_POINTER_EVENTS_BOX_ONLY) {
     // Topmost first: later siblings paint above earlier ones.
     for (GtkWidget *child = gtk_widget_get_last_child(widget); child;
          child = gtk_widget_get_prev_sibling(child)) {
-      if (GTK_IS_NATIVE(child)) continue;
+      if (GTK_IS_NATIVE(child) || GTK_IS_SCROLLBAR(child)) continue;
       graphene_point_t cp;
       if (!gtk_widget_compute_point(widget, child, &p, &cp)) continue;
       if (GtkWidget *hit = pick(child, cp, local)) return hit;
     }
   }
-  if (mode != RN_POINTER_EVENTS_BOX_NONE && inside) {
+  if (react && mode != RN_POINTER_EVENTS_BOX_NONE && inside) {
     *local = p;
     return widget;
   }

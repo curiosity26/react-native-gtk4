@@ -2,6 +2,7 @@
 // GTK main loop and whose views mount into GTK widgets.
 #pragma once
 
+#include <folly/dynamic.h>
 #include <gtk/gtk.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
@@ -22,6 +23,7 @@ namespace rngtk {
 
 class DevUI;
 class GtkMessageQueueThread;
+class GtkImageLoader;
 class GtkMountingManager;
 class GtkPointerHandler;
 
@@ -55,7 +57,8 @@ class RNGtkHost {
   // Returns false if a release bundle can't be read.
   bool run(const std::string &script, facebook::react::SurfaceId surfaceId,
            const std::string &moduleName, GtkWidget *root, float width,
-           float height);
+           float height,
+           folly::dynamic initialProps = folly::dynamic::object());
 
   // Dev mode: reloads the JS (like `r` in Metro's terminal).
   void reload();
@@ -94,6 +97,7 @@ class RNGtkHost {
   std::string script_;
   facebook::react::SurfaceId surfaceId_{0};
   std::string moduleName_;
+  folly::dynamic initialProps_ = folly::dynamic::object();
   std::shared_ptr<GtkMountingManager> mountingManager_;
   std::shared_ptr<facebook::react::RunLoopObserverManager> runLoopObservers_;
   std::weak_ptr<GtkMessageQueueThread> queue_;
@@ -101,6 +105,8 @@ class RNGtkHost {
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;
+  std::shared_ptr<GtkImageLoader> imageLoader_;
+  std::string bundleURL_;  // file:// URL of a release bundle
   std::unique_ptr<GtkPointerHandler> pointerHandler_;
   std::unique_ptr<GtkPointerHandler> logBoxPointerHandler_;
   GtkWidget *logBoxRoot_{nullptr};

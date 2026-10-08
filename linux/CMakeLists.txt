@@ -208,6 +208,12 @@ list(REMOVE_ITEM rngtk_devsupport_src ${RNGTK_DEV_SERVER_HELPER_SRC})
 list(APPEND rngtk_devsupport_src ${CMAKE_CURRENT_BINARY_DIR}/rngtk/DevServerHelper.cpp)
 set_property(TARGET react_cxx_platform_react_devsupport PROPERTY SOURCES ${rngtk_devsupport_src})
 
+# ReactCommon's cxx ImageManager is a stub; ours (linux/imagemanager) loads
+# through GtkImageLoader and is built into rn-gtk-host instead.
+get_target_property(rngtk_imagemanager_src react_renderer_imagemanager SOURCES)
+list(FILTER rngtk_imagemanager_src EXCLUDE REGEX "platform/cxx/.*ImageManager\\.cpp$")
+set_property(TARGET react_renderer_imagemanager PROPERTY SOURCES ${rngtk_imagemanager_src})
+
 # React Native's own -Werror stays useful for our code, but warnings that a
 # newer toolchain finds in upstream sources should not stop the build.
 function(rngtk_relax_upstream_warnings dir)
@@ -226,7 +232,8 @@ endfunction()
 rngtk_relax_upstream_warnings(${CMAKE_CURRENT_SOURCE_DIR})
 
 # GTK widgets (also used by the Phase 0 spike)
-add_library(rngtk_widgets STATIC widgets/rn_view.cc widgets/rn_text.cc)
+add_library(rngtk_widgets STATIC widgets/rn_view.cc widgets/rn_text.cc
+            widgets/rn_scroll_view.cc)
 target_include_directories(rngtk_widgets PUBLIC widgets)
 target_compile_definitions(rngtk_widgets PUBLIC
   GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_14
@@ -238,6 +245,10 @@ add_executable(rn-gtk-host
   src/GtkMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/GtkPointerHandler.cc
+  src/GtkScrollViews.cc
+  src/GtkImageLoader.cc
+  src/GtkImages.cc
+  imagemanager/ImageManager.cpp
   src/GtkViewProps.cc
   src/PlatformConstantsModule.cc
   src/RNGtkHost.cc
@@ -370,6 +381,12 @@ add_test(NAME hello-world-js-self-test
 add_test(NAME gallery-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE} --module Gallery
                  --width 940 --height 680 --self-test)
+add_test(NAME gallery-lists-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryLists --width 940 --height 680 --self-test)
+add_test(NAME gallery-images-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryImages --width 940 --height 680 --self-test)
 
 # libsoup clients against a running Metro (scripts/test-dev-loop.sh).
 add_executable(rngtk-net-check tests/net_check.cc src/SoupNetworking.cc)

@@ -1,6 +1,7 @@
 #include "GtkPointerHandler.h"
 
 #include "GtkMountingManager.h"
+#include "rn_scroll_view.h"
 #include "rn_text.h"
 #include "rn_view.h"
 
@@ -188,7 +189,9 @@ void GtkPointerHandler::dispatch(const Input &input) {
   bool primary = input.device == Device::Touch || input.button == 1;
 
   // Hover (pointerover/out, pointerenter/leave) follows the mouse.
-  if (input.device == Device::Mouse) updateHover(input, target);
+  if (input.device == Device::Mouse && input.phase != Phase::Scroll) {
+    updateHover(input, target);
+  }
 
   switch (input.phase) {
     case Phase::Down: {
@@ -243,7 +246,37 @@ void GtkPointerHandler::dispatch(const Input &input) {
     }
     case Phase::Leave:
       break;
+    case Phase::Scroll: {
+      // The innermost scroll view under the pointer. Real wheel and
+      // touchpad events go to its GtkScrolledWindow directly (kinetic,
+      // smooth); this is the same scroll, by GTK's wheel step.
+      for (GtkWidget *w = target.widget.get(); w; w = gtk_widget_get_parent(w)) {
+        if (RN_IS_SCROLL_VIEW(w)) {
+          rn_scroll_view_scroll_by_wheel(RN_SCROLL_VIEW(w), input.dx, input.dy);
+          break;
+        }
+        if (w == root_) break;
+      }
+      break;
+    }
   }
+}
+
+void GtkPointerHandler::cancelTouches() {
+  if (touches_.empty()) return;
+  Input input{};
+  input.phase = Phase::Cancel;
+  std::vector<int> ids;
+  for (const auto &[id, t] : touches_) ids.push_back(id);
+  for (int id : ids) {
+    const auto &t = touches_.at(id);
+    input.x = t.x;
+    input.y = t.y;
+    input.timeMs = t.timeMs;
+    dispatchTouch("touchCancel", id, input);
+    touches_.erase(id);
+  }
+  pressTarget_ = Target{};
 }
 
 void GtkPointerHandler::dispatchTouch(const char *type, int id,
