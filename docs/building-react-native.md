@@ -8,7 +8,15 @@ sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-de
 python3 scripts/fetch-rn-deps.py   # RN 0.87.1 source, third-party C++ deps, codegen, Hermes source
 scripts/build-hermes.sh            # libhermesvm + hermesc + headers
 (cd examples/hello-world && npm install && npm run bundle)
+
+# The GTK host (clang is picked by default)
+cmake -S linux -B build/linux -G Ninja
+cmake --build build/linux
+build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js
+build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js --self-test
 ```
+
+`apt` also needs `libgtk-4-dev` (already there if you built the Phase 0 spike).
 
 Everything lands in `third-party/deps/` (git-ignored). Versions are pinned in
 `rn-version.properties`.

@@ -11,11 +11,12 @@ pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.14)
 pkg_check_modules(PANGOCAIRO REQUIRED IMPORTED_TARGET pangocairo)
 find_package(Threads REQUIRED)
 
+# The host widgets live in linux/widgets; the spike benchmarks them.
 add_library(rngtk_spike STATIC
-  src/rn_view.cc
-  src/rn_text.cc
+  ../linux/widgets/rn_view.cc
+  ../linux/widgets/rn_text.cc
   src/harness.cc)
-target_include_directories(rngtk_spike PUBLIC src)
+target_include_directories(rngtk_spike PUBLIC src ../linux/widgets)
 target_compile_options(rngtk_spike PRIVATE -Wall -Wextra)
 # GTK 4.14 API only; newer features must be runtime-checked.
 target_compile_definitions(rngtk_spike PUBLIC

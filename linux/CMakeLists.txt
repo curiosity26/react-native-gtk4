@@ -1,0 +1,329 @@
+# The GTK4 host: React Native's C++ core (ReactCommon + ReactCxxPlatform),
+# Hermes, and GTK widgets that Fabric mounts into.
+#
+# Fetch and build the dependencies first (see docs/building-react-native.md):
+#   python3 scripts/fetch-rn-deps.py && scripts/build-hermes.sh
+#   cmake -S linux -B build/linux -G Ninja \
+#     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+#   cmake --build build/linux
+#
+# The target list follows React Native's Fantom tester
+# (private/react-native-fantom/tester/CMakeLists.txt), minus its test-only
+# modules and with a Pango TextLayoutManager.
+cmake_minimum_required(VERSION 3.22)
+
+if(NOT CMAKE_C_COMPILER AND NOT DEFINED ENV{CC})
+  set(CMAKE_C_COMPILER clang)
+endif()
+if(NOT CMAKE_CXX_COMPILER AND NOT DEFINED ENV{CXX})
+  set(CMAKE_CXX_COMPILER clang++)
+endif()
+if(NOT CMAKE_BUILD_TYPE)
+  # Same as Fantom; matches the Hermes build's debugger setting.
+  set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+project(react_native_gtk4 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -latomic")
+set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -latomic")
+# React Native and folly headers assume <cstdint> arrives transitively, which
+# libstdc++ 13 no longer does; folly also uses APIs newer libstdc++ deprecates.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -Wno-deprecated-declarations")
+
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  message(WARNING "React Native's sources need clang (GCC rejects '#pragma mark' under -Werror)")
+endif()
+
+set(RNGTK_DEPS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/deps"
+    CACHE PATH "Output of scripts/fetch-rn-deps.py and scripts/build-hermes.sh")
+get_filename_component(RNGTK_DEPS_DIR "${RNGTK_DEPS_DIR}" ABSOLUTE)
+set(RN_PACKAGE_DIR ${RNGTK_DEPS_DIR}/react-native/packages/react-native)
+set(FANTOM_TESTER_DIR ${RNGTK_DEPS_DIR}/react-native/private/react-native-fantom/tester)
+
+set(REACT_COMMON_DIR ${RN_PACKAGE_DIR}/ReactCommon)
+set(REACT_CXX_PLATFORM_DIR ${RN_PACKAGE_DIR}/ReactCxxPlatform)
+set(REACT_ANDROID_DIR ${RN_PACKAGE_DIR}/ReactAndroid)
+set(REACT_THIRD_PARTY_NDK_DIR ${RNGTK_DEPS_DIR}/third-party-ndk)
+set(FANTOM_THIRD_PARTY_DIR ${RNGTK_DEPS_DIR}/fantom-third-party)
+set(FANTOM_CODEGEN_DIR ${RNGTK_DEPS_DIR}/codegen)
+
+if(NOT EXISTS ${REACT_COMMON_DIR})
+  message(FATAL_ERROR "React Native sources missing in ${RNGTK_DEPS_DIR}; run scripts/fetch-rn-deps.py")
+endif()
+
+list(APPEND CMAKE_MODULE_PATH "${FANTOM_TESTER_DIR}/cmake/modules/")
+include(Deps)
+
+find_package(PkgConfig REQUIRED)
+# GTK 4.14 is the floor (Ubuntu 24.04 / Linux Mint 22.3).
+pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.14)
+pkg_check_modules(PANGO REQUIRED IMPORTED_TARGET pango>=1.50 pangocairo)
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
+
+# Hermes, built by scripts/build-hermes.sh with the same compiler.
+include_directories(${RNGTK_DEPS_DIR}/hermes-headers)
+find_library(LIB_HERMES hermesvm HINTS ${RNGTK_DEPS_DIR}/hermes-build/lib
+             NO_DEFAULT_PATH REQUIRED)
+add_library(hermes-engine::hermesvm INTERFACE IMPORTED)
+set_target_properties(hermes-engine::hermesvm PROPERTIES
+  INTERFACE_LINK_LIBRARIES ${LIB_HERMES})
+
+# Third-party C++ libraries
+add_subdirectory(${FANTOM_TESTER_DIR}/third-party/boost boost)
+add_react_third_party_ndk_subdir(glog)
+add_react_third_party_ndk_subdir(double-conversion)
+add_react_third_party_ndk_subdir(fast_float)
+add_react_third_party_ndk_subdir(fmt)
+add_fantom_third_party_subdir(folly)
+add_fantom_third_party_subdir(gflags)
+add_fantom_third_party_subdir(nlohmann_json)
+
+add_subdirectory(${FANTOM_CODEGEN_DIR} codegen)
+
+add_library(glog_init INTERFACE)
+
+# ReactCommon
+set(RNGTK_REACT_COMMON_SUBDIRS
+  callinvoker
+  cxxreact
+  devtoolsruntimesettings
+  hermes/executor
+  hermes/inspector-modern
+  jserrorhandler
+  jsi
+  jsiexecutor
+  jsinspector-modern
+  jsinspector-modern/cdp
+  jsinspector-modern/network
+  jsinspector-modern/tracing
+  jsitooling
+  logger
+  oscompat
+  react/bridging
+  react/debug
+  react/featureflags
+  react/nativemodule/core
+  react/nativemodule/defaults
+  react/nativemodule/devtoolsruntimesettings
+  react/nativemodule/dom
+  react/nativemodule/featureflags
+  react/nativemodule/idlecallbacks
+  react/nativemodule/intersectionobserver
+  react/nativemodule/microtasks
+  react/nativemodule/mutationobserver
+  react/nativemodule/viewtransition
+  react/nativemodule/webperformance
+  react/performance/cdpmetrics
+  react/performance/timeline
+  react/renderer/animated
+  react/renderer/animationbackend
+  react/renderer/attributedstring
+  react/renderer/bridging
+  react/renderer/componentregistry
+  react/renderer/componentregistry/native
+  react/renderer/components/image
+  react/renderer/components/legacyviewmanagerinterop
+  react/renderer/components/modal
+  react/renderer/components/root
+  react/renderer/components/scrollview
+  react/renderer/components/text
+  react/renderer/components/view
+  react/renderer/consistency
+  react/renderer/core
+  react/renderer/css
+  react/renderer/debug
+  react/renderer/dom
+  react/renderer/graphics
+  react/renderer/imagemanager
+  react/renderer/leakchecker
+  react/renderer/mapbuffer
+  react/renderer/mounting
+  react/renderer/observers/events
+  react/renderer/observers/intersection
+  react/renderer/observers/mutation
+  react/renderer/runtimescheduler
+  react/renderer/scheduler
+  react/renderer/telemetry
+  react/renderer/uimanager
+  react/renderer/viewtransition
+  react/renderer/uimanager/consistency
+  react/runtime
+  react/runtime/hermes
+  react/timing
+  react/utils
+  reactperflogger
+  runtimeexecutor
+  yoga)
+foreach(dir ${RNGTK_REACT_COMMON_SUBDIRS})
+  add_react_common_subdir(${dir})
+endforeach()
+# Libraries that depend on the JNI yoga target link "yoga".
+add_library(yoga ALIAS yogacore)
+
+# Our Pango text measurement replaces react/renderer/textlayoutmanager.
+add_subdirectory(textlayoutmanager)
+
+# ReactCxxPlatform
+foreach(dir
+    react/coremodules
+    react/devsupport
+    react/http
+    react/io
+    react/logging
+    react/nativemodule
+    react/profiling
+    react/renderer/scheduler
+    react/renderer/uimanager
+    react/runtime
+    react/threading
+    react/utils)
+  add_react_cxx_platform_subdir(${dir})
+endforeach()
+
+# React Native's own -Werror stays useful for our code, but warnings that a
+# newer toolchain finds in upstream sources should not stop the build.
+function(rngtk_relax_upstream_warnings dir)
+  get_property(targets DIRECTORY ${dir} PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(t ${targets})
+    get_target_property(type ${t} TYPE)
+    if(NOT type STREQUAL "INTERFACE_LIBRARY")
+      set_property(TARGET ${t} APPEND PROPERTY COMPILE_OPTIONS -Wno-error)
+    endif()
+  endforeach()
+  get_property(subdirs DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+  foreach(sub ${subdirs})
+    rngtk_relax_upstream_warnings(${sub})
+  endforeach()
+endfunction()
+rngtk_relax_upstream_warnings(${CMAKE_CURRENT_SOURCE_DIR})
+
+# GTK widgets (also used by the Phase 0 spike)
+add_library(rngtk_widgets STATIC widgets/rn_view.cc widgets/rn_text.cc)
+target_include_directories(rngtk_widgets PUBLIC widgets)
+target_compile_definitions(rngtk_widgets PUBLIC
+  GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_14
+  GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_14)
+target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
+
+add_executable(rn-gtk-host
+  src/GtkMessageQueueThread.cc
+  src/GtkMountingManager.cc
+  src/RNGtkHost.cc
+  src/StubNetworking.cc
+  src/main.cc
+  ../spike/src/harness.cc)
+target_include_directories(rn-gtk-host PRIVATE src ../spike/src)
+target_compile_options(rn-gtk-host PRIVATE -Wall -Werror -fexceptions -frtti)
+
+target_link_libraries(rn-gtk-host
+  PRIVATE
+    rngtk_widgets
+    Threads::Threads
+
+    # third-party
+    boost
+    double-conversion
+    fmt
+    folly_runtime
+    gflags
+    glog
+
+    # hermes
+    hermes-engine::hermesvm
+
+    # codegen
+    react_codegen_rncore
+
+    # ReactCommon
+    bridgeless
+    bridgelesshermes
+    devtoolsruntimesettings
+    hermes_executor_common
+    hermes_inspector_modern
+    jserrorhandler
+    jsi
+    jsinspector
+    jsinspector_cdp
+    jsinspector_network
+    jsinspector_tracing
+    jsireact
+    jsitooling
+    logger
+    oscompat
+    react_bridging
+    react_cxxreact
+    react_debug
+    react_featureflags
+    react_nativemodule_core
+    react_nativemodule_defaults
+    react_nativemodule_devtoolsruntimesettings
+    react_nativemodule_dom
+    react_nativemodule_featureflags
+    react_nativemodule_idlecallbacks
+    react_nativemodule_intersectionobserver
+    react_nativemodule_microtasks
+    react_nativemodule_mutationobserver
+    react_nativemodule_viewtransition
+    react_nativemodule_webperformance
+    react_performance_cdpmetrics
+    react_performance_timeline
+    react_renderer_attributedstring
+    react_renderer_componentregistry
+    react_renderer_consistency
+    react_renderer_core
+    react_renderer_css
+    react_renderer_debug
+    react_renderer_dom
+    react_renderer_graphics
+    react_renderer_imagemanager
+    react_renderer_leakchecker
+    react_renderer_mapbuffer
+    react_renderer_mounting
+    react_renderer_observers_events
+    react_renderer_observers_intersection
+    react_renderer_observers_mutation
+    react_renderer_runtimescheduler
+    react_renderer_scheduler
+    react_renderer_telemetry
+    react_renderer_textlayoutmanager
+    react_renderer_uimanager
+    react_renderer_uimanager_consistency
+    react_utils
+    reactperflogger
+    rrc_legacyviewmanagerinterop
+    rrc_image
+    rrc_modal
+    rrc_native
+    rrc_root
+    rrc_scrollview
+    rrc_text
+    rrc_view
+    runtimeexecutor
+    yogacore
+
+    # ReactCxxPlatform
+    react_cxx_platform_react_coremodules
+    react_cxx_platform_react_devsupport
+    react_cxx_platform_react_http
+    react_cxx_platform_react_io
+    react_cxx_platform_react_logging
+    react_cxx_platform_react_profiling
+    react_renderer_animated
+    react_renderer_animationbackend
+    react_cxx_platform_react_renderer_scheduler
+    react_cxx_platform_react_runtime
+    react_cxx_platform_react_threading
+    react_cxx_platform_react_utils
+)
+
+enable_testing()
+set(RNGTK_HELLO_BUNDLE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/build/index.bundle.js)
+add_test(NAME hello-world-js-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE} --self-test)

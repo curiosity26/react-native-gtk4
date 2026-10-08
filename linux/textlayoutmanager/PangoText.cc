@@ -1,0 +1,229 @@
+#include "PangoText.h"
+
+#include <pango/pangocairo.h>
+#include <react/renderer/graphics/Color.h>
+
+#include <algorithm>
+#include <cmath>
+#include <optional>
+#include <string>
+#include <thread>
+
+using namespace facebook::react;
+
+namespace rngtk {
+
+namespace {
+
+PangoContext *g_main_context = nullptr;
+std::thread::id g_main_thread;
+
+struct ThreadPango {
+  PangoFontMap *font_map = pango_cairo_font_map_new();
+  PangoContext *context = pango_font_map_create_context(font_map);
+  ~ThreadPango() {
+    g_object_unref(context);
+    g_object_unref(font_map);
+  }
+};
+
+void insert(PangoAttrList *list, PangoAttribute *attr, guint start,
+            guint end) {
+  attr->start_index = start;
+  attr->end_index = end;
+  pango_attr_list_insert(list, attr);
+}
+
+guint16 channel16(float c) {
+  return static_cast<guint16>(std::lround(std::clamp(c, 0.0f, 1.0f) * 65535));
+}
+
+void insert_color(PangoAttrList *list, const SharedColor &color, bool fg,
+                  guint start, guint end) {
+  if (!color) return;
+  ColorComponents c = colorComponentsFromColor(color);
+  guint16 r = channel16(c.red), g = channel16(c.green), b = channel16(c.blue);
+  insert(list,
+         fg ? pango_attr_foreground_new(r, g, b)
+            : pango_attr_background_new(r, g, b),
+         start, end);
+  guint16 a = channel16(c.alpha);
+  insert(list,
+         fg ? pango_attr_foreground_alpha_new(a)
+            : pango_attr_background_alpha_new(a),
+         start, end);
+}
+
+PangoStyle to_pango(FontStyle style) {
+  switch (style) {
+    case FontStyle::Italic:
+      return PANGO_STYLE_ITALIC;
+    case FontStyle::Oblique:
+      return PANGO_STYLE_OBLIQUE;
+    default:
+      return PANGO_STYLE_NORMAL;
+  }
+}
+
+void apply_fragment(PangoAttrList *list, const TextAttributes &a, guint start,
+                    guint end) {
+  PangoFontDescription *desc = pango_font_description_new();
+  pango_font_description_set_family(
+      desc, a.fontFamily.empty() ? kDefaultFontFamily : a.fontFamily.c_str());
+  float size = std::isnan(a.fontSize) ? 14.0f : a.fontSize;
+  if (!std::isnan(a.fontSizeMultiplier)) size *= a.fontSizeMultiplier;
+  pango_font_description_set_absolute_size(desc, size * PANGO_SCALE);
+  if (a.fontWeight) {
+    pango_font_description_set_weight(
+        desc, static_cast<PangoWeight>(static_cast<int>(*a.fontWeight)));
+  }
+  if (a.fontStyle) pango_font_description_set_style(desc, to_pango(*a.fontStyle));
+  insert(list, pango_attr_font_desc_new(desc), start, end);
+  pango_font_description_free(desc);
+
+  insert_color(list, a.foregroundColor, true, start, end);
+  if (a.backgroundColor && alphaFromColor(a.backgroundColor) > 0) {
+    insert_color(list, a.backgroundColor, false, start, end);
+  }
+  if (!std::isnan(a.letterSpacing)) {
+    insert(list,
+           pango_attr_letter_spacing_new(
+               static_cast<int>(a.letterSpacing * PANGO_SCALE)),
+           start, end);
+  }
+  if (!std::isnan(a.lineHeight) && a.lineHeight > 0) {
+    insert(list,
+           pango_attr_line_height_new_absolute(
+               static_cast<int>(a.lineHeight * PANGO_SCALE)),
+           start, end);
+  }
+  if (a.textDecorationLineType) {
+    auto t = *a.textDecorationLineType;
+    if (t == TextDecorationLineType::Underline ||
+        t == TextDecorationLineType::UnderlineStrikethrough) {
+      insert(list, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE), start,
+             end);
+    }
+    if (t == TextDecorationLineType::Strikethrough ||
+        t == TextDecorationLineType::UnderlineStrikethrough) {
+      insert(list, pango_attr_strikethrough_new(TRUE), start, end);
+    }
+  }
+  if (a.textTransform) {
+    PangoTextTransform t = PANGO_TEXT_TRANSFORM_NONE;
+    switch (*a.textTransform) {
+      case TextTransform::Uppercase:
+        t = PANGO_TEXT_TRANSFORM_UPPERCASE;
+        break;
+      case TextTransform::Lowercase:
+        t = PANGO_TEXT_TRANSFORM_LOWERCASE;
+        break;
+      case TextTransform::Capitalize:
+        t = PANGO_TEXT_TRANSFORM_CAPITALIZE;
+        break;
+      default:
+        break;
+    }
+    insert(list, pango_attr_text_transform_new(t), start, end);
+  }
+}
+
+void apply_alignment(PangoLayout *layout, std::optional<TextAlignment> align) {
+  PangoAlignment a = PANGO_ALIGN_LEFT;
+  bool justify = false;
+  if (align) {
+    switch (*align) {
+      case TextAlignment::Center:
+        a = PANGO_ALIGN_CENTER;
+        break;
+      case TextAlignment::Right:
+      case TextAlignment::End:
+        a = PANGO_ALIGN_RIGHT;
+        break;
+      case TextAlignment::Justified:
+        justify = true;
+        break;
+      default:
+        break;
+    }
+  }
+  pango_layout_set_alignment(layout, a);
+  pango_layout_set_justify(layout, justify);
+}
+
+PangoEllipsizeMode to_pango(EllipsizeMode mode) {
+  switch (mode) {
+    case EllipsizeMode::Head:
+      return PANGO_ELLIPSIZE_START;
+    case EllipsizeMode::Middle:
+      return PANGO_ELLIPSIZE_MIDDLE;
+    default:
+      // Pango only limits the line count when ellipsizing, so Clip ends with
+      // an ellipsis too for now.
+      return PANGO_ELLIPSIZE_END;
+  }
+}
+
+}  // namespace
+
+void set_main_thread_pango_context(PangoContext *context) {
+  g_set_object(&g_main_context, context);
+  g_main_thread = std::this_thread::get_id();
+}
+
+PangoContext *pango_context_for_current_thread() {
+  if (g_main_context && std::this_thread::get_id() == g_main_thread) {
+    return g_main_context;
+  }
+  thread_local ThreadPango pango;
+  return pango.context;
+}
+
+PangoLayout *create_pango_layout(PangoContext *context,
+                                 const AttributedString &string,
+                                 const ParagraphAttributes &paragraph,
+                                 float max_width) {
+  PangoLayout *layout = pango_layout_new(context);
+  PangoAttrList *attrs = pango_attr_list_new();
+  std::string text;
+  std::optional<TextAlignment> alignment;
+
+  for (const auto &fragment : string.getFragments()) {
+    auto start = static_cast<guint>(text.size());
+    text += fragment.string;
+    auto end = static_cast<guint>(text.size());
+    if (fragment.isAttachment()) {
+      // Inline views are not supported yet; take up no space.
+      PangoRectangle empty{0, 0, 0, 0};
+      insert(attrs, pango_attr_shape_new(&empty, &empty), start, end);
+      continue;
+    }
+    apply_fragment(attrs, fragment.textAttributes, start, end);
+    if (!alignment) alignment = fragment.textAttributes.alignment;
+  }
+
+  pango_layout_set_text(layout, text.c_str(), static_cast<int>(text.size()));
+  pango_layout_set_attributes(layout, attrs);
+  pango_attr_list_unref(attrs);
+
+  pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+  apply_alignment(layout, alignment);
+  if (paragraph.maximumNumberOfLines > 0) {
+    pango_layout_set_height(layout, -paragraph.maximumNumberOfLines);
+    pango_layout_set_ellipsize(layout, to_pango(paragraph.ellipsizeMode));
+  }
+  pango_layout_set_width(
+      layout, max_width < 0 || std::isinf(max_width)
+                  ? -1
+                  : static_cast<int>(std::ceil(max_width * PANGO_SCALE)));
+  return layout;
+}
+
+void pango_layout_size_px(PangoLayout *layout, float *width, float *height) {
+  PangoRectangle logical;
+  pango_layout_get_extents(layout, nullptr, &logical);
+  *width = std::ceil(static_cast<float>(logical.width) / PANGO_SCALE);
+  *height = std::ceil(static_cast<float>(logical.height) / PANGO_SCALE);
+}
+
+}  // namespace rngtk
