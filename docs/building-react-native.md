@@ -3,7 +3,8 @@
 Run these on the Ubuntu 24.04 machine you develop on.
 
 ```sh
-sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-dev
+sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-dev \
+  libgtk-4-dev libsoup-3.0-dev
 # Node 24 LTS (Metro 0.87 needs >= 22.13; Ubuntu 24.04's apt nodejs is 18)
 python3 scripts/fetch-rn-deps.py   # RN 0.87.1 source, third-party C++ deps, codegen, Hermes source
 scripts/build-hermes.sh            # libhermesvm + hermesc + headers
@@ -19,7 +20,9 @@ GDK_BACKEND=x11 build/linux/rn-gtk-host --bundle examples/hello-world/build/inde
 npm test                           # unit tests for the Metro config
 ```
 
-`apt` also needs `libgtk-4-dev` (already there if you built the Phase 0 spike).
+`libsoup-3.0-dev` is for networking (`fetch`, `XMLHttpRequest`, `WebSocket`)
+and the Metro dev loop: see [dev-loop.md](dev-loop.md) for running from
+Metro with reload, fast refresh and LogBox.
 
 Everything lands in `third-party/deps/` (git-ignored). Versions are pinned in
 `rn-version.properties`.
@@ -59,6 +62,11 @@ still runs first). For modules inside the `react-native` package only:
 Other packages resolve normally: a library that only ships `.ios.js` and
 `.android.js` files fails to resolve on Linux instead of silently getting
 Android code.
+
+Overrides import React Native's own files as
+`react-native-upstream/<path>`, which the resolver maps into the app's
+`react-native`. (A `react-native/<path>` deep import would work too, but
+React Native's dev Babel preset warns about each one at runtime.)
 
 | Override | Behaves like | Why |
 | --- | --- | --- |
