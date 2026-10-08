@@ -25,6 +25,14 @@ void rn_text_set_layout(RNText *self, PangoLayout *layout);
 
 // The paragraph's text (owned by the widget).
 const char *rn_text_get_text(RNText *self);
+// The layout drawn (owned by the widget), for hit-testing text.
+PangoLayout *rn_text_get_layout(RNText *self);
+
+// Padding + border around the text (RN content insets): the layout is as
+// wide as the frame minus these, and draws offset by top/left.
+void rn_text_set_insets(RNText *self, float top, float right, float bottom,
+                        float left);
+void rn_text_get_insets(RNText *self, float insets[4]);
 
 // Measures text the way Yoga's measure function will: max_width < 0 means
 // unconstrained. Safe to call from any thread.
