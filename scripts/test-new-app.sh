@@ -145,6 +145,14 @@ if start_metro "$app"; then
   stop_metro
 fi
 run_linux "$app" "release-build($app)" --release --build-only
+release=$work/$app/linux/build/Release
+if [[ -s $release/index.bundle.js && -f $release/librngtk_host.so &&
+      -f $release/libhermesvm.so && -f $release/libjsi.so ]] &&
+   readelf -d "$release/$app" | grep -q 'RUNPATH.*\[\$ORIGIN\]$'; then
+  pass "$app: the Release build is self-contained (bundle, libraries, RUNPATH \$ORIGIN)"
+else
+  fail "$app: the Release build is not self-contained"
+fi
 for backend in "${backends[@]}"; do
   smoke "$app" Release "$backend"
 done

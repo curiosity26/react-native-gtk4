@@ -35,8 +35,10 @@ function(rngtk_app target)
       BUILD_RPATH "${ReactNativeGtk_LIBRARY_DIR}")
     return()
   endif()
+  # Only $ORIGIN: not the cache, which CMake would add for the imported
+  # library.
   set_target_properties(${target} PROPERTIES
-    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    BUILD_WITH_INSTALL_RPATH ON INSTALL_RPATH "$ORIGIN")
   set(dir $<TARGET_FILE_DIR:${target}>)
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${ReactNativeGtk_LIBRARIES} ${dir}
