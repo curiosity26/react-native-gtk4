@@ -4,4 +4,4 @@
  * Follows Android: the C++ core's image component and ImageLoader module
  * are shared with Android, and the GTK host implements that interface.
  */
-export {default} from 'react-native/Libraries/Image/Image.android';
+export {default} from 'react-native-upstream/Libraries/Image/Image.android';

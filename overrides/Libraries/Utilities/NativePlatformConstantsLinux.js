@@ -5,9 +5,9 @@
  * @flow strict
  */
 
-import type {TurboModule} from 'react-native/Libraries/TurboModule/RCTExport';
+import type {TurboModule} from 'react-native-upstream/Libraries/TurboModule/RCTExport';
 
-import * as TurboModuleRegistry from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
+import * as TurboModuleRegistry from 'react-native-upstream/Libraries/TurboModule/TurboModuleRegistry';
 
 export type PlatformConstantsLinux = {
   isTesting: boolean,

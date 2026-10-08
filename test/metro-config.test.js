@@ -148,10 +148,12 @@ describe('createLinuxResolver', () => {
 
   test('resolves react-native imports in overrides from the app', () => {
     const from = override('Libraries/Utilities/BackHandler.linux.js');
-    assert.equal(
-      resolve(from, 'react-native/Libraries/Utilities/BackHandler.ios').filePath,
-      path.join(rn, 'Libraries/Utilities/BackHandler.ios.js'),
-    );
+    for (const prefix of ['react-native-upstream', 'react-native']) {
+      assert.equal(
+        resolve(from, `${prefix}/Libraries/Utilities/BackHandler.ios`).filePath,
+        path.join(rn, 'Libraries/Utilities/BackHandler.ios.js'),
+      );
+    }
     assert.equal(resolve(from, 'react-native').filePath, path.join(rn, 'index.js'));
   });
 

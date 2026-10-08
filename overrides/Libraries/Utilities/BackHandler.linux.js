@@ -4,4 +4,4 @@
  * Desktops have no hardware back button: behave like iOS, where listeners
  * are accepted and never called.
  */
-export {default} from 'react-native/Libraries/Utilities/BackHandler.ios';
+export {default} from 'react-native-upstream/Libraries/Utilities/BackHandler.ios';

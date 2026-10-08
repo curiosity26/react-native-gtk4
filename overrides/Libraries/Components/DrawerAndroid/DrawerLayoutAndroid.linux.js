@@ -3,4 +3,4 @@
  *
  * An Android-only component: render the same "unsupported" fallback as iOS.
  */
-export {default} from 'react-native/Libraries/Components/DrawerAndroid/DrawerLayoutAndroid.ios';
+export {default} from 'react-native-upstream/Libraries/Components/DrawerAndroid/DrawerLayoutAndroid.ios';
