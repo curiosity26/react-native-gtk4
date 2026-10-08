@@ -1,0 +1,16 @@
+{
+  "name": "rngtk4-hello-world",
+  "private": true,
+  "scripts": {
+    "bundle": "mkdir -p build && metro build index.js --platform android --dev false --minify false --out build/index.bundle.js"
+  },
+  "dependencies": {
+    "react": "19.2.3",
+    "react-native": "0.87.1"
+  },
+  "devDependencies": {
+    "@react-native/babel-preset": "0.87.1",
+    "@react-native/metro-config": "0.87.1",
+    "metro": "^0.87.0"
+  }
+}
