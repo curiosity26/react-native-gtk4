@@ -101,7 +101,6 @@ run_linux() {
     pass "$app: run-linux $*"
   else
     fail "$app: run-linux $*"
-    return 1
   fi
 }
 

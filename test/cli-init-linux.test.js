@@ -222,7 +222,7 @@ describe('platform config', () => {
   test('react-native.config.js has the shape the CLI validates', () => {
     const config = require('../react-native.config');
     assert.deepEqual(Object.keys(config.platforms), ['linux']);
-    assert.deepEqual(Object.keys(config.platforms.linux).sort(), ['dependencyConfig', 'npmPackageName', 'projectConfig']);
+    assert.deepEqual(Object.keys(config.platforms.linux).sort(), ['dependencyConfig', 'projectConfig']);
     assert.deepEqual(config.commands.map(c => c.name), ['init-linux', 'run-linux']);
     for (const c of config.commands) {
       assert.equal(typeof c.func, 'function');

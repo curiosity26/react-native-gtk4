@@ -29,6 +29,8 @@ class GtkMountingManager;
 class GtkPointerHandler;
 
 struct RNGtkHostOptions {
+  // The app's id, sent to Metro and React Native DevTools.
+  std::string appId = "dev.curiosity26.RNGtk4";
   // Reported to JS as Platform.isTesting (in dev bundles).
   bool isTesting = false;
   // Load from Metro, with reload, fast refresh, LogBox and the dev menu.

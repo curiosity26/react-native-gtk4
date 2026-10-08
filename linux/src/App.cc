@@ -114,20 +114,30 @@ void onAfterPaint(GdkFrameClock *, gpointer data) {
     return;
   }
   auto &mm = run->host->mountingManager();
-  if (mm.mountCount() == 0 || !run->host->isIdle() ||
-      ++run->frames < kFramesAfterMount) {
+  if (mm.mountCount() == 0 && run->host->jsErrorCount() > 0 &&
+      run->host->isIdle()) {
+    fprintf(stderr, "SMOKE FAIL a JS error before the first mount\n");
+    if (run->host->devUI() && !run->host->devUI()->bannerText().empty()) {
+      fprintf(stderr, "dev banner: %s\n",
+              run->host->devUI()->bannerText().c_str());
+    }
+    finish(run, 1);
     return;
   }
-  if (!run->screenshot.empty() &&
-      !saveScreenshot(run->root, run->screenshot.c_str())) {
-    fprintf(stderr, "SMOKE FAIL could not save %s\n", run->screenshot.c_str());
-    finish(run, 1);
+  if (mm.mountCount() == 0 || !run->host->isIdle() ||
+      ++run->frames < kFramesAfterMount) {
     return;
   }
   size_t views = mm.mountedViewCount();
   int errors = run->host->jsErrorCount();
   if (views == 0 || errors > 0) {
     fprintf(stderr, "SMOKE FAIL views %zu, JS errors %d\n", views, errors);
+    finish(run, 1);
+    return;
+  }
+  if (!run->screenshot.empty() &&
+      !saveScreenshot(run->root, run->screenshot.c_str())) {
+    fprintf(stderr, "SMOKE FAIL could not save %s\n", run->screenshot.c_str());
     finish(run, 1);
     return;
   }
@@ -180,6 +190,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
   gtk_window_set_child(GTK_WINDOW(window), overlay);
 
   RNGtkHostOptions hostOptions{
+      .appId = o.appId.empty() ? "dev.curiosity26.RNGtk4.App" : o.appId,
       .isTesting = run->smoke,
       .devMode = run->dev,
       .devServerHost = o.devServerHost,

@@ -1,5 +1,9 @@
 # Building React Native for Linux (GTK4)
 
+This is for working on this repository. Apps don't need any of it:
+`react-native run-linux` does the same build into a shared cache (see
+[getting-started.md](getting-started.md)).
+
 Run these on the Ubuntu 24.04 machine you develop on.
 
 ```sh
@@ -17,8 +21,16 @@ build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js
 build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js --self-test
 GDK_BACKEND=x11 build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js --self-test
 
-npm test                           # unit tests for the Metro config
+npm test                           # unit tests for the Metro config and the CLI
 ```
+
+`cmake --build build/linux` builds two things from the same sources:
+`rn-gtk-host`, the test harness (self-tests, galleries, dev-loop checks),
+and `librngtk_host.so`, the library apps link (`ReactNativeGtk::host`,
+exporting only `rngtk::runApp`). `cmake --install build/linux --prefix DIR`
+installs the library with `libhermesvm.so`, `libjsi.so`, its header and
+`lib/cmake/ReactNativeGtk/ReactNativeGtkConfig.cmake`; run-linux does that
+into its cache with `-DRNGTK_BUILD_HARNESS=OFF`.
 
 `libsoup-3.0-dev` is for networking (`fetch`, `XMLHttpRequest`, `WebSocket`)
 and the Metro dev loop: see [dev-loop.md](dev-loop.md) for running from
