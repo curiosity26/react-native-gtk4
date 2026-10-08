@@ -8,7 +8,7 @@ sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-de
 # Node 24 LTS (Metro 0.87 needs >= 22.13; Ubuntu 24.04's apt nodejs is 18)
 python3 scripts/fetch-rn-deps.py   # RN 0.87.1 source, third-party C++ deps, codegen, Hermes source
 scripts/build-hermes.sh            # libhermesvm + hermesc + headers
-(cd examples/hello-world && npm install && npm run bundle)
+(cd examples/hello-world && npm install && npm run bundle)   # react-native bundle --platform linux --assets-dest build
 
 # The GTK host (clang is picked by default)
 cmake -S linux -B build/linux -G Ninja
@@ -77,7 +77,11 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Image/Image`, `Network/RCTNetworking`, `NativeComponent/BaseViewConfig`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
 | `Alert/RCTAlertManager` | Android | no Linux dialog module yet; Android's dialog-manager shape is the plan |
 | `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
+| `Image/ImageViewNativeComponent` (not platform-split) | Android's view config | Image.android.js sends `defaultSource` as a string and `shouldNotifyLoadEvents`, which iOS's config drops |
 
+An override can also replace a file React Native doesn't split by
+platform; the resolver checks `overrides/` for every react-native module.
+`ImageViewNativeComponent.linux.js` is such a copy, with one line changed.
 `ProgressBarAndroid`, `Settings` and `PlatformColorValueTypesIOS` need no
 override: their platform-less files are already the non-Android/non-iOS
 versions.
