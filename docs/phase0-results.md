@@ -1,11 +1,35 @@
 # Phase 0 results: GTK4 Hello World and widget benchmark
 
-Measured 2026-10-08 in a cloud container: Ubuntu 24.04, GTK 4.14.5, 4 vCPU,
-**no GPU** (Mesa llvmpipe software GL). Treat the frame times as relative,
-not absolute. Real numbers come from running `scripts/bench-matrix.sh` with
-`BACKENDS=native` on a desktop VM.
+Two environments, both Ubuntu 24.04 with GTK 4.14:
 
-## Hello World
+- **Real desktop:** a Parallels VM (arm64) on an Apple M5 Max, GNOME on
+  Wayland, GPU through virgl (OpenGL 4.0, Mesa 25.2.8). These are the
+  numbers to trust.
+- **Cloud container:** 4 vCPU and **no GPU** (Mesa llvmpipe software
+  rendering), running headless on X11 (Xvfb) and Wayland (mutter, Weston).
+  This is what CI uses, so treat its frame times as relative only.
+
+## Real desktop results (Ubuntu 24.04 VM, Wayland, virgl GPU)
+
+`hello-world --self-test` passes every check here too (GskNglRenderer,
+title measured 228px by both paths). GTK picks the `ngl` renderer by
+default on this GPU, so the default and forced-`ngl` runs match; the
+forced-`ngl` run is shown.
+
+| mode | views | moved/frame | mount ms | mount→paint ms | frame p50 ms | frame p95 ms | layout ms | paint ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| rnview | 1000 | 100% | 4 | 10 | 1.4 | 2.6 | 0.2 | 1.2 |
+| rnview | 1000 | 1% | 3 | 9 | 1.0 | 1.4 | 0.2 | 0.7 |
+| rnview | 10000 | 100% | 23 | 45 | 5.6 | 6.3 | 1.2 | 3.2 |
+| rnview | 10000 | 1% | 24 | 45 | 5.1 | 5.6 | 1.9 | 3.2 |
+| fixed | 1000 | 100% | 4 | 8 | 1.8 | 2.5 | 0.4 | 1.2 |
+| fixed | 1000 | 1% | 3 | 7 | 1.2 | 1.6 | 0.4 | 0.8 |
+| fixed | 10000 | 100% | 28 | 51 | 8.4 | 10.6 | 2.7 | 4.5 |
+| fixed | 10000 | 1% | 30 | 55 | 6.7 | 8.5 | 3.1 | 3.8 |
+
+## Cloud results (software rendering)
+
+### Hello World
 
 `hello-world --self-test` passes all 9 checks on X11 (Xvfb), Wayland under
 GNOME's compositor (mutter 46 headless) and Wayland under Weston 13:
@@ -16,7 +40,7 @@ pixel (228px for the title on every backend).
 
 ![Hello World on X11](images/hello-world-x11.png)
 
-## Benchmark
+### Benchmark
 
 `widget-benchmark` mounts N views in rows (every 10th view is a text node),
 animates "moved/frame" of them every frame for 120 frames, then unmounts.
@@ -63,31 +87,36 @@ renderer forced with `GSK_RENDERER=ngl`.
 
 ## What this tells us
 
-1. **Mounting 10,000 native views is cheap.** About 45-50 ms to create and
-   insert, 3-4 ms for GTK to allocate them, roughly 2x faster layout than the
-   `GtkFixed` baseline because our `size_allocate` reads Yoga frames directly
-   instead of measuring children. This confirms the research decision not to
-   build on `GtkFixed`.
-2. **Painting is the cost, and it scales with total view count, not changed
-   views.** Moving 1% of 10k views costs about the same as moving all of them.
-   In this container every frame is a full software redraw (no buffer-age
-   damage on Xvfb or headless compositors). Whether GTK's damage tracking
-   rescues this on a real GPU is the main question for the VM run.
-3. **Renderer choice matters.** With `ngl`, 10k views paint in about 43-50 ms
-   versus about 100 ms on the old `gl` renderer, which handles our per-view
-   rounded clip poorly. `ngl` also beats the `GtkFixed` baseline. Follow-ups:
-   check which renderer GTK picks on real hardware, and draw rounded
-   backgrounds without a clip (for example as a border node) so the old
-   renderer gets a fast path.
-4. **1,000 views is comfortably interactive** even in software (5-15 ms
-   frames on Wayland, 9-17 ms on X11).
-5. **X11 and Wayland behave the same** for layout and paint. One real
+1. **10,000 views fit easily in a 60 fps frame on a real GPU.** On the VM,
+   moving every one of 10,000 views each frame costs about 5.6 ms (p95
+   6.3 ms) against a 16.7 ms budget, and 1,000 views cost about 1.4 ms. This
+   is a virtualized GPU, so bare-metal hardware should do at least as well.
+2. **Our widget beats `GtkFixed`.** At 10k views it lays out about 2x faster
+   (1.2 vs 2.7 ms), paints faster (3.2 vs 4.5 ms), mounts faster (23 vs 28 ms)
+   and has a lower frame p95 (6.3 vs 10.6 ms). That confirms the research
+   decision not to build on `GtkFixed`.
+3. **Mounting is cheap.** 10,000 native views are created and inserted in
+   about 23 ms and first painted 45 ms after the mount starts.
+4. **Paint scales with total view count, not with how many views changed.**
+   Moving 1% of 10k views costs the same paint time as moving all of them
+   (3.2 ms), on the GPU and in software. It is cheap enough not to matter at
+   these sizes. If huge lists ever need it, the fix is to cache unchanged
+   subtrees (for example, render nodes per row), and virtualized lists will
+   keep real view counts well below 10k anyway.
+5. **Renderer:** GTK 4.14 picks `ngl` on a real GPU. The older `gl`
+   renderer only showed up on software rendering in the cloud, where it was
+   about 2x slower on our per-view rounded clips. It is worth avoiding the
+   clip for plain rounded backgrounds later, but it is not a blocker.
+6. **X11 and Wayland behave the same** for layout and paint. One real
    difference found: on Wayland a client-side title bar is part of the
    window's default size, so the RN root view must size the window (no
    `gtk_window_set_default_size`), which is what the spike now does.
+7. **Text measurement off the main thread matches rendering to the pixel**
+   on X11, Wayland and the real desktop, so the planned threaded
+   `TextLayoutManager` design holds for this case.
 
 ## Not covered yet
 
-Running on a real desktop with a GPU (the Ubuntu 24.04 VM), Mint Cinnamon,
-fractional scaling, and the actual React Native runtime (Fantom/ReactCxxPlatform
-build), which is the next step of Phase 0.
+x86_64 hardware, Mint Cinnamon on X11 with a real GPU, fractional scaling,
+and the actual React Native runtime (Fantom/ReactCxxPlatform build) mounting
+into these widgets, which is the next step of Phase 0.
