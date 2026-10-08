@@ -242,7 +242,7 @@ target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 
 add_executable(rn-gtk-host
   src/DevUI.cc
-  src/GtkMessageQueueThread.cc
+  src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/GtkPointerHandler.cc
   src/GtkScrollViews.cc

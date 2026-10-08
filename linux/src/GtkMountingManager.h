@@ -3,9 +3,9 @@
 // Every host component becomes an RNView, except Paragraph, which becomes an
 // RNText. Widgets are positioned at the frames Yoga computed.
 //
-// Transactions usually arrive on the main thread (the JS thread). Those
-// that don't (a reload stops surfaces from ReactHost's reload thread) are
-// queued and applied on the main thread, in order.
+// Transactions arrive on the JS thread (or ReactHost's reload thread); they
+// are queued and applied on the GTK main thread, in order. Commands and
+// native Animated's direct updates hop to the main thread the same way.
 #pragma once
 
 #include <gtk/gtk.h>
@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 
@@ -54,6 +55,16 @@ class GtkMountingManager
   void synchronouslyUpdateViewOnUIThread(
       facebook::react::Tag tag, const folly::dynamic &props) override;
 
+  // ReactHost hands over each new instance's UIManager once the instance
+  // is built; `callback` runs then (on the creating thread).
+  void setUIManager(std::weak_ptr<facebook::react::UIManager> uiManager) noexcept
+      override;
+  void setOnUIManagerChanged(std::function<void()> callback) {
+    onUIManagerChanged_ = std::move(callback);
+  }
+  // No transactions or commands waiting for the main thread.
+  bool isIdle();
+
   GtkWidget *viewForTag(facebook::react::Tag tag) const;
   struct EventTarget {
     facebook::react::Tag tag = 0;
@@ -87,6 +98,7 @@ class GtkMountingManager
   void apply(facebook::react::SurfaceId surfaceId,
              const facebook::react::MountingTransaction &transaction);
   void flushPending();
+  void scheduleFlushLocked();
   void create(const facebook::react::ShadowView &view);
   void update(const facebook::react::ShadowView &oldView,
               const facebook::react::ShadowView &newView);
@@ -147,15 +159,25 @@ class GtkMountingManager
   std::shared_ptr<const facebook::react::ContextContainer> contextContainer_;
   std::unordered_map<facebook::react::Tag, ScrollTracking> scrolls_;
   std::function<void()> onUserScroll_;
+  std::function<void()> onUIManagerChanged_;
+  bool onMainThread() const {
+    return std::this_thread::get_id() == mainThread_;
+  }
+  // Runs `fn` on the main thread after the transactions queued before it.
+  void runOnMainInOrder(std::function<void()> fn);
   std::unordered_map<facebook::react::Tag, ImageTracking> images_;
   std::shared_ptr<class GtkImageLoader> imageLoader_;
   int mountCount_{0};
 
   std::thread::id mainThread_;
   std::mutex pendingMutex_;
-  std::deque<std::pair<facebook::react::SurfaceId,
-                       facebook::react::MountingTransaction>>
-      pending_;
+  // A transaction, or other work that must keep its place after them.
+  struct PendingWork {
+    facebook::react::SurfaceId surfaceId{};
+    std::optional<facebook::react::MountingTransaction> transaction;
+    std::function<void()> work;
+  };
+  std::deque<PendingWork> pending_;
   bool flushScheduled_{false};
 };
 

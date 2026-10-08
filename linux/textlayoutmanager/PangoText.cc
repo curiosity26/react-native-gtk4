@@ -4,9 +4,11 @@
 #include <react/renderer/graphics/Color.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <optional>
 #include <string>
+#include <mutex>
 #include <thread>
 
 using namespace facebook::react;
@@ -16,11 +18,21 @@ namespace rngtk {
 namespace {
 
 PangoContext *g_main_context = nullptr;
-std::thread::id g_main_thread;
+std::atomic<std::thread::id> g_main_thread;
+// The main context's font options and resolution, for the other threads'
+// contexts (the JS thread measures text): measuring and drawing must agree.
+std::mutex g_options_mutex;
+cairo_font_options_t *g_font_options = nullptr;
+double g_resolution = -1;
 
 struct ThreadPango {
   PangoFontMap *font_map = pango_cairo_font_map_new();
   PangoContext *context = pango_font_map_create_context(font_map);
+  ThreadPango() {
+    std::lock_guard<std::mutex> lock(g_options_mutex);
+    if (g_font_options) pango_cairo_context_set_font_options(context, g_font_options);
+    if (g_resolution > 0) pango_cairo_context_set_resolution(context, g_resolution);
+  }
   ~ThreadPango() {
     g_object_unref(context);
     g_object_unref(font_map);
@@ -198,6 +210,12 @@ const char *kClipLinesKey = "rngtk-clip-lines";
 void set_main_thread_pango_context(PangoContext *context) {
   g_set_object(&g_main_context, context);
   g_main_thread = std::this_thread::get_id();
+  std::lock_guard<std::mutex> lock(g_options_mutex);
+  if (g_font_options) cairo_font_options_destroy(g_font_options);
+  const cairo_font_options_t *options =
+      pango_cairo_context_get_font_options(context);
+  g_font_options = options ? cairo_font_options_copy(options) : nullptr;
+  g_resolution = pango_cairo_context_get_resolution(context);
 }
 
 PangoContext *pango_context_for_current_thread() {

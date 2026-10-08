@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <memory>
 #include <string>
 #include <thread>
@@ -22,7 +23,7 @@ class SurfaceDelegate;
 namespace rngtk {
 
 class DevUI;
-class GtkMessageQueueThread;
+class JsMessageQueueThread;
 class GtkImageLoader;
 class GtkMountingManager;
 class GtkPointerHandler;
@@ -100,7 +101,11 @@ class RNGtkHost {
   folly::dynamic initialProps_ = folly::dynamic::object();
   std::shared_ptr<GtkMountingManager> mountingManager_;
   std::shared_ptr<facebook::react::RunLoopObserverManager> runLoopObservers_;
-  std::weak_ptr<GtkMessageQueueThread> queue_;
+  mutable std::mutex queueMutex_;
+  std::weak_ptr<JsMessageQueueThread> queue_;
+  // Guards the event beat against ReactHost re-creating it on reload.
+  std::mutex beatMutex_;
+  bool creatingInstance_{false};
   std::shared_ptr<DevUI> devUI_;
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
@@ -111,7 +116,8 @@ class RNGtkHost {
   std::unique_ptr<GtkPointerHandler> logBoxPointerHandler_;
   GtkWidget *logBoxRoot_{nullptr};
   // Native Animated runs a frame callback while animations are active.
-  std::function<void()> onAnimationRender_;
+  std::mutex animationMutex_;
+  std::shared_ptr<std::function<void()>> onAnimationRender_;
   guint animationTick_{0};
   GSource *observerSource_{nullptr};
   std::atomic<int> jsErrors_{0};
