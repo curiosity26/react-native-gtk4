@@ -3,4 +3,4 @@
  *
  * An Android-only API: warn like iOS does.
  */
-export {default} from 'react-native/Libraries/Components/ToastAndroid/ToastAndroid.ios';
+export {default} from 'react-native-upstream/Libraries/Components/ToastAndroid/ToastAndroid.ios';

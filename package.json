@@ -32,6 +32,9 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "bundle:hello-world": "npm --prefix examples/hello-world run bundle",
+    "start:hello-world": "npm --prefix examples/hello-world start",
+    "dev:hello-world": "scripts/dev-hello-world.sh",
+    "test:dev-loop": "scripts/test-dev-loop.sh",
     "spike:build": "cmake -S spike -B spike/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build spike/build",
     "spike:test:x11": "scripts/run-headless.sh x11 -- ctest --test-dir spike/build --output-on-failure",
     "spike:test:wayland": "scripts/run-headless.sh wayland -- ctest --test-dir spike/build --output-on-failure",

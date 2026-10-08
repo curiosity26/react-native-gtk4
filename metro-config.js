@@ -23,6 +23,7 @@ const PACKAGE_DIR = __dirname;
 const OVERRIDES_DIR = path.join(PACKAGE_DIR, 'overrides');
 const RN_SEGMENT = `${path.sep}node_modules${path.sep}react-native${path.sep}`;
 const SOURCE_EXTS = ['.js', '.jsx', '.ts', '.tsx'];
+const UPSTREAM_PREFIXES = ['react-native-upstream/', 'react-native/'];
 
 function isFile(p) {
   try {
@@ -102,22 +103,26 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     const next = upstream ?? context.resolveRequest;
     if (platform !== PLATFORM) return next(context, moduleName, platform);
 
-    // Overrides import react-native files by name. Resolve those as files
-    // inside the app's react-native (its "exports" map hides src/private),
-    // and other packages from the app: when this package is linked (npm
-    // `file:` dependency) its real path has no node_modules above it.
+    // Overrides import React Native's own files as
+    // 'react-native-upstream/<path>' (a 'react-native/...' deep import would
+    // make RN's dev Babel preset warn in every app). Resolve those as files
+    // inside the app's react-native, since its "exports" map hides
+    // src/private. Resolve other packages from the app: when this package
+    // is linked (npm `file:` dependency) its real path has no node_modules
+    // above it.
     if (
       projectRoot &&
       isInside(context.originModulePath, OVERRIDES_DIR) &&
       !moduleName.startsWith('.') &&
       !path.isAbsolute(moduleName)
     ) {
-      if (knownRnDir && moduleName.startsWith('react-native/')) {
+      const prefix = UPSTREAM_PREFIXES.find(p => moduleName.startsWith(p));
+      if (knownRnDir && prefix) {
         context = {
           ...context,
           originModulePath: path.join(knownRnDir, 'package.json'),
         };
-        moduleName = `./${moduleName.slice('react-native/'.length)}`;
+        moduleName = `./${moduleName.slice(prefix.length)}`;
       } else {
         context = {
           ...context,

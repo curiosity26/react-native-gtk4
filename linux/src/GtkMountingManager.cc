@@ -38,7 +38,8 @@ bool is_paragraph(const ShadowView &view) {
 }  // namespace
 
 GtkMountingManager::GtkMountingManager(OnAfterMount onAfterMount)
-    : onAfterMount_(std::move(onAfterMount)) {}
+    : onAfterMount_(std::move(onAfterMount)),
+      mainThread_(std::this_thread::get_id()) {}
 
 GtkMountingManager::~GtkMountingManager() noexcept {
   for (auto &[tag, widget] : views_) g_object_unref(widget);
@@ -65,12 +66,53 @@ GtkWidget *GtkMountingManager::viewForTag(Tag tag) const {
 
 void GtkMountingManager::executeMount(SurfaceId surfaceId,
                                       MountingTransaction &&transaction) {
+  {
+    std::lock_guard<std::mutex> lock(pendingMutex_);
+    if (std::this_thread::get_id() != mainThread_ || !pending_.empty()) {
+      pending_.emplace_back(surfaceId, std::move(transaction));
+      if (!flushScheduled_) {
+        flushScheduled_ = true;
+        g_idle_add_full(
+            G_PRIORITY_DEFAULT,
+            [](gpointer data) -> gboolean {
+              auto *weak = static_cast<std::weak_ptr<GtkMountingManager> *>(data);
+              if (auto self = weak->lock()) self->flushPending();
+              return G_SOURCE_REMOVE;
+            },
+            new std::weak_ptr<GtkMountingManager>(weak_from_this()),
+            [](gpointer data) {
+              delete static_cast<std::weak_ptr<GtkMountingManager> *>(data);
+            });
+      }
+      return;
+    }
+  }
+  apply(surfaceId, transaction);
+}
+
+void GtkMountingManager::flushPending() {
+  for (;;) {
+    std::unique_lock<std::mutex> lock(pendingMutex_);
+    if (pending_.empty()) {
+      flushScheduled_ = false;
+      return;
+    }
+    auto [surfaceId, transaction] = std::move(pending_.front());
+    pending_.pop_front();
+    lock.unlock();
+    apply(surfaceId, transaction);
+  }
+}
+
+void GtkMountingManager::apply(SurfaceId surfaceId,
+                               const MountingTransaction &transaction) {
   for (const auto &m : transaction.getMutations()) {
     switch (m.type) {
       case ShadowViewMutation::Create:
         create(m.newChildShadowView);
         break;
       case ShadowViewMutation::Delete:
+        if (roots_.count(m.oldChildShadowView.tag)) break;  // ours to keep
         if (auto it = views_.find(m.oldChildShadowView.tag);
             it != views_.end()) {
           g_object_unref(it->second);
