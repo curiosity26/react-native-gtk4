@@ -237,6 +237,8 @@ add_executable(rn-gtk-host
   src/DevUI.cc
   src/GtkMessageQueueThread.cc
   src/GtkMountingManager.cc
+  src/GtkPointerHandler.cc
+  src/GtkViewProps.cc
   src/PlatformConstantsModule.cc
   src/RNGtkHost.cc
   src/SoupNetworking.cc
@@ -365,6 +367,9 @@ set(RNGTK_HELLO_BUNDLE
     ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/build/index.bundle.js)
 add_test(NAME hello-world-js-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE} --self-test)
+add_test(NAME gallery-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE} --module Gallery
+                 --width 940 --height 680 --self-test)
 
 # libsoup clients against a running Metro (scripts/test-dev-loop.sh).
 add_executable(rngtk-net-check tests/net_check.cc src/SoupNetworking.cc)
