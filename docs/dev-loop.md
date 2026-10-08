@@ -78,6 +78,9 @@ reloading from Metro's terminal does nothing.
 
 ## How it fits together
 
+Which thread does what (JS has its own thread; GTK stays on the main one)
+is in [architecture.md](architecture.md).
+
 - `linux/src/SoupNetworking.cc` implements ReactCxxPlatform's `IHttpClient`
   and `IWebSocketClient` on libsoup 3. All soup work runs on one
   `rngtk-network` thread with its own `GMainContext`, never on the GTK main
@@ -88,11 +91,11 @@ reloading from Metro's terminal does nothing.
   (upstream T159303412). `linux/CMakeLists.txt` compiles a copy that asks for
   `platform=linux`, for both the bundle URL and HMR setup. The configure step
   fails loudly if upstream changes that line.
-- JS runs on the GTK main thread. ReactHost reloads on a thread of its own,
-  so `GtkMessageQueueThread::quitSynchronous()` waits until the main thread
-  is between two JS tasks. `GtkMountingManager` queues transactions that
-  arrive off the main thread (stopping surfaces during a reload) and applies
-  them on the main thread, in order. Root widgets survive the reload.
+- JS runs on its own thread (`JsMessageQueueThread`). ReactHost reloads on
+  a thread of its own, which joins the old JS thread and starts a new one.
+  `GtkMountingManager` queues every transaction (they arrive on the JS or
+  reload thread) and applies them on the main thread, in order. Root
+  widgets survive the reload.
 - `linux/src/DevUI.cc` implements `IDevUIDelegate`: the banner, the
   debugger-paused bar and the dev menu button, in the window's `GtkOverlay`.
 
@@ -109,9 +112,10 @@ and the `/message` WebSocket. Then it runs `rn-gtk-host --dev-server
 --self-test` with these checks:
 
 1. the Hello World checks on the bundle from Metro;
-2. a reload through the host (what Ctrl+R calls), then a reload sent by
+2. three reloads through the host (what Ctrl+R calls), then one sent by
    Metro (`POST /reload`, what `r` sends); each re-runs the checks and
-   requires the same number of mounted views (no leaked widgets);
+   requires the same number of mounted views (no leaked widgets) and of
+   process threads (no leaked JS threads);
 3. fast refresh: the script edits App.js's subtitle and the host waits for
    the new text with the same JS instance (no reload);
 4. LogBox: the script makes `App` throw and the host waits for LogBox.
