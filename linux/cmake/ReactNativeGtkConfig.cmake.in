@@ -1,0 +1,54 @@
+# ReactNativeGtk::host: React Native's GTK4 host for apps, built by
+# `react-native run-linux` for React Native @RNGTK_RN_VERSION@.
+#
+#   find_package(ReactNativeGtk REQUIRED)
+#   add_executable(MyApp main.cc)
+#   target_link_libraries(MyApp PRIVATE ReactNativeGtk::host)
+#   rngtk_app(MyApp)   # copies the host libraries next to MyApp
+get_filename_component(_rngtk_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+
+set(ReactNativeGtk_REACT_NATIVE_VERSION "@RNGTK_RN_VERSION@")
+set(ReactNativeGtk_LIBRARIES
+    "${_rngtk_prefix}/lib/librngtk_host.so"
+    "${_rngtk_prefix}/lib/libhermesvm.so"
+    "${_rngtk_prefix}/lib/libjsi.so")
+set(ReactNativeGtk_LIBRARY_DIR "${_rngtk_prefix}/lib")
+
+if(NOT TARGET ReactNativeGtk::host)
+  add_library(ReactNativeGtk::host SHARED IMPORTED)
+  set_target_properties(ReactNativeGtk::host PROPERTIES
+    IMPORTED_LOCATION "${_rngtk_prefix}/lib/librngtk_host.so"
+    IMPORTED_SONAME "librngtk_host.so"
+    INTERFACE_INCLUDE_DIRECTORIES "${_rngtk_prefix}/include"
+    INTERFACE_COMPILE_FEATURES cxx_std_17
+    # Its own dependencies (libhermesvm.so, libjsi.so) sit next to it.
+    INTERFACE_LINK_OPTIONS "-Wl,-rpath-link,${_rngtk_prefix}/lib")
+endif()
+
+# Sets up an app executable. Debug builds run the host from this install
+# (RPATH). Other builds are self-contained: the host libraries are copied
+# next to the executable (debug info stripped) and found through
+# RPATH $ORIGIN.
+function(rngtk_app target)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_target_properties(${target} PROPERTIES
+      BUILD_RPATH "${ReactNativeGtk_LIBRARY_DIR}")
+    return()
+  endif()
+  set_target_properties(${target} PROPERTIES
+    BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  set(dir $<TARGET_FILE_DIR:${target}>)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${ReactNativeGtk_LIBRARIES} ${dir}
+    VERBATIM)
+  if(CMAKE_STRIP)
+    foreach(lib ${ReactNativeGtk_LIBRARIES})
+      get_filename_component(name ${lib} NAME)
+      add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-debug ${dir}/${name}
+        VERBATIM)
+    endforeach()
+  endif()
+endfunction()
+
+unset(_rngtk_prefix)
