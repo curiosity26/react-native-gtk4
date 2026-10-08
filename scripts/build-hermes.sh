@@ -11,7 +11,9 @@ src=$(cd "$deps/hermes" && pwd -P)
 build=$(readlink -f "$deps/hermes-build")
 headers=$deps/hermes-headers
 
+# Same compiler as React Native's core (clang), so the C++ ABI matches.
 cmake -S "$src" -B "$build" -G Ninja --log-level=ERROR -Wno-dev \
+  -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
   -DJSI_DIR="$deps/react-native/packages/react-native/ReactCommon/jsi" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHERMES_ENABLE_DEBUGGER=True \

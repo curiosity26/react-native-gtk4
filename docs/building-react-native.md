@@ -3,7 +3,8 @@
 Run these on the Ubuntu 24.04 machine you develop on.
 
 ```sh
-sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-dev nodejs npm
+sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-dev
+# Node 22.13+ (Metro 0.87 needs it; Ubuntu 24.04's apt nodejs is 18)
 python3 scripts/fetch-rn-deps.py   # RN 0.87.1 source, third-party C++ deps, codegen, Hermes source
 scripts/build-hermes.sh            # libhermesvm + hermesc + headers
 (cd examples/hello-world && npm install && npm run bundle)
