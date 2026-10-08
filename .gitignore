@@ -1,0 +1,4 @@
+node_modules/
+spike/build/
+spike/out/
+*.log
