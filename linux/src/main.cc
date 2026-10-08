@@ -42,6 +42,7 @@
 #include "GtkPointerHandler.h"
 #include "PangoText.h"
 #include "rn_scroll_view.h"
+#include "rn_text_input.h"
 #include "RNGtkHost.h"
 #include "harness.h"
 #include "rn_text.h"
@@ -908,6 +909,196 @@ void add_images_steps() {
       }});
 }
 
+
+// ---------------------------------------------------------------------------
+// GalleryControls checks
+
+bool is_controls() { return opts.module == "GalleryControls"; }
+
+GtkWidget *editor_of(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v && RN_IS_TEXT_INPUT(v) ? rn_text_input_get_editor(RN_TEXT_INPUT(v))
+                                  : nullptr;
+}
+
+std::string input_text(const char *id) {
+  GtkWidget *v = by_id(id);
+  if (!v || !RN_IS_TEXT_INPUT(v)) return "";
+  gchar *t = rn_text_input_get_text(RN_TEXT_INPUT(v));
+  std::string s = t;
+  g_free(t);
+  return s;
+}
+
+int caret(const char *id) {
+  int start = -1, end = -1;
+  if (GtkWidget *v = by_id(id)) rn_text_input_get_selection(RN_TEXT_INPUT(v), &start, &end);
+  return end;
+}
+
+// Typing as GTK does it: the editable's insert at the caret (what an input
+// method's commit and key presses end in).
+void type_into(const char *id, const char *text) {
+  GtkWidget *editor = editor_of(id);
+  if (!editor) return;
+  if (GTK_IS_TEXT_VIEW(editor)) {
+    gtk_text_buffer_insert_interactive_at_cursor(
+        gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor)), text, -1, TRUE);
+    return;
+  }
+  int pos = gtk_editable_get_position(GTK_EDITABLE(editor));
+  gtk_editable_insert_text(GTK_EDITABLE(editor), text, -1, &pos);
+  gtk_editable_set_position(GTK_EDITABLE(editor), pos);
+}
+
+void click(const char *id) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_point_t c = center_of(v);
+  send(rngtk::GtkPointerHandler::Phase::Down, c);
+  send(rngtk::GtkPointerHandler::Phase::Up, c);
+}
+
+// Dark pixels drawn in a view (text ink).
+int ink(const char *id) {
+  GtkWidget *v = by_id(id);
+  GdkTexture *tex = v ? rngtk::render_widget(app.root) : nullptr;
+  if (!tex) return -1;
+  graphene_rect_t b = bounds_in_root(v);
+  int n = 0;
+  for (int y = int(b.origin.y) + 3; y < int(b.origin.y + b.size.height) - 3; y++) {
+    for (int x = int(b.origin.x) + 3; x < int(b.origin.x + b.size.width) - 3; x++) {
+      auto p = px(tex, float(x), float(y));
+      if (p.r < 100 && p.g < 100 && p.b < 100) n++;
+    }
+  }
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return n;
+}
+
+std::vector<uint8_t> region(const char *id) {
+  GtkWidget *v = by_id(id);
+  GdkTexture *tex = v ? rngtk::render_widget(app.root) : nullptr;
+  std::vector<uint8_t> out;
+  if (!tex) return out;
+  graphene_rect_t b = bounds_in_root(v);
+  for (int y = int(b.origin.y); y < int(b.origin.y + b.size.height); y++) {
+    for (int x = int(b.origin.x); x < int(b.origin.x + b.size.width); x++) {
+      auto p = px(tex, float(x), float(y));
+      out.insert(out.end(), {p.r, p.g, p.b});
+    }
+  }
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return out;
+}
+
+void add_controls_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "typing into a controlled TextInput; JS uppercases it back",
+      [] { type_into("upper", "hello"); },
+      [] {
+        return has_text(app.root, "upper: HELLO") && input_text("upper") == "HELLO" &&
+               caret("upper") == 5;
+      }});
+  app.steps.push_back(Step{
+      "typing mid-text: the caret stays after the insertion",
+      [] {
+        gtk_editable_set_position(GTK_EDITABLE(editor_of("upper")), 2);
+        type_into("upper", "x");
+      },
+      [] {
+        return has_text(app.root, "upper: HEXLLO") && input_text("upper") == "HEXLLO" &&
+               caret("upper") == 3;
+      }});
+  app.steps.push_back(Step{
+      "maxLength 5 stops at five characters",
+      [] { type_into("limited", "abcdefgh"); },
+      [] { return input_text("limited") == "abcde" && has_text(app.root, "max: abcde"); }});
+  app.steps.push_back(Step{
+      "secureTextEntry hides the characters", [] {},
+      [] {
+        int secure = ink("secure"), plain = ink("plain");
+        if (secure < 0 || plain < 0) return false;
+        printf("  ink: secure %d px, plain %d px\n", secure, plain);
+        if (!(secure < plain / 2)) check(false, "secure input draws less ink");
+        return true;
+      }});
+  static float multi_before = 0;
+  app.steps.push_back(Step{
+      "multiline grows with its content (onContentSizeChange)",
+      [] {
+        multi_before = rn_widget_get_frame(by_id("multi")).size.height;
+        type_into("multi", "one\ntwo\nthree\nfour");
+      },
+      [] {
+        float h = rn_widget_get_frame(by_id("multi")).size.height;
+        if (h > multi_before + 30 && !has_text(app.root, "content height 0")) {
+          printf("  multiline height %.0f -> %.0f\n", multi_before, h);
+          return true;
+        }
+        return false;
+      }});
+  app.steps.push_back(Step{
+      "Enter submits (onSubmitEditing)",
+      [] {
+        type_into("submit", "done");
+        g_signal_emit_by_name(editor_of("submit"), "activate");
+      },
+      [] { return has_text(app.root, "submitted: done"); }});
+  app.steps.push_back(Step{
+      "focus() command focuses the input (onFocus)", [] { click("focus-btn"); },
+      [] {
+        return has_text(app.root, "focus: yes") && gtk_widget_has_focus(editor_of("focusable"));
+      }});
+  app.steps.push_back(Step{
+      "blur() command (onBlur)", [] { click("blur-btn"); },
+      [] {
+        return has_text(app.root, "focus: no") && !gtk_widget_has_focus(editor_of("focusable"));
+      }});
+  app.steps.push_back(Step{
+      "pressing a TextInput doesn't press its Pressable parent", [] { click("in-pressable"); },
+      [] { return true; }});
+  app.steps.push_back(after_frames("  ...parent presses stay 0", 15,
+                                   [] { return has_text(app.root, "parent presses 0"); }));
+  app.steps.push_back(Step{
+      "Switch toggles (onValueChange)",
+      [] { gtk_widget_activate(by_id("switch")); },
+      [] {
+        return has_text(app.root, "switch: on") &&
+               gtk_switch_get_active(GTK_SWITCH(by_id("switch")));
+      }});
+  app.steps.push_back(Step{
+      "a Switch controlled to off flips back (setValue)",
+      [] { gtk_widget_activate(by_id("locked")); },
+      [] {
+        return has_text(app.root, "locked attempts 1") &&
+               !gtk_switch_get_active(GTK_SWITCH(by_id("locked")));
+      }});
+  static std::vector<uint8_t> spinner_before;
+  app.steps.push_back(Step{
+      "ActivityIndicator animates", [] { spinner_before = region("spinner"); },
+      [] {
+        static int frames = 0;
+        if (++frames < 10) return false;
+        frames = 0;
+        auto now = region("spinner");
+        return !now.empty() && now != spinner_before;
+      }});
+  app.steps.push_back(Step{
+      "a stopped ActivityIndicator hides, and shows when animating",
+      [] {
+        if (gtk_widget_get_visible(by_id("stopped"))) check(false, "stopped spinner hidden");
+        click("toggle-spinner");
+      },
+      [] {
+        GtkWidget *s = by_id("stopped");
+        return s && gtk_widget_get_visible(s) && gtk_spinner_get_spinning(GTK_SPINNER(s));
+      }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -962,6 +1153,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_lists() && app.steps.empty()) {
     add_lists_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
+    add_controls_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_images() && app.steps.empty()) {
     add_images_steps();
     enter(Phase::Steps);
@@ -989,6 +1183,8 @@ void check_app(bool first) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else if (is_images()) {
       verify_images(tex);
+    } else if (is_controls()) {
+      check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
     }

@@ -45,6 +45,15 @@ class TextLayoutManager {
       const TextLayoutContext &layoutContext,
       const LayoutConstraints &layoutConstraints) const;
 
+  /*
+   * Measures each line of the text laid out in `size` (TextInput's
+   * baseline).
+   */
+  LinesMeasurements measureLines(
+      const AttributedStringBox &attributedStringBox,
+      const ParagraphAttributes &paragraphAttributes,
+      const Size &size) const;
+
  protected:
   std::shared_ptr<const ContextContainer> contextContainer_;
   TextMeasureCache textMeasureCache_;

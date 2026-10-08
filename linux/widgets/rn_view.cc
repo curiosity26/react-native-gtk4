@@ -668,12 +668,14 @@ static bool contains(GtkWidget *widget, graphene_point_t p) {
   return true;
 }
 
-// React's own widgets; GTK containers in between (a scroll view's
-// scrolled window and viewport) are passed through but never hit.
+// Widgets mounted for React views (they carry a tag; RNView/RNText also
+// count, for the spike). GTK widgets in between or inside (a scroll
+// view's scrolled window, a text input's GtkText) are passed through but
+// never hit themselves.
 static bool is_react_widget(GtkWidget *widget) {
+  static GQuark tag = g_quark_from_static_string("rn-tag");
   return RN_IS_VIEW(widget) || RN_IS_TEXT(widget) ||
-         g_type_is_a(G_OBJECT_TYPE(widget),
-                     g_type_from_name("RNScrollView"));
+         g_object_get_qdata(G_OBJECT(widget), tag) != nullptr;
 }
 
 static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
@@ -688,6 +690,7 @@ static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
   bool react = is_react_widget(widget);
   bool inside = contains(widget, p);
   // Scrollers clip their content.
+  // Scroll views (and every other mounted non-RNView control) clip.
   bool clips = (RN_IS_VIEW(widget) && RN_VIEW(widget)->style.clip_children) ||
                GTK_IS_VIEWPORT(widget) || (react && !RN_IS_VIEW(widget) &&
                                            !RN_IS_TEXT(widget));
