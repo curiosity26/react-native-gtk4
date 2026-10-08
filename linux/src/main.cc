@@ -61,10 +61,8 @@ GtkWidget *find_nth(GtkWidget *widget, GType type, int *n) {
 }
 
 graphene_rect_t bounds_in_root(GtkWidget *widget) {
-  graphene_rect_t b = GRAPHENE_RECT_INIT(0, 0, 0, 0);
-  if (!gtk_widget_compute_bounds(widget, app.root, &b)) {
-    return GRAPHENE_RECT_INIT(0, 0, 0, 0);
-  }
+  graphene_rect_t b{};
+  if (!gtk_widget_compute_bounds(widget, app.root, &b)) return {};
   return b;
 }
 

@@ -77,7 +77,7 @@ RNGtkHost::RNGtkHost() {
 
   reactHost_ = std::make_unique<ReactHost>(
       config, mountingManager_, runLoopObservers_, std::move(contextContainer),
-      [this](jsi::Runtime &, const JsErrorHandler::ProcessedError &error) {
+      [this](facebook::jsi::Runtime &, const JsErrorHandler::ProcessedError &error) {
         jsErrors_++;
         LOG(ERROR) << "JS error: " << error;
       },
