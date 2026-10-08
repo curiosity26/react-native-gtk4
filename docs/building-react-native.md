@@ -1,4 +1,4 @@
-# Building React Native's C++ core for the GTK host (work in progress)
+# Building React Native for Linux (GTK4)
 
 Run these on the Ubuntu 24.04 machine you develop on.
 
@@ -14,12 +14,93 @@ cmake -S linux -B build/linux -G Ninja
 cmake --build build/linux
 build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js
 build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js --self-test
+GDK_BACKEND=x11 build/linux/rn-gtk-host --bundle examples/hello-world/build/index.bundle.js --self-test
+
+npm test                           # unit tests for the Metro config
 ```
 
 `apt` also needs `libgtk-4-dev` (already there if you built the Phase 0 spike).
 
 Everything lands in `third-party/deps/` (git-ignored). Versions are pinned in
 `rn-version.properties`.
+
+## The `linux` platform
+
+Bundles target their own Metro platform, `linux`, the out-of-tree way that
+react-native-windows and react-native-macos use: React Native's package is
+not patched or forked.
+
+```js
+// metro.config.js
+const {getDefaultConfig} = require('@curiosity26/react-native-gtk4/metro-config');
+module.exports = getDefaultConfig(__dirname);
+
+// or, to add Linux to a config you already build:
+const {withLinux} = require('@curiosity26/react-native-gtk4/metro-config');
+module.exports = withLinux(config);
+```
+
+```sh
+metro build index.js --platform linux --out build/index.bundle.js
+```
+
+(`examples/hello-world` requires `../../metro-config` directly, since it
+lives in this repo.)
+
+`withLinux` adds `linux` to `resolver.platforms`, so your own `Foo.linux.js`
+files win over `Foo.js`, and wraps `resolver.resolveRequest` (an existing one
+still runs first). For modules inside the `react-native` package only:
+
+- If `overrides/<path in react-native>.linux.js` exists in this package, it
+  is used. There is one for each platform-split file in React Native 0.87.1.
+- Otherwise, a module React Native splits into `.ios.js` and `.android.js`
+  resolves to the Android variant (the C++ core is shared with Android).
+
+Other packages resolve normally: a library that only ships `.ios.js` and
+`.android.js` files fails to resolve on Linux instead of silently getting
+Android code.
+
+| Override | Behaves like | Why |
+| --- | --- | --- |
+| `Utilities/Platform` | own | `OS: 'linux'`; `select()` checks `linux`, `native`, `default`; constants from the host |
+| `Utilities/BackHandler` | iOS | desktops have no hardware back button |
+| `Components/DrawerAndroid/DrawerLayoutAndroid`, `Components/ToastAndroid/ToastAndroid` | iOS | Android-only APIs: the "unsupported" fallbacks |
+| `Components/AccessibilityInfo/legacySendAccessibilityEvent` | iOS | pre-Fabric only; the iOS one tolerates a missing module |
+| `Image/Image`, `Network/RCTNetworking`, `NativeComponent/BaseViewConfig`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
+| `Alert/RCTAlertManager` | Android | no Linux dialog module yet; Android's dialog-manager shape is the plan |
+| `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
+
+`ProgressBarAndroid`, `Settings` and `PlatformColorValueTypesIOS` need no
+override: their platform-less files are already the non-Android/non-iOS
+versions.
+
+### Platform.constants
+
+The host registers its own `PlatformConstants` TurboModule
+(`linux/src/PlatformConstantsModule.cc`) ahead of ReactCxxPlatform's, which
+returns placeholder Android values.
+
+| Key | Value |
+| --- | --- |
+| `Version` | `VERSION_ID` from `/etc/os-release` (`"24.04"`, `"41"`, `"22.3"`); the kernel release on distros without one. A string, as on iOS. |
+| `Release` | `PRETTY_NAME` from `/etc/os-release` |
+| `osId`, `osVersion` | `ID` and `VERSION_ID` from `/etc/os-release` |
+| `kernelRelease` | `uname -r` |
+| `gtkVersion` | the running GTK, e.g. `"4.14.5"` |
+| `windowSystem` | `'wayland'`, `'x11'` or `'unknown'`, from the `GdkDisplay` |
+| `desktop` | `XDG_CURRENT_DESKTOP` (`"ubuntu:GNOME"`, `"X-Cinnamon"`), or `''` |
+| `reactNativeVersion` | from `rn-version.properties`, compiled in |
+| `isTesting` | true under `rn-gtk-host --self-test` |
+| `isDisableAnimations` | true when GTK's `gtk-enable-animations` setting is off |
+
+`isTV` and `isVision` are always false.
+
+### TypeScript
+
+React Native declares `PlatformOSType` and its Platform types as type
+aliases, which cannot be extended from outside, so TypeScript does not know
+`'linux'` yet. `@curiosity26/react-native-gtk4` exports `LinuxPlatform` and
+`PlatformConstantsLinux` for narrowing by hand (see `types/index.d.ts`).
 
 ## Findings so far
 
