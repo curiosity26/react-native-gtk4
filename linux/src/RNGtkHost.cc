@@ -2,6 +2,7 @@
 
 #include "DevUI.h"
 #include "GtkMessageQueueThread.h"
+#include "GtkImageLoader.h"
 #include "GtkMountingManager.h"
 #include "GtkPointerHandler.h"
 #include "PangoText.h"
@@ -11,7 +12,9 @@
 #include <glog/logging.h>
 #include <jsi/jsi.h>
 #include <logger/react_native_log.h>
+#include <react/devsupport/SourceCodeModule.h>
 #include <react/http/IHttpClient.h>
+#include <react/io/ImageLoaderModule.h>
 #include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/http/IWebSocketClient.h>
 #include <react/renderer/core/LayoutConstraints.h>
@@ -143,6 +146,11 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   contextContainer->insert(HttpClientFactoryKey, getHttpClientFactory());
   contextContainer->insert(WebSocketClientFactoryKey,
                            getWebSocketClientFactory());
+  // Images: ImageManager finds the loader here; the mounting manager uses
+  // it for defaultSource; the ImageLoader module for getSize/prefetch.
+  imageLoader_ = std::make_shared<GtkImageLoader>(getHttpClientFactory());
+  contextContainer->insert(GtkImageLoader::kContextKey, imageLoader_);
+  mountingManager_->setImageLoader(imageLoader_);
 
   ReactInstanceConfig config{
       .appId = "dev.curiosity26.RNGtk4",
@@ -164,6 +172,21 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         if (name == PlatformConstantsModule::kModuleName) {
           return std::make_shared<PlatformConstantsModule>(jsInvoker,
                                                            constants);
+        }
+        return nullptr;
+      },
+      [this](const std::string &name,
+             const std::shared_ptr<CallInvoker> &jsInvoker)
+          -> std::shared_ptr<TurboModule> {
+        if (name == ImageLoaderModule::kModuleName) {
+          return std::make_shared<ImageLoaderModule>(
+              jsInvoker, std::weak_ptr<IImageLoader>(imageLoader_));
+        }
+        // Release bundles: the bundle's file:// URL, so require()d images
+        // resolve to the assets/ folder next to it. (Dev mode keeps
+        // ReactHost's SourceCode module, with Metro's URL.)
+        if (name == SourceCodeModule::kModuleName && !options_.devMode) {
+          return std::make_shared<SourceCodeModule>(jsInvoker, bundleURL_);
         }
         return nullptr;
       },
@@ -264,7 +287,8 @@ RNGtkHost::~RNGtkHost() {
 
 bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
                     const std::string &moduleName, GtkWidget *root,
-                    float width, float height) {
+                    float width, float height, folly::dynamic initialProps) {
+  initialProps_ = std::move(initialProps);
   width_ = width;
   height_ = height;
   // Measure text with the same font options the widgets draw with.
@@ -275,6 +299,10 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
   rn_widget_set_frame(root, 0, 0, width, height);
   mountingManager_->registerSurface(surfaceId, root);
   pointerHandler_ = std::make_unique<GtkPointerHandler>(*mountingManager_, root);
+  mountingManager_->setOnUserScroll([this] {
+    if (pointerHandler_) pointerHandler_->cancelTouches();
+    if (logBoxPointerHandler_) logBoxPointerHandler_->cancelTouches();
+  });
   if (logBox_) {
     rn_widget_set_frame(mountingManager_->viewForTag(kLogBoxSurfaceId), 0, 0,
                         width, height);
@@ -284,6 +312,11 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
   surfaceId_ = surfaceId;
   moduleName_ = moduleName;
   if (!options_.devMode) {
+    gchar *absolute = g_canonicalize_filename(script.c_str(), nullptr);
+    gchar *url = g_filename_to_uri(absolute, nullptr, nullptr);
+    bundleURL_ = url ? url : "";
+    g_free(url);
+    g_free(absolute);
     if (!reactHost_->loadScript(script, script)) return false;
     loaded_ = true;
     startAppSurface();
@@ -294,7 +327,7 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
 }
 
 void RNGtkHost::startAppSurface() {
-  reactHost_->startSurface(surfaceId_, moduleName_, folly::dynamic::object(),
+  reactHost_->startSurface(surfaceId_, moduleName_, initialProps_,
                            fixedSize(width_, height_),
                            LayoutContext{.pointScaleFactor = 1.0f});
 }

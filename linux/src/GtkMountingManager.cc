@@ -2,6 +2,7 @@
 
 #include "GtkViewProps.h"
 #include "PangoText.h"
+#include "rn_scroll_view.h"
 #include "rn_text.h"
 #include "rn_view.h"
 
@@ -74,6 +75,8 @@ void GtkMountingManager::unregisterSurface(SurfaceId surfaceId) {
 }
 
 void GtkMountingManager::forget(Tag tag) {
+  forgetScrollView(tag);
+  forgetImage(tag);
   shadowViews_.erase(tag);
   if (auto it = views_.find(tag); it != views_.end()) {
     g_object_set_qdata(G_OBJECT(it->second), tag_quark(), nullptr);
@@ -179,7 +182,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         forget(m.oldChildShadowView.tag);
         break;
       case ShadowViewMutation::Insert: {
-        GtkWidget *parent = viewForTag(m.parentTag);
+        GtkWidget *parent = containerFor(viewForTag(m.parentTag));
         GtkWidget *child = viewForTag(m.newChildShadowView.tag);
         if (!parent || !child || !RN_IS_VIEW(parent)) {
           LOG(ERROR) << "Insert: can't mount " << m.newChildShadowView.tag
@@ -191,7 +194,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         break;
       }
       case ShadowViewMutation::Remove: {
-        GtkWidget *parent = viewForTag(m.parentTag);
+        GtkWidget *parent = containerFor(viewForTag(m.parentTag));
         GtkWidget *child = viewForTag(m.oldChildShadowView.tag);
         if (parent && child && gtk_widget_get_parent(child) == parent) {
           rn_view_remove_child(RN_VIEW(parent), child);
@@ -210,9 +213,13 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
 }
 
 void GtkMountingManager::create(const ShadowView &view) {
-  GtkWidget *widget = is_paragraph(view) ? rn_text_new("") : rn_view_new();
+  bool scroll = std::strcmp(view.componentName, "ScrollView") == 0;
+  GtkWidget *widget = is_paragraph(view) ? rn_text_new("")
+                      : scroll           ? rn_scroll_view_new()
+                                         : rn_view_new();
   views_[view.tag] = GTK_WIDGET(g_object_ref_sink(widget));
   g_object_set_qdata(G_OBJECT(widget), tag_quark(), GINT_TO_POINTER(view.tag));
+  if (scroll) connectScrollView(widget, view.tag);
   update(ShadowView{}, view);
 }
 
@@ -227,11 +234,19 @@ void GtkMountingManager::update(const ShadowView &oldView,
   }
   applyLayout(widget, newView);
   if (RN_IS_TEXT(widget)) applyParagraph(widget, newView);
+  if (RN_IS_SCROLL_VIEW(widget)) updateScrollView(widget, oldView, newView);
+  if (std::strcmp(newView.componentName, ImageComponentName) == 0) {
+    updateImage(widget, oldView, newView);
+  }
 }
 
 void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
   if (auto props = std::dynamic_pointer_cast<const ViewProps>(view.props)) {
     apply_view_props(widget, *props, view.layoutMetrics);
+    if (RN_IS_SCROLL_VIEW(widget)) {
+      apply_view_style(rn_scroll_view_get_background(RN_SCROLL_VIEW(widget)),
+                       *props, view.layoutMetrics);
+    }
   }
 }
 
@@ -292,7 +307,12 @@ void GtkMountingManager::applyParagraph(GtkWidget *widget,
 
 void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
                                          const std::string &commandName,
-                                         const folly::dynamic & /*args*/) {
+                                         const folly::dynamic &args) {
+  GtkWidget *widget = viewForTag(shadowView.tag);
+  if (widget && RN_IS_SCROLL_VIEW(widget) &&
+      scrollCommand(widget, commandName, args)) {
+    return;
+  }
   LOG(WARNING) << "Unsupported command " << commandName << " for "
                << shadowView.componentName;
 }

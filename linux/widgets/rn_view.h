@@ -90,6 +90,16 @@ typedef struct {
   guint n_stops;
 } RNGradient;
 
+// RN Image resizeMode.
+typedef enum {
+  RN_IMAGE_COVER,
+  RN_IMAGE_CONTAIN,
+  RN_IMAGE_STRETCH,
+  RN_IMAGE_CENTER,
+  RN_IMAGE_REPEAT,
+  RN_IMAGE_NONE,  // natural size at the top-left
+} RNImageFit;
+
 typedef enum {
   RN_POINTER_EVENTS_AUTO,
   RN_POINTER_EVENTS_NONE,
@@ -105,6 +115,14 @@ void rn_view_set_box_shadows(RNView *self, const RNBoxShadow *shadows, guint n);
 void rn_view_set_filters(RNView *self, const RNFilter *filters, guint n);
 void rn_view_set_background_gradients(RNView *self, const RNGradient *gradients,
                                       guint n);
+
+// An image drawn inside the view's padding box (above the background,
+// clipped to the rounded corners). `scale` is the image's pixels per point
+// (2 for @2x assets). tint: NULL or a color all opaque pixels take. NULL
+// texture clears.
+void rn_view_set_image(RNView *self, GdkTexture *texture, float scale,
+                       RNImageFit fit, const GdkRGBA *tint, float blur_radius);
+GdkTexture *rn_view_get_image(RNView *self);
 
 // Inserts child at index (RN mount instruction "Insert"); -1 appends.
 void rn_view_insert_child(RNView *self, GtkWidget *child, int index);
