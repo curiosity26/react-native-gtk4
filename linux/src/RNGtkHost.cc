@@ -197,7 +197,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   mountingManager_->setImageLoader(imageLoader_);
 
   ReactInstanceConfig config{
-      .appId = "dev.curiosity26.RNGtk4",
+      .appId = options_.appId,
       .deviceName = "GTK4",
   };
   config.enableDevMode = options_.devMode;

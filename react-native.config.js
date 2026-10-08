@@ -8,8 +8,11 @@ const {projectConfig, dependencyConfig} = require('./lib/cli/config');
 
 module.exports = {
   platforms: {
+    // No npmPackageName: with one, the CLI's Metro config resolves
+    // 'react-native' to that package on this platform (react-native-windows
+    // is a fork of React Native's JS). Linux uses React Native's own JS,
+    // plus metro-config's overrides.
     linux: {
-      npmPackageName: '@curiosity26/react-native-gtk4',
       projectConfig,
       dependencyConfig,
     },
