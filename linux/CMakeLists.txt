@@ -63,6 +63,8 @@ find_package(PkgConfig REQUIRED)
 # GTK 4.14 is the floor (Ubuntu 24.04 / Linux Mint 22.3).
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.14)
 pkg_check_modules(PANGO REQUIRED IMPORTED_TARGET pango>=1.50 pangocairo)
+# HTTP and WebSocket for fetch, XMLHttpRequest, WebSocket and Metro.
+pkg_check_modules(SOUP REQUIRED IMPORTED_TARGET libsoup-3.0>=3.0)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -186,6 +188,26 @@ foreach(dir
   add_react_cxx_platform_subdir(${dir})
 endforeach()
 
+# DevServerHelper asks Metro for platform=android (bundle URL and HMR setup;
+# upstream T159303412). Build a copy that asks for platform=linux instead.
+set(RNGTK_DEV_SERVER_HELPER_SRC
+    ${REACT_CXX_PLATFORM_DIR}/react/devsupport/DevServerHelper.cpp)
+file(READ ${RNGTK_DEV_SERVER_HELPER_SRC} rngtk_dsh)
+string(REPLACE "DEFAULT_PLATFORM = \"android\"" "DEFAULT_PLATFORM = \"linux\""
+       rngtk_dsh_linux "${rngtk_dsh}")
+if(rngtk_dsh_linux STREQUAL rngtk_dsh)
+  message(FATAL_ERROR "DevServerHelper.cpp changed upstream: no DEFAULT_PLATFORM = \"android\"")
+endif()
+string(REPLACE "#include \"DevServerHelper.h\"" "#include <react/devsupport/DevServerHelper.h>"
+       rngtk_dsh_linux "${rngtk_dsh_linux}")
+file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rngtk/DevServerHelper.cpp
+     CONTENT "${rngtk_dsh_linux}" @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RNGTK_DEV_SERVER_HELPER_SRC})
+get_target_property(rngtk_devsupport_src react_cxx_platform_react_devsupport SOURCES)
+list(REMOVE_ITEM rngtk_devsupport_src ${RNGTK_DEV_SERVER_HELPER_SRC})
+list(APPEND rngtk_devsupport_src ${CMAKE_CURRENT_BINARY_DIR}/rngtk/DevServerHelper.cpp)
+set_property(TARGET react_cxx_platform_react_devsupport PROPERTY SOURCES ${rngtk_devsupport_src})
+
 # React Native's own -Werror stays useful for our code, but warnings that a
 # newer toolchain finds in upstream sources should not stop the build.
 function(rngtk_relax_upstream_warnings dir)
@@ -212,11 +234,12 @@ target_compile_definitions(rngtk_widgets PUBLIC
 target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 
 add_executable(rn-gtk-host
+  src/DevUI.cc
   src/GtkMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/PlatformConstantsModule.cc
   src/RNGtkHost.cc
-  src/StubNetworking.cc
+  src/SoupNetworking.cc
   src/main.cc
   ../spike/src/harness.cc)
 target_include_directories(rn-gtk-host PRIVATE src ../spike/src)
@@ -238,6 +261,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 target_link_libraries(rn-gtk-host
   PRIVATE
     rngtk_widgets
+    PkgConfig::SOUP
     Threads::Threads
 
     # third-party
@@ -341,3 +365,9 @@ set(RNGTK_HELLO_BUNDLE
     ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/build/index.bundle.js)
 add_test(NAME hello-world-js-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE} --self-test)
+
+# libsoup clients against a running Metro (scripts/test-dev-loop.sh).
+add_executable(rngtk-net-check tests/net_check.cc src/SoupNetworking.cc)
+target_compile_options(rngtk-net-check PRIVATE -Wall -Werror -fexceptions -frtti)
+target_link_libraries(rngtk-net-check PRIVATE
+  PkgConfig::SOUP folly_runtime glog react_cxx_platform_react_http)
