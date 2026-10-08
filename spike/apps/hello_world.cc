@@ -40,9 +40,11 @@ GtkWidget *build_tree() {
   rn_widget_set_frame(card, kCardX, kCardY, kCardW, kCardH);
   RNViewStyle card_style{};
   card_style.background = kCardBg;
-  card_style.border_radius = 16;
-  card_style.border_width = 2;
-  card_style.border_color = kCardBorder;
+  for (int i = 0; i < 4; i++) {
+    graphene_size_init(&card_style.radii[i], 16, 16);
+    card_style.border_widths[i] = 2;
+    card_style.border_colors[i] = kCardBorder;
+  }
   card_style.clip_children = TRUE;
   rn_view_set_style(RN_VIEW(card), &card_style);
   rn_view_insert_child(RN_VIEW(root), card, -1);

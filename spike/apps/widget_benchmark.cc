@@ -115,7 +115,7 @@ void mount() {
         RNViewStyle s{};
         float hue = (float)i / opts.count;
         s.background = GdkRGBA{0.2f + 0.6f * hue, 0.5f, 0.8f - 0.6f * hue, 1};
-        s.border_radius = size * 0.2f;
+        for (auto &r : s.radii) graphene_size_init(&r, size * 0.2f, size * 0.2f);
         rn_view_set_style(RN_VIEW(leaf), &s);
       }
       if (opts.fixed) {
