@@ -11,6 +11,8 @@
 #include <gtk/gtk.h>
 #include <react/renderer/componentregistry/ComponentDescriptorRegistry.h>
 #include <react/renderer/core/EventEmitter.h>
+#include <react/renderer/imagemanager/ImageResponseObserverCoordinator.h>
+#include <react/renderer/imagemanager/primitives.h>
 #include <react/renderer/uimanager/IMountingManager.h>
 #include <react/utils/ContextContainer.h>
 
@@ -66,6 +68,18 @@ class GtkMountingManager
   bool isSelectableText(facebook::react::Tag tag) const;
   // The mounted view with this nativeID, for tests.
   GtkWidget *viewForNativeId(const std::string &nativeId) const;
+
+  // Called when the user scrolls a scroll view: like a native scroller
+  // taking over a gesture, in-flight touches are cancelled.
+  void setOnUserScroll(std::function<void()> callback) {
+    onUserScroll_ = std::move(callback);
+  }
+  // Loads Image's defaultSource (and backs ImageManager).
+  void setImageLoader(std::shared_ptr<class GtkImageLoader> loader) {
+    imageLoader_ = std::move(loader);
+  }
+  // How many onScroll events each scroll view sent (tests).
+  int scrollEventCount(facebook::react::Tag tag) const;
   size_t mountedViewCount() const { return views_.size(); }
   int mountCount() const { return mountCount_; }
 
@@ -77,6 +91,44 @@ class GtkMountingManager
   void update(const facebook::react::ShadowView &oldView,
               const facebook::react::ShadowView &newView);
   void applyProps(GtkWidget *widget, const facebook::react::ShadowView &view);
+
+  // ScrollView (GtkScrollViews.cc)
+  struct ScrollTracking {
+    gint64 lastEventUs = 0;
+    guint trailingEvent = 0;
+    gint64 lastStateUs = 0;
+    guint trailingState = 0;
+    bool initialOffsetApplied = false;
+    int events = 0;
+  };
+  void connectScrollView(GtkWidget *widget, facebook::react::Tag tag);
+  void updateScrollView(GtkWidget *widget,
+                        const facebook::react::ShadowView &oldView,
+                        const facebook::react::ShadowView &newView);
+  void onScrollOffsetChanged(facebook::react::Tag tag, bool user);
+  void emitScrollEvent(facebook::react::Tag tag, const std::string &type);
+  void updateScrollState(facebook::react::Tag tag);
+  bool scrollCommand(GtkWidget *widget, const std::string &name,
+                     const folly::dynamic &args);
+  void forgetScrollView(facebook::react::Tag tag);
+  static GtkWidget *containerFor(GtkWidget *parent);
+
+  // Image (GtkImages.cc)
+  class ImageObserver;
+  struct ImageTracking {
+    std::shared_ptr<const facebook::react::ImageResponseObserverCoordinator>
+        coordinator;
+    std::shared_ptr<ImageObserver> observer;
+    bool loaded = false;
+  };
+  void updateImage(GtkWidget *widget,
+                   const facebook::react::ShadowView &oldView,
+                   const facebook::react::ShadowView &newView);
+  void imageLoaded(facebook::react::Tag tag, GdkTexture *texture);
+  void imageFailed(facebook::react::Tag tag,
+                   const facebook::react::ImageErrorInfo &error);
+  void applyImage(facebook::react::Tag tag, GdkTexture *texture);
+  void forgetImage(facebook::react::Tag tag);
   void forget(facebook::react::Tag tag);
   void applyLayout(GtkWidget *widget, const facebook::react::ShadowView &view);
   void applyParagraph(GtkWidget *widget,
@@ -93,6 +145,10 @@ class GtkMountingManager
   // native Animated's direct updates.
   std::weak_ptr<const facebook::react::ComponentDescriptorRegistry> registry_;
   std::shared_ptr<const facebook::react::ContextContainer> contextContainer_;
+  std::unordered_map<facebook::react::Tag, ScrollTracking> scrolls_;
+  std::function<void()> onUserScroll_;
+  std::unordered_map<facebook::react::Tag, ImageTracking> images_;
+  std::shared_ptr<class GtkImageLoader> imageLoader_;
   int mountCount_{0};
 
   std::thread::id mainThread_;

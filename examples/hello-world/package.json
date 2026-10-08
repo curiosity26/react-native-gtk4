@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
-    "bundle": "mkdir -p build && metro build index.js --platform linux --dev false --minify false --out build/index.bundle.js"
+    "bundle": "react-native bundle --entry-file index.js --platform linux --dev false --minify false --bundle-output build/index.bundle.js --assets-dest build"
   },
   "dependencies": {
     "react": "19.2.3",

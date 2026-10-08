@@ -20,6 +20,8 @@
 //   --dismiss-logbox       then click LogBox's Dismiss button and wait for
 //                          LogBox to close
 #include <glog/logging.h>
+#include <folly/json.h>
+#include <libsoup/soup.h>
 #include <react/featureflags/ReactNativeFeatureFlags.h>
 #include <react/featureflags/ReactNativeFeatureFlagsDynamicProvider.h>
 
@@ -35,6 +37,7 @@
 #include "GtkMountingManager.h"
 #include "GtkPointerHandler.h"
 #include "PangoText.h"
+#include "rn_scroll_view.h"
 #include "RNGtkHost.h"
 #include "harness.h"
 #include "rn_text.h"
@@ -49,6 +52,7 @@ constexpr int kFramesAfterMount = 2;
 
 struct Options {
   std::string bundle;
+  std::string initial_props;  // JSON
   bool dev = false;
   std::string dev_host = "localhost";
   uint32_t dev_port = 8081;
@@ -563,6 +567,312 @@ void add_gallery_input_steps() {
       [] { return near_color(pixel_at_center("pressable"), 0x00, 0x7A, 0xFF, 12); }});
 }
 
+
+// ---------------------------------------------------------------------------
+// GalleryLists and GalleryImages checks
+
+bool is_lists() { return opts.module == "GalleryLists"; }
+bool is_images() { return opts.module == "GalleryImages"; }
+
+RNScrollView *scroll_by_id(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v && RN_IS_SCROLL_VIEW(v) ? RN_SCROLL_VIEW(v) : nullptr;
+}
+
+double offset_of(const char *id, bool horizontal = false) {
+  double x = 0, y = 0;
+  if (auto *s = scroll_by_id(id)) rn_scroll_view_get_offset(s, &x, &y);
+  return horizontal ? x : y;
+}
+
+void wheel(const char *id, double dx, double dy) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  rngtk::GtkPointerHandler::Input input{};
+  graphene_point_t c = center_of(v);
+  input.phase = rngtk::GtkPointerHandler::Phase::Scroll;
+  input.x = c.x;
+  input.y = c.y;
+  input.dx = dx;
+  input.dy = dy;
+  app.host->pointerHandler()->dispatch(input);
+}
+
+// Waits `frames` painted frames, then checks `pred`.
+Step after_frames(std::string name, int frames, std::function<bool()> pred) {
+  auto counter = std::make_shared<int>(0);
+  return Step{std::move(name), [counter] { *counter = 0; },
+              [counter, frames, pred] {
+                if (++*counter < frames) return false;
+                if (!pred()) {
+                  check(false, "(condition above)");
+                }
+                return true;
+              }};
+}
+
+// Frame intervals while the 10k FlatList scrolls continuously.
+struct ScrollTiming {
+  std::vector<double> frames;
+  gint64 last = 0;
+  size_t maxViews = 0;
+} timing;
+
+void add_lists_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  auto &mm = app.host->mountingManager();
+
+  app.steps.push_back(Step{
+      "wheel scroll moves the ScrollView and onScroll reaches JS",
+      [] { wheel("vscroll", 0, 3); },
+      [&mm] {
+        GtkWidget *v = by_id("vscroll");
+        int tag = v ? mm.targetForView(v).tag : 0;
+        double y = offset_of("vscroll");
+        return y > 0 && mm.scrollEventCount(tag) > 0 &&
+               has_text(app.root, "offset " + std::to_string(int(std::lround(y))));
+      }});
+  app.steps.push_back(Step{
+      "scrollTo command (ref.scrollTo({y: 200}))",
+      [] {
+        GtkWidget *b = by_id("scroll-to-200");
+        if (!b) return;
+        send(Phase::Down, center_of(b));
+        send(Phase::Up, center_of(b));
+      },
+      [] {
+        return std::abs(offset_of("vscroll") - 200) < 0.5 &&
+               has_text(app.root, "offset 200");
+      }});
+  app.steps.push_back(Step{
+      "a wheel scroll back to the top",
+      [] { wheel("vscroll", 0, -30); },
+      [] { return offset_of("vscroll") == 0 && has_text(app.root, "offset 0"); }});
+  // Hit-testing through the scroll offset: scroll 15px, press the row
+  // where it is now drawn.
+  app.steps.push_back(Step{
+      "press inside a scrolled ScrollView hits the scrolled row",
+      [] {
+        rn_scroll_view_scroll_to(scroll_by_id("vscroll"), 0, 15, FALSE);
+        GtkWidget *b = by_id("scroll-press");
+        if (!b) return;
+        graphene_rect_t r = bounds_in_root(b);
+        graphene_point_t p{r.origin.x + 20, r.origin.y + r.size.height - 8};
+        send(Phase::Down, p);
+        send(Phase::Up, p);
+      },
+      [] { return has_text(app.root, "scroll press 1"); }});
+  app.steps.push_back(Step{
+      "scrolling during a press cancels it (touchCancel)",
+      [] {
+        GtkWidget *b = by_id("scroll-press");
+        if (!b) return;
+        graphene_rect_t r = bounds_in_root(b);
+        graphene_point_t p{r.origin.x + 20, r.origin.y + r.size.height - 8};
+        send(Phase::Down, p);
+        wheel("vscroll", 0, 1);
+        send(Phase::Up, p);
+      },
+      [] { return true; }});
+  app.steps.push_back(after_frames(
+      "  ...and onPress didn't fire", 20,
+      [] { return has_text(app.root, "scroll press 1"); }));
+  app.steps.push_back(Step{
+      "horizontal ScrollView scrolls sideways",
+      [] { wheel("hscroll", 0, 2); },
+      [] {
+        return offset_of("hscroll", true) > 0 && offset_of("hscroll") == 0; }});
+
+  // FlatList windowing.
+  static size_t views_at_start = 0;
+  app.steps.push_back(Step{
+      "FlatList scrollToIndex(5000) renders that window",
+      [&mm] {
+        views_at_start = mm.mountedViewCount();
+        GtkWidget *b = by_id("list-index");
+        if (!b) return;
+        send(Phase::Down, center_of(b));
+        send(Phase::Up, center_of(b));
+      },
+      [] {
+        return has_text(app.root, "item 5000") &&
+               std::abs(offset_of("flatlist") - 5000 * 30) < 1;
+      }});
+  app.steps.push_back(Step{
+      "FlatList scrollToEnd reaches item 9999 and onEndReached",
+      [] {
+        GtkWidget *b = by_id("list-end");
+        if (!b) return;
+        send(Phase::Down, center_of(b));
+        send(Phase::Up, center_of(b));
+      },
+      [] {
+        return has_text(app.root, "item 9999") &&
+               !has_text(app.root, "end reached 0");
+      }});
+  app.steps.push_back(after_frames(
+      "FlatList keeps the mounted view count bounded (windowing)", 10, [&mm] {
+        printf("  mounted views: %zu at start, %zu at the end of 10k rows\n",
+               views_at_start, mm.mountedViewCount());
+        return !has_text(app.root, "item 0 ") &&
+               mm.mountedViewCount() < views_at_start + 400;
+      }));
+
+  // Sticky section headers follow the native-driver Animated.event.
+  app.steps.push_back(Step{
+      "SectionList sticky header stays at the top",
+      [] { rn_scroll_view_scroll_to(scroll_by_id("sections"), 0, 120, FALSE); },
+      [] {
+        GtkWidget *list = by_id("sections");
+        GtkWidget *header = list ? find_text(list, "section A") : nullptr;
+        if (!header) return false;
+        graphene_rect_t l = bounds_in_root(list), h = bounds_in_root(header);
+        // The header's text sits a few px into the 28px header.
+        return h.origin.y >= l.origin.y - 0.5 && h.origin.y < l.origin.y + 20;
+      }});
+
+  // Frame times while the 10k list scrolls: a wheel step every frame, fast
+  // (a whole notch, ~58 px) and moderate (a quarter notch, ~15 px).
+  for (double notch : {1.0, 0.25}) {
+    app.steps.push_back(Step{
+        notch == 1.0 ? "FlatList (10k rows) scroll timing, 1 notch/frame"
+                     : "FlatList (10k rows) scroll timing, 1/4 notch/frame",
+        [] {
+          rn_scroll_view_scroll_to(scroll_by_id("flatlist"), 0, 0, FALSE);
+          timing = ScrollTiming{};
+        },
+        [&mm, notch] {
+          GdkFrameClock *clock = gtk_widget_get_frame_clock(app.root);
+          gint64 now = gdk_frame_clock_get_frame_time(clock);
+          if (timing.last) timing.frames.push_back((now - timing.last) / 1000.0);
+          timing.last = now;
+          timing.maxViews = std::max(timing.maxViews, mm.mountedViewCount());
+          if (timing.frames.size() < 240) {
+            wheel("flatlist", 0, notch);
+            return false;
+          }
+                    auto stats = rngtk::summarize(timing.frames);
+          printf("  scrolled %.0f px in %zu frames (%.0f px/frame): frame p50 "
+                 "%.1f ms, p95 %.1f ms, max mounted views %zu\n",
+                 offset_of("flatlist"), timing.frames.size(),
+                 offset_of("flatlist") / timing.frames.size(), stats.p50,
+                 stats.p95, timing.maxViews);
+          return true;
+        }});
+  }
+}
+
+// The http images for GalleryImages: green.png and a 404.
+std::string start_image_server() {
+  static SoupServer *server = soup_server_new(nullptr, nullptr);
+  static GBytes *png = [] {
+    GdkPixbuf *pb = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, 40, 30);
+    gdk_pixbuf_fill(pb, 0x00C800FF);
+    gchar *buf = nullptr;
+    gsize len = 0;
+    gdk_pixbuf_save_to_buffer(pb, &buf, &len, "png", nullptr, nullptr);
+    g_object_unref(pb);
+    return g_bytes_new_take(buf, len);
+  }();
+  soup_server_add_handler(
+      server, nullptr,
+      [](SoupServer *, SoupServerMessage *msg, const char *path, GHashTable *,
+         gpointer) {
+        if (g_strcmp0(path, "/green.png") == 0) {
+          soup_server_message_set_status(msg, 200, nullptr);
+          soup_server_message_set_response(
+              msg, "image/png", SOUP_MEMORY_COPY,
+              static_cast<const char *>(g_bytes_get_data(png, nullptr)),
+              g_bytes_get_size(png));
+        } else {
+          soup_server_message_set_status(msg, 404, nullptr);
+        }
+      },
+      nullptr, nullptr);
+  GError *error = nullptr;
+  if (!soup_server_listen_local(server, 0, SOUP_SERVER_LISTEN_IPV4_ONLY,
+                                &error)) {
+    fprintf(stderr, "image server: %s\n", error->message);
+    g_clear_error(&error);
+    return "";
+  }
+  GSList *uris = soup_server_get_uris(server);
+  gchar *uri = g_uri_to_string(static_cast<GUri *>(uris->data));
+  std::string base = uri;
+  g_free(uri);
+  g_slist_free_full(uris, (GDestroyNotify)g_uri_unref);
+  if (!base.empty() && base.back() == '/') base.pop_back();
+  return base;
+}
+
+void verify_images(GdkTexture *tex) {
+  check(app.host->jsErrorCount() == 0, "no JS errors");
+  if (!tex) return;
+  // Pixel (x, y) inside the image view `id`.
+  auto at = [&](const char *id, float x, float y) {
+    GtkWidget *v = by_id(id);
+    if (!v) return rngtk::Rgba8{};
+    graphene_rect_t b = bounds_in_root(v);
+    return px(tex, b.origin.x + x, b.origin.y + y);
+  };
+  auto red = [](rngtk::Rgba8 p) { return near_color(p, 255, 0, 0, 30); };
+  auto blue = [](rngtk::Rgba8 p) { return near_color(p, 0, 0, 255, 30); };
+  auto white = [](rngtk::Rgba8 p) { return near_color(p, 255, 255, 255, 20); };
+  // halves.png is 100x50: 25px red, then blue; frames are 160x100.
+  check(red(at("mode-stretch", 20, 50)) && blue(at("mode-stretch", 60, 50)) &&
+            red(at("mode-stretch", 5, 3)),
+        "resizeMode stretch fills the frame (red until x=40)");
+  check(white(at("mode-contain", 80, 3)) && red(at("mode-contain", 20, 50)) &&
+            blue(at("mode-contain", 60, 50)),
+        "resizeMode contain letterboxes (scaled 1.6x, white above)");
+  check(red(at("mode-cover", 15, 50)) && blue(at("mode-cover", 35, 50)) &&
+            red(at("mode-cover", 15, 2)),
+        "resizeMode cover fills and crops (scaled 2x, red until x=30)");
+  check(white(at("mode-center", 10, 50)) && red(at("mode-center", 40, 50)) &&
+            blue(at("mode-center", 70, 50)),
+        "resizeMode center keeps the natural size, centred");
+  check(red(at("mode-repeat", 5, 5)) && white(at("mode-repeat", 20, 5)) &&
+            red(at("mode-repeat", 35, 5)),
+        "resizeMode repeat tiles the 30x30 image");
+  check(near_color(at("tint", 20, 50), 0x34, 0xC7, 0x59, 12) &&
+            near_color(at("tint", 120, 50), 0x34, 0xC7, 0x59, 12),
+        "tintColor recolors the image");
+  check(near_color(at("rounded", 2, 2), 0xF5, 0xF5, 0xF7, 12) &&
+            blue(at("rounded", 80, 50)),
+        "borderRadius clips the image");
+  check(near_color(at("data", 80, 50), 0, 200, 0, 12), "data: URI image");
+  check(near_color(at("http", 80, 50), 0, 200, 0, 12), "http image (libsoup)");
+}
+
+void add_images_steps() {
+  app.steps.push_back(Step{
+      "onLoad reports the asset's size", [] {},
+      [] { return has_text(app.root, "asset loaded 100x50"); }});
+  app.steps.push_back(Step{
+      "http image: onLoadStart, onLoad (40x30), onLoadEnd", [] {},
+      [] {
+        return has_text(app.root, "http loaded 40x30") &&
+               has_text(app.root, "start,load,end");
+      }});
+  app.steps.push_back(Step{
+      "404 image fires onError", [] {},
+      [] { return has_text(app.root, "error HTTP 404"); }});
+  app.steps.push_back(Step{
+      "defaultSource shows while (and since) the image failed", [] {},
+      [] {
+        GtkWidget *v = by_id("missing");
+        if (!v) return false;
+        GdkTexture *tex = rngtk::render_widget(app.root);
+        if (!tex) return false;
+        graphene_rect_t b = bounds_in_root(v);
+        bool red = near_color(px(tex, b.origin.x + 5, b.origin.y + 5), 255, 0, 0, 30);
+        pixels.tex = nullptr;
+        g_object_unref(tex);
+        return red;
+      }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -612,6 +922,12 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_gallery() && app.steps.empty()) {
     add_gallery_input_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_lists() && app.steps.empty()) {
+    add_lists_steps();
+    enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_images() && app.steps.empty()) {
+    add_images_steps();
+    enter(Phase::Steps);
   } else if (done < Phase::ExpectText && !opts.expect_text.empty()) {
     app.instances_before = app.host->instanceCount();
     enter(Phase::ExpectText);
@@ -632,6 +948,10 @@ void check_app(bool first) {
   if (opts.self_test) {
     if (is_gallery()) {
       verify_gallery(tex);
+    } else if (is_lists()) {
+      check(app.host->jsErrorCount() == 0, "no JS errors");
+    } else if (is_images()) {
+      verify_images(tex);
     } else {
       verify_hello_world(tex);
     }
@@ -639,7 +959,22 @@ void check_app(bool first) {
   g_clear_object(&tex);
 }
 
-gboolean on_tick(GtkWidget *, GdkFrameClock *, gpointer) {
+// The self-test runs after each frame is painted: widgets are allocated
+// then (animated scrollbars queue allocations every frame, so a tick
+// callback could see a half-laid-out tree).
+void on_after_paint(GdkFrameClock *, gpointer);
+
+gboolean on_tick(GtkWidget *, GdkFrameClock *clock, gpointer) {
+  // Keeps frames coming; the work happens in on_after_paint.
+  static bool connected = false;
+  if (!connected) {
+    connected = true;
+    g_signal_connect(clock, "after-paint", G_CALLBACK(on_after_paint), nullptr);
+  }
+  return app.phase == Phase::Done ? G_SOURCE_REMOVE : G_SOURCE_CONTINUE;
+}
+
+void on_after_paint(GdkFrameClock *, gpointer) {
   auto &mm = app.host->mountingManager();
   switch (app.phase) {
     case Phase::Initial:
@@ -735,9 +1070,8 @@ gboolean on_tick(GtkWidget *, GdkFrameClock *, gpointer) {
       break;
     }
     case Phase::Done:
-      return G_SOURCE_REMOVE;
+      break;
   }
-  return G_SOURCE_CONTINUE;
 }
 
 gboolean on_timeout(gpointer) {
@@ -833,8 +1167,19 @@ void activate(GtkApplication *gtk_app, gpointer) {
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) add_dev_controls(window);
+  folly::dynamic props = folly::dynamic::object();
+  if (!opts.initial_props.empty()) {
+    try {
+      props = folly::parseJson(opts.initial_props);
+    } catch (const std::exception &e) {
+      fprintf(stderr, "--initial-props: %s\n", e.what());
+    }
+  }
+  // GalleryImages' self-test serves its http images itself.
+  if (opts.self_test && is_images()) props["imageServer"] = start_image_server();
   if (!app.host->run(opts.dev ? opts.entry : opts.bundle, kSurfaceId,
-                     opts.module, app.root, opts.width, opts.height)) {
+                     opts.module, app.root, opts.width, opts.height,
+                     std::move(props))) {
     fprintf(stderr, "could not load %s\n", opts.bundle.c_str());
     app.exit_code = 1;
     g_application_quit(G_APPLICATION(gtk_app));
@@ -864,7 +1209,8 @@ int usage() {
           "usage: rn-gtk-host --bundle FILE [options]\n"
           "       rn-gtk-host --dev-server [HOST:PORT] [--entry index]\n"
           "                   [--no-inspector] [options]\n"
-          "options: [--module NAME] [--width N] [--height N] [--self-test]\n"
+          "options: [--module NAME] [--initial-props JSON] [--width N]\n"
+          "         [--height N] [--self-test]\n"
           "         [--screenshot PNG] [--timeout MS] [--test-reload]\n"
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
@@ -888,6 +1234,7 @@ int main(int argc, char **argv) {
     else if (arg("--screenshot")) opts.screenshot = argv[++i];
     else if (arg("--timeout")) opts.timeout_ms = atoi(argv[++i]);
     else if (arg("--entry")) opts.entry = argv[++i];
+    else if (arg("--initial-props")) opts.initial_props = argv[++i];
     else if (arg("--expect-text")) opts.expect_text = argv[++i];
     else if (arg("--logbox-screenshot")) opts.logbox_screenshot = argv[++i];
     else if (!strcmp(argv[i], "--self-test")) opts.self_test = true;

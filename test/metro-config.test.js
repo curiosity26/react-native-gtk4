@@ -217,7 +217,7 @@ describe('withLinux', () => {
   });
 });
 
-test('every override replaces a platform-split react-native file', () => {
+test('every override replaces a react-native file', () => {
   const rnDir = path.join(
     __dirname,
     '..',
@@ -234,8 +234,10 @@ test('every override replaces a platform-split react-native file', () => {
   for (const f of overrides) {
     const base = path.join(rnDir, f.replace(/\.linux\.js$/, ''));
     assert.ok(
-      fs.existsSync(`${base}.android.js`) || fs.existsSync(`${base}.ios.js`),
-      `${f} has no .ios.js/.android.js counterpart in react-native`,
+      fs.existsSync(`${base}.android.js`) ||
+        fs.existsSync(`${base}.ios.js`) ||
+        fs.existsSync(`${base}.js`),
+      `${f} replaces nothing in react-native`,
     );
   }
 });

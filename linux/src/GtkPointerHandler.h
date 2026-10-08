@@ -25,7 +25,9 @@ class GtkMountingManager;
 
 class GtkPointerHandler {
  public:
-  enum class Phase { Down, Move, Up, Cancel, Leave };
+  // Scroll: a wheel turn of (dx, dy) notches over the scroll view under the
+  // pointer.
+  enum class Phase { Down, Move, Up, Cancel, Leave, Scroll };
   enum class Device { Mouse, Touch };
 
   struct Input {
@@ -36,6 +38,7 @@ class GtkPointerHandler {
     int button = 1;        // 1 primary, 2 middle, 3 secondary
     GdkModifierType modifiers = GdkModifierType(0);
     uint32_t timeMs = 0;   // event time, for velocity in JS
+    double dx = 0, dy = 0; // Scroll
   };
 
   // Listens to input on `root` (an RNView registered as a surface root).
@@ -49,6 +52,9 @@ class GtkPointerHandler {
   // Self-tests drive dispatch() alone: the desktop's real pointer may sit
   // over the window and would move the hover state under them.
   void setRealInputEnabled(bool enabled) { realInput_ = enabled; }
+  // Ends every touch in progress with touchCancel (a scroll view took over
+  // the gesture), so presses under it don't fire.
+  void cancelTouches();
 
  private:
   struct Target {

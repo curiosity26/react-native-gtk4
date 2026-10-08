@@ -271,7 +271,12 @@ void apply_view_props(GtkWidget *widget, const ViewProps &props,
     rn_widget_set_transform(widget, &matrix);
   }
 
-  if (!RN_IS_VIEW(widget)) return;
+  if (RN_IS_VIEW(widget)) apply_view_style(widget, props, layout);
+}
+
+void apply_view_style(GtkWidget *widget, const ViewProps &props,
+                      const LayoutMetrics &layout) {
+  const auto &size = layout.frame.size;
   RNView *view = RN_VIEW(widget);
   RNViewStyle style = view_style(props, layout);
   rn_view_set_style(view, &style);
