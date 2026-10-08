@@ -2,10 +2,13 @@
 
 #include <pango/pangocairo.h>
 
+#include <algorithm>
+
 struct _RNText {
   GtkWidget parent_instance;
   PangoLayout *layout;
   GdkRGBA color;
+  float insets[4];  // padding + border: top, right, bottom, left
 };
 
 G_DEFINE_FINAL_TYPE(RNText, rn_text, GTK_TYPE_WIDGET)
@@ -24,13 +27,16 @@ static void rn_text_measure_vfunc(GtkWidget *widget, GtkOrientation orientation,
                                   int *minimum_baseline,
                                   int *natural_baseline) {
   RNText *self = RN_TEXT(widget);
+  const float *in = self->insets;
   int width = -1;
   if (orientation == GTK_ORIENTATION_VERTICAL && for_size >= 0) {
-    width = for_size * PANGO_SCALE;
+    width = std::max(0, int(for_size - in[1] - in[3])) * PANGO_SCALE;
   }
   pango_layout_set_width(self->layout, width);
   int w, h;
   pango_layout_get_pixel_size(self->layout, &w, &h);
+  w += int(in[1] + in[3]);
+  h += int(in[0] + in[2]);
   // Minimum 0: Yoga decides the frame; text that does not fit is clipped.
   *minimum = 0;
   *natural = orientation == GTK_ORIENTATION_HORIZONTAL ? w : h;
@@ -38,12 +44,33 @@ static void rn_text_measure_vfunc(GtkWidget *widget, GtkOrientation orientation,
 }
 
 static void rn_text_size_allocate(GtkWidget *widget, int width, int, int) {
-  pango_layout_set_width(RN_TEXT(widget)->layout, width * PANGO_SCALE);
+  RNText *self = RN_TEXT(widget);
+  float content = std::max(0.0f, width - self->insets[1] - self->insets[3]);
+  pango_layout_set_width(self->layout, int(content * PANGO_SCALE));
 }
 
 static void rn_text_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   RNText *self = RN_TEXT(widget);
+  const float *in = self->insets;
+  // Lines past numberOfLines (ellipsizeMode 'clip') fall outside the frame.
+  float w = gtk_widget_get_width(widget), h = gtk_widget_get_height(widget);
+  float cw = w - in[1] - in[3], ch = h - in[0] - in[2];
+  int lw, lh;
+  pango_layout_get_pixel_size(self->layout, &lw, &lh);
+  bool clip = lh > ch + 1;
+  if (clip) {
+    graphene_rect_t bounds = GRAPHENE_RECT_INIT(in[3], in[0], cw, ch);
+    gtk_snapshot_push_clip(snapshot, &bounds);
+  }
+  bool offset = in[0] != 0 || in[3] != 0;
+  if (offset) {
+    gtk_snapshot_save(snapshot);
+    graphene_point_t p = GRAPHENE_POINT_INIT(in[3], in[0]);
+    gtk_snapshot_translate(snapshot, &p);
+  }
   gtk_snapshot_append_layout(snapshot, self->layout, &self->color);
+  if (offset) gtk_snapshot_restore(snapshot);
+  if (clip) gtk_snapshot_pop(snapshot);
 }
 
 static void rn_text_dispose(GObject *object) {
@@ -89,6 +116,20 @@ void rn_text_set_font(RNText *self, const char *family, double size_px,
 void rn_text_set_layout(RNText *self, PangoLayout *layout) {
   g_set_object(&self->layout, layout);
   gtk_widget_queue_resize(GTK_WIDGET(self));
+}
+
+PangoLayout *rn_text_get_layout(RNText *self) { return self->layout; }
+
+void rn_text_set_insets(RNText *self, float top, float right, float bottom,
+                        float left) {
+  const float in[4] = {top, right, bottom, left};
+  if (std::equal(in, in + 4, self->insets)) return;
+  std::copy(in, in + 4, self->insets);
+  gtk_widget_queue_resize(GTK_WIDGET(self));
+}
+
+void rn_text_get_insets(RNText *self, float insets[4]) {
+  std::copy(self->insets, self->insets + 4, insets);
 }
 
 const char *rn_text_get_text(RNText *self) {

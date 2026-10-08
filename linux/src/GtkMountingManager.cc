@@ -1,5 +1,6 @@
 #include "GtkMountingManager.h"
 
+#include "GtkViewProps.h"
 #include "PangoText.h"
 #include "rn_text.h"
 #include "rn_view.h"
@@ -15,6 +16,8 @@
 #include <react/renderer/components/text/TextComponentDescriptor.h>
 #include <react/renderer/components/view/ViewComponentDescriptor.h>
 #include <react/renderer/components/view/ViewProps.h>
+#include <react/renderer/core/PropsParserContext.h>
+#include <react/renderer/core/RawProps.h>
 #include <react/renderer/mounting/MountingTransaction.h>
 
 #include <cstring>
@@ -25,14 +28,27 @@ namespace rngtk {
 
 namespace {
 
-GdkRGBA to_rgba(const SharedColor &color) {
-  if (!color) return GdkRGBA{0, 0, 0, 0};
-  ColorComponents c = colorComponentsFromColor(color);
-  return GdkRGBA{c.red, c.green, c.blue, c.alpha};
-}
-
 bool is_paragraph(const ShadowView &view) {
   return std::strcmp(view.componentName, ParagraphComponentName) == 0;
+}
+
+GQuark tag_quark() {
+  static GQuark q = g_quark_from_static_string("rn-tag");
+  return q;
+}
+
+// A paragraph's nested <Text> spans: byte ranges in its text and the span's
+// tag, for hit-testing presses on nested text.
+struct TextSpan {
+  int start, end;
+  Tag tag;
+  SharedEventEmitter emitter;
+};
+using TextSpans = std::vector<TextSpan>;
+
+GQuark spans_quark() {
+  static GQuark q = g_quark_from_static_string("rn-text-spans");
+  return q;
 }
 
 }  // namespace
@@ -49,14 +65,61 @@ void GtkMountingManager::registerSurface(SurfaceId surfaceId, GtkWidget *root) {
   roots_[surfaceId] = root;
   // The root view's tag is the surface id.
   views_[surfaceId] = GTK_WIDGET(g_object_ref(root));
+  g_object_set_qdata(G_OBJECT(root), tag_quark(), GINT_TO_POINTER(surfaceId));
 }
 
 void GtkMountingManager::unregisterSurface(SurfaceId surfaceId) {
   roots_.erase(surfaceId);
-  if (auto it = views_.find(surfaceId); it != views_.end()) {
+  forget(surfaceId);
+}
+
+void GtkMountingManager::forget(Tag tag) {
+  shadowViews_.erase(tag);
+  if (auto it = views_.find(tag); it != views_.end()) {
+    g_object_set_qdata(G_OBJECT(it->second), tag_quark(), nullptr);
     g_object_unref(it->second);
     views_.erase(it);
   }
+}
+
+GtkMountingManager::EventTarget GtkMountingManager::targetForView(
+    GtkWidget *widget, int textIndex) const {
+  if (textIndex >= 0) {
+    if (auto *spans = static_cast<TextSpans *>(
+            g_object_get_qdata(G_OBJECT(widget), spans_quark()))) {
+      for (const auto &span : *spans) {
+        if (textIndex >= span.start && textIndex < span.end && span.emitter) {
+          return {span.tag, span.emitter};
+        }
+      }
+    }
+  }
+  Tag tag = GPOINTER_TO_INT(g_object_get_qdata(G_OBJECT(widget), tag_quark()));
+  auto it = shadowViews_.find(tag);
+  return {tag, it == shadowViews_.end() ? nullptr : it->second.eventEmitter};
+}
+
+bool GtkMountingManager::hasEventListener(Tag tag, size_t offset) const {
+  auto it = shadowViews_.find(tag);
+  if (it == shadowViews_.end()) return false;
+  auto props = std::dynamic_pointer_cast<const ViewProps>(it->second.props);
+  return props && props->events.bits[offset];
+}
+
+bool GtkMountingManager::isSelectableText(Tag tag) const {
+  auto it = shadowViews_.find(tag);
+  if (it == shadowViews_.end()) return false;
+  auto props = std::dynamic_pointer_cast<const ParagraphProps>(it->second.props);
+  return props && props->isSelectable;
+}
+
+GtkWidget *GtkMountingManager::viewForNativeId(
+    const std::string &nativeId) const {
+  for (const auto &[tag, view] : shadowViews_) {
+    auto props = std::dynamic_pointer_cast<const ViewProps>(view.props);
+    if (props && props->nativeId == nativeId) return viewForTag(tag);
+  }
+  return nullptr;
 }
 
 GtkWidget *GtkMountingManager::viewForTag(Tag tag) const {
@@ -113,11 +176,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         break;
       case ShadowViewMutation::Delete:
         if (roots_.count(m.oldChildShadowView.tag)) break;  // ours to keep
-        if (auto it = views_.find(m.oldChildShadowView.tag);
-            it != views_.end()) {
-          g_object_unref(it->second);
-          views_.erase(it);
-        }
+        forget(m.oldChildShadowView.tag);
         break;
       case ShadowViewMutation::Insert: {
         GtkWidget *parent = viewForTag(m.parentTag);
@@ -153,6 +212,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
 void GtkMountingManager::create(const ShadowView &view) {
   GtkWidget *widget = is_paragraph(view) ? rn_text_new("") : rn_view_new();
   views_[view.tag] = GTK_WIDGET(g_object_ref_sink(widget));
+  g_object_set_qdata(G_OBJECT(widget), tag_quark(), GINT_TO_POINTER(view.tag));
   update(ShadowView{}, view);
 }
 
@@ -160,6 +220,7 @@ void GtkMountingManager::update(const ShadowView &oldView,
                                 const ShadowView &newView) {
   GtkWidget *widget = viewForTag(newView.tag);
   if (!widget) return;
+  shadowViews_[newView.tag] = newView;
   if (oldView.props != newView.props ||
       oldView.layoutMetrics != newView.layoutMetrics) {
     applyProps(widget, newView);
@@ -169,21 +230,26 @@ void GtkMountingManager::update(const ShadowView &oldView,
 }
 
 void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
-  auto props = std::dynamic_pointer_cast<const ViewProps>(view.props);
-  if (!props) return;
-  gtk_widget_set_opacity(widget, props->opacity);
-  if (!RN_IS_VIEW(widget)) return;
+  if (auto props = std::dynamic_pointer_cast<const ViewProps>(view.props)) {
+    apply_view_props(widget, *props, view.layoutMetrics);
+  }
+}
 
-  // GTK draws one radius, width and color per view for now; take the
-  // top-left/left values when they differ per side.
-  BorderMetrics border = props->resolveBorderMetrics(view.layoutMetrics);
-  RNViewStyle style{};
-  style.background = to_rgba(props->backgroundColor);
-  style.border_radius = border.borderRadii.topLeft.horizontal;
-  style.border_width = border.borderWidths.left;
-  style.border_color = to_rgba(border.borderColors.left);
-  style.clip_children = props->getClipsContentToBounds();
-  rn_view_set_style(RN_VIEW(widget), &style);
+void GtkMountingManager::synchronouslyUpdateViewOnUIThread(
+    Tag tag, const folly::dynamic &props) {
+  // Native Animated (opacity, transforms...) on the main thread, between
+  // commits: clone the mounted props with the animated values and apply.
+  auto registry = registry_.lock();
+  auto it = shadowViews_.find(tag);
+  GtkWidget *widget = viewForTag(tag);
+  if (!registry || !contextContainer_ || it == shadowViews_.end() || !widget) {
+    return;
+  }
+  ShadowView &view = it->second;
+  const ComponentDescriptor &descriptor = registry->at(view.componentHandle);
+  PropsParserContext context{view.surfaceId, *contextContainer_};
+  view.props = descriptor.cloneProps(context, view.props, RawProps(props));
+  applyProps(widget, view);
 }
 
 void GtkMountingManager::applyLayout(GtkWidget *widget,
@@ -202,11 +268,26 @@ void GtkMountingManager::applyParagraph(GtkWidget *widget,
           view.state);
   if (!state) return;
   const ParagraphState &data = state->getData();
+  // Yoga measured the text inside padding and border.
+  const EdgeInsets &in = view.layoutMetrics.contentInsets;
+  rn_text_set_insets(RN_TEXT(widget), in.top, in.right, in.bottom, in.left);
   PangoLayout *layout = create_pango_layout(
       gtk_widget_get_pango_context(widget), data.attributedString,
-      data.paragraphAttributes, view.layoutMetrics.frame.size.width);
+      data.paragraphAttributes,
+      view.layoutMetrics.frame.size.width - in.left - in.right);
   rn_text_set_layout(RN_TEXT(widget), layout);
   g_object_unref(layout);
+
+  auto *spans = new TextSpans();
+  int offset = 0;
+  for (const auto &fragment : data.attributedString.getFragments()) {
+    int size = static_cast<int>(fragment.string.size());
+    spans->push_back({offset, offset + size, fragment.parentShadowView.tag,
+                      fragment.parentShadowView.eventEmitter});
+    offset += size;
+  }
+  g_object_set_qdata_full(G_OBJECT(widget), spans_quark(), spans,
+                          [](gpointer p) { delete static_cast<TextSpans *>(p); });
 }
 
 void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
@@ -217,8 +298,9 @@ void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
 }
 
 ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
-  return [](const EventDispatcher::Weak &eventDispatcher,
-            const std::shared_ptr<const ContextContainer> &contextContainer) {
+  return [weak = weak_from_this()](
+             const EventDispatcher::Weak &eventDispatcher,
+             const std::shared_ptr<const ContextContainer> &contextContainer) {
     static auto providers = [] {
       auto registry = std::make_shared<ComponentDescriptorProviderRegistry>();
       registry->add(
@@ -237,8 +319,13 @@ ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
                     ModalHostViewComponentDescriptor>());
       return registry;
     }();
-    return providers->createComponentDescriptorRegistry(
+    auto registry = providers->createComponentDescriptorRegistry(
         {eventDispatcher, contextContainer, nullptr});
+    if (auto self = weak.lock()) {
+      self->registry_ = registry;
+      self->contextContainer_ = contextContainer;
+    }
+    return registry;
   };
 }
 

@@ -99,14 +99,38 @@ void apply_fragment(PangoAttrList *list, const TextAttributes &a, guint start,
   }
   if (a.textDecorationLineType) {
     auto t = *a.textDecorationLineType;
+    // Pango has no dotted or dashed underline; those draw solid.
+    PangoUnderline underline = PANGO_UNDERLINE_SINGLE;
+    if (a.textDecorationStyle == TextDecorationStyle::Double) {
+      underline = PANGO_UNDERLINE_DOUBLE;
+    } else if (a.textDecorationStyle == TextDecorationStyle::Wavy) {
+      underline = PANGO_UNDERLINE_ERROR;
+    }
+    std::optional<ColorComponents> color;
+    if (a.textDecorationColor) {
+      color = colorComponentsFromColor(a.textDecorationColor);
+    }
     if (t == TextDecorationLineType::Underline ||
         t == TextDecorationLineType::UnderlineStrikethrough) {
-      insert(list, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE), start,
-             end);
+      insert(list, pango_attr_underline_new(underline), start, end);
+      if (color) {
+        insert(list,
+               pango_attr_underline_color_new(channel16(color->red),
+                                              channel16(color->green),
+                                              channel16(color->blue)),
+               start, end);
+      }
     }
     if (t == TextDecorationLineType::Strikethrough ||
         t == TextDecorationLineType::UnderlineStrikethrough) {
       insert(list, pango_attr_strikethrough_new(TRUE), start, end);
+      if (color) {
+        insert(list,
+               pango_attr_strikethrough_color_new(channel16(color->red),
+                                                  channel16(color->green),
+                                                  channel16(color->blue)),
+               start, end);
+      }
     }
   }
   if (a.textTransform) {
@@ -157,12 +181,17 @@ PangoEllipsizeMode to_pango(EllipsizeMode mode) {
       return PANGO_ELLIPSIZE_START;
     case EllipsizeMode::Middle:
       return PANGO_ELLIPSIZE_MIDDLE;
+    case EllipsizeMode::Clip:
+      return PANGO_ELLIPSIZE_NONE;
     default:
-      // Pango only limits the line count when ellipsizing, so Clip ends with
-      // an ellipsis too for now.
       return PANGO_ELLIPSIZE_END;
   }
 }
+
+// numberOfLines with ellipsizeMode 'clip': Pango only limits lines when it
+// ellipsizes, so the layout keeps every line and its measured height stops
+// after the last allowed one; RNText clips the rest.
+const char *kClipLinesKey = "rngtk-clip-lines";
 
 }  // namespace
 
@@ -209,8 +238,13 @@ PangoLayout *create_pango_layout(PangoContext *context,
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
   apply_alignment(layout, alignment);
   if (paragraph.maximumNumberOfLines > 0) {
-    pango_layout_set_height(layout, -paragraph.maximumNumberOfLines);
-    pango_layout_set_ellipsize(layout, to_pango(paragraph.ellipsizeMode));
+    if (paragraph.ellipsizeMode == EllipsizeMode::Clip) {
+      g_object_set_data(G_OBJECT(layout), kClipLinesKey,
+                        GINT_TO_POINTER(paragraph.maximumNumberOfLines));
+    } else {
+      pango_layout_set_height(layout, -paragraph.maximumNumberOfLines);
+      pango_layout_set_ellipsize(layout, to_pango(paragraph.ellipsizeMode));
+    }
   }
   pango_layout_set_width(
       layout, max_width < 0 || std::isinf(max_width)
@@ -224,6 +258,16 @@ void pango_layout_size_px(PangoLayout *layout, float *width, float *height) {
   pango_layout_get_extents(layout, nullptr, &logical);
   *width = std::ceil(static_cast<float>(logical.width) / PANGO_SCALE);
   *height = std::ceil(static_cast<float>(logical.height) / PANGO_SCALE);
+  int clip_lines =
+      GPOINTER_TO_INT(g_object_get_data(G_OBJECT(layout), kClipLinesKey));
+  if (clip_lines > 0 && pango_layout_get_line_count(layout) > clip_lines) {
+    PangoLayoutIter *iter = pango_layout_get_iter(layout);
+    for (int i = 1; i < clip_lines; i++) pango_layout_iter_next_line(iter);
+    PangoRectangle line;
+    pango_layout_iter_get_line_extents(iter, nullptr, &line);
+    pango_layout_iter_free(iter);
+    *height = std::ceil(static_cast<float>(line.y + line.height) / PANGO_SCALE);
+  }
 }
 
 }  // namespace rngtk

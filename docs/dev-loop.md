@@ -115,15 +115,16 @@ and the `/message` WebSocket. Then it runs `rn-gtk-host --dev-server
 3. fast refresh: the script edits App.js's subtitle and the host waits for
    the new text with the same JS instance (no reload);
 4. LogBox: the script makes `App` throw and the host waits for LogBox.
-   `LOGBOX_SCREENSHOT=path.png` saves the window at that point.
+   `LOGBOX_SCREENSHOT=path.png` saves the window at that point. Then the
+   host clicks LogBox's Dismiss button and waits for LogBox to close.
 
 App.js is restored when the script exits.
 
 ## Known gaps
 
-- **No pointer or keyboard input to React views yet.** LogBox's buttons
-  (Dismiss, Minimize, the warning toast) and Pressables can't be clicked.
-  Reload (Ctrl+R) clears LogBox.
+- **No keyboard input to React views yet** (Phase 2). Mouse and touch work
+  (see [components.md](components.md)), and LogBox's buttons can be
+  clicked: the dev-loop test clicks Dismiss.
 - **Download progress.** `DevServerHelper` doesn't ask Metro for a
   multipart progress stream, so the banner can't show a percentage.
 - **Metro's `d` key.** ReactCxxPlatform ignores Metro's `showDevMenu`

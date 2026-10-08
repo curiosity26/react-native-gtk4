@@ -3,6 +3,7 @@
 #include "DevUI.h"
 #include "GtkMessageQueueThread.h"
 #include "GtkMountingManager.h"
+#include "GtkPointerHandler.h"
 #include "PangoText.h"
 #include "PlatformConstantsModule.h"
 #include "rn_view.h"
@@ -11,6 +12,7 @@
 #include <jsi/jsi.h>
 #include <logger/react_native_log.h>
 #include <react/http/IHttpClient.h>
+#include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/http/IWebSocketClient.h>
 #include <react/renderer/core/LayoutConstraints.h>
 #include <react/renderer/scheduler/SurfaceDelegate.h>
@@ -174,6 +176,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     gtk_widget_set_valign(logBoxRoot, GTK_ALIGN_START);
     gtk_overlay_add_overlay(overlay_, logBoxRoot);
     mountingManager_->registerSurface(kLogBoxSurfaceId, logBoxRoot);
+    logBoxPointerHandler_ =
+        std::make_unique<GtkPointerHandler>(*mountingManager_, logBoxRoot);
+    logBoxRoot_ = logBoxRoot;
     logBox_ = std::make_shared<LogBoxDelegate>(*this, logBoxRoot);
 
     GMenu *menu = g_menu_new();
@@ -184,6 +189,26 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     devUI_ = DevUI::create(overlay_, G_MENU_MODEL(menu));
     g_object_unref(menu);
   }
+
+  // Native Animated (useNativeDriver: TouchableOpacity's fade...) asks for
+  // a callback each frame while animations run; GTK's frame clock gives it
+  // one, and the values reach widgets through
+  // GtkMountingManager::synchronouslyUpdateViewOnUIThread.
+  auto animatedProvider = std::make_shared<NativeAnimatedNodesManagerProvider>(
+      [this](std::function<void()> &&onRender, bool /*isAsync*/) {
+        onAnimationRender_ = std::move(onRender);
+        if (!animationTick_) {
+          animationTick_ = gtk_widget_add_tick_callback(
+              GTK_WIDGET(overlay_), onAnimationFrame, this, nullptr);
+        }
+      },
+      [this](bool /*isAsync*/) {
+        onAnimationRender_ = nullptr;
+        if (animationTick_) {
+          gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_), animationTick_);
+          animationTick_ = 0;
+        }
+      });
 
   reactHost_ = std::make_unique<ReactHost>(
       config, mountingManager_, runLoopObservers_, std::move(contextContainer),
@@ -203,7 +228,8 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
               "\nSee Metro's terminal for build errors; fix, then press Ctrl+R.");
         }
       },
-      logToConsole, devUI_, std::move(turboModuleProviders), logBox_);
+      logToConsole, devUI_, std::move(turboModuleProviders), logBox_,
+      std::move(animatedProvider));
 
   static GSourceFuncs funcs = {beforeWaiting, nullptr, nullptr, nullptr,
                                nullptr, nullptr};
@@ -214,7 +240,19 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   g_source_attach(observerSource_, nullptr);
 }
 
+gboolean RNGtkHost::onAnimationFrame(GtkWidget *, GdkFrameClock *,
+                                     gpointer self) {
+  auto *host = static_cast<RNGtkHost *>(self);
+  if (host->onAnimationRender_) host->onAnimationRender_();
+  return G_SOURCE_CONTINUE;
+}
+
 RNGtkHost::~RNGtkHost() {
+  if (animationTick_) {
+    gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_), animationTick_);
+  }
+  pointerHandler_.reset();
+  logBoxPointerHandler_.reset();
   if (loader_.joinable()) loader_.join();
   if (observerSource_) {
     g_source_destroy(observerSource_);
@@ -236,6 +274,7 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
 
   rn_widget_set_frame(root, 0, 0, width, height);
   mountingManager_->registerSurface(surfaceId, root);
+  pointerHandler_ = std::make_unique<GtkPointerHandler>(*mountingManager_, root);
   if (logBox_) {
     rn_widget_set_frame(mountingManager_->viewForTag(kLogBoxSurfaceId), 0, 0,
                         width, height);
