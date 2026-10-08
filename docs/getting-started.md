@@ -103,10 +103,13 @@ builds a new host once; delete old ones whenever you like. `RNGTK_DEPS_DIR`
 points at an existing dependency directory instead (this repository's
 `third-party/deps`, say).
 
-Build times on a 2-core ARM64 VM (Ubuntu 24.04, 4 GB RAM): the first app
-took **FIRST_BUILD** with an empty cache (fetching **FETCH**, Hermes
-**HERMES**, the host library **HOST**, the app **APP**). A second app took
-**SECOND_BUILD**: its own `main.cc` and a link.
+Build times on a 2-core ARM64 VM (Ubuntu 24.04, 4 GB RAM), measured with
+`scripts/test-new-app.sh`: the first app took **7m 18s** with an empty
+cache (fetching React Native and building Hermes 4m 05s, the host library
+3m 13s, the app under a second). With the dependencies cached, a new
+package version's host build took 3m 45s. A second app took **under a
+second** for Debug and **2 to 9 seconds** for Release, nearly all of it
+`react-native bundle`.
 
 ## Debug and Release
 
