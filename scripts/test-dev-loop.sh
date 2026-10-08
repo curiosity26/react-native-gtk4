@@ -8,7 +8,8 @@
 #      widgets: the host's own (Ctrl+R) and one from Metro (POST /reload,
 #      what `r` in Metro's terminal sends),
 #   4. fast refresh: edits App.js and waits for the new text without a reload,
-#   5. LogBox: makes App throw and waits for LogBox to show,
+#   5. LogBox: makes App throw, waits for LogBox to show, then clicks its
+#      Dismiss button (pointer input into LogBox's surface),
 #
 # then restores App.js and stops the Metro it started.
 #
@@ -81,7 +82,7 @@ wait_ready() {
 
 echo "== rn-gtk-host --dev-server (${GDK_BACKEND:-default backend})"
 "$build/rn-gtk-host" --dev-server "localhost:$port" --self-test --test-reload --expect-reload --verbose \
-  --expect-text "$refreshed_text" --expect-logbox \
+  --expect-text "$refreshed_text" --expect-logbox --dismiss-logbox \
   ${LOGBOX_SCREENSHOT:+--logbox-screenshot "$LOGBOX_SCREENSHOT"} \
   >"$out/host.log" 2>&1 &
 host_pid=$!

@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -22,6 +23,7 @@ namespace rngtk {
 class DevUI;
 class GtkMessageQueueThread;
 class GtkMountingManager;
+class GtkPointerHandler;
 
 struct RNGtkHostOptions {
   // Reported to JS as Platform.isTesting (in dev bundles).
@@ -61,6 +63,12 @@ class RNGtkHost {
   void showDevMenu();
 
   GtkMountingManager &mountingManager() { return *mountingManager_; }
+  // Input for the app's surface (tests drive it directly).
+  GtkPointerHandler *pointerHandler() { return pointerHandler_.get(); }
+  GtkPointerHandler *logBoxPointerHandler() {
+    return logBoxPointerHandler_.get();
+  }
+  GtkWidget *logBoxRoot() const { return logBoxRoot_; }
   DevUI *devUI() { return devUI_.get(); }
   // True when no JS work is queued.
   bool isIdle() const;
@@ -74,6 +82,7 @@ class RNGtkHost {
 
  private:
   class LogBoxDelegate;
+  static gboolean onAnimationFrame(GtkWidget *, GdkFrameClock *, gpointer self);
   void startAppSurface();
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
@@ -92,6 +101,12 @@ class RNGtkHost {
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;
+  std::unique_ptr<GtkPointerHandler> pointerHandler_;
+  std::unique_ptr<GtkPointerHandler> logBoxPointerHandler_;
+  GtkWidget *logBoxRoot_{nullptr};
+  // Native Animated runs a frame callback while animations are active.
+  std::function<void()> onAnimationRender_;
+  guint animationTick_{0};
   GSource *observerSource_{nullptr};
   std::atomic<int> jsErrors_{0};
   std::atomic<int> instances_{0};

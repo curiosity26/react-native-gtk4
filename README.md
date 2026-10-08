@@ -6,7 +6,10 @@ and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
 **Status: Phase 1 (core) in progress.** The GTK host runs React Native
-0.87.1 (Hermes, Fabric) and renders `<View>` and `<Text>`. Apps bundle for
+0.87.1 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
+and Pango: borders, radii, shadows, transforms, filters, gradients, nested
+text. Mouse and touch input drive Pressable, the Touchables, Button and
+hover. See [docs/components.md](docs/components.md). Apps bundle for
 their own `linux` platform: `Platform.OS === 'linux'`, `.linux.js` files,
 and Linux `Platform.constants` (distro, GTK version, Wayland or X11). In
 development the host loads from Metro, with reload, fast refresh, LogBox and

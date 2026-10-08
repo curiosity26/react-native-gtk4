@@ -17,6 +17,8 @@
 //                          containing TEXT, without a reload (fast refresh)
 //   --expect-logbox        print "READY expect-logbox", then wait for LogBox
 //   --logbox-screenshot F  save the window once LogBox shows
+//   --dismiss-logbox       then click LogBox's Dismiss button and wait for
+//                          LogBox to close
 #include <glog/logging.h>
 #include <react/featureflags/ReactNativeFeatureFlags.h>
 #include <react/featureflags/ReactNativeFeatureFlagsDynamicProvider.h>
@@ -25,11 +27,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "DevUI.h"
 #include "GtkMountingManager.h"
+#include "GtkPointerHandler.h"
+#include "PangoText.h"
 #include "RNGtkHost.h"
 #include "harness.h"
 #include "rn_text.h"
@@ -58,11 +63,20 @@ struct Options {
   std::string expect_text;
   bool expect_logbox = false;
   const char *logbox_screenshot = nullptr;
+  bool dismiss_logbox = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
 
-enum class Phase { Initial, Reloading, ExpectText, ExpectLogBox, Done };
+enum class Phase { Initial, Reloading, ExpectText, ExpectLogBox, Steps, Done };
+
+// An asynchronous self-test step: start() once, then done() each frame
+// until it returns true.
+struct Step {
+  std::string name;
+  std::function<void()> start;
+  std::function<bool()> done;
+};
 
 struct App {
   rngtk::RNGtkHost *host = nullptr;
@@ -77,6 +91,9 @@ struct App {
   int reloads_done = 0;
   guint timeout_id = 0;
   int exit_code = 0;
+  std::vector<Step> steps;
+  size_t step = 0;
+  bool step_started = false;
 } app;
 
 bool check(bool ok, const char *what) {
@@ -91,6 +108,16 @@ GtkWidget *find_nth(GtkWidget *widget, GType type, int *n) {
        c = gtk_widget_get_next_sibling(c)) {
     if (G_TYPE_CHECK_INSTANCE_TYPE(c, type) && (*n)-- == 0) return c;
     if (GtkWidget *found = find_nth(c, type, n)) return found;
+  }
+  return nullptr;
+}
+
+// The first paragraph under `widget` whose text is exactly `text`.
+GtkWidget *find_text(GtkWidget *widget, const std::string &text) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (RN_IS_TEXT(c) && text == rn_text_get_text(RN_TEXT(c))) return c;
+    if (GtkWidget *found = find_text(c, text)) return found;
   }
   return nullptr;
 }
@@ -114,11 +141,38 @@ graphene_rect_t bounds_in_root(GtkWidget *widget) {
   return b;
 }
 
+// The texture's pixels, downloaded once (texture_pixel downloads it all on
+// every call).
+struct Pixels {
+  GdkTexture *tex = nullptr;
+  int w = 0, h = 0;
+  std::vector<uint8_t> data;
+  rngtk::Rgba8 at(int x, int y) {
+    if (x < 0 || y < 0 || x >= w || y >= h) return {};
+    const uint8_t *p = &data[(size_t(y) * w + x) * 4];
+    return rngtk::Rgba8{p[0], p[1], p[2], p[3]};
+  }
+} pixels;
+
+rngtk::Rgba8 px(GdkTexture *tex, float x, float y) {
+  if (pixels.tex != tex) {
+    pixels.tex = tex;
+    pixels.w = gdk_texture_get_width(tex);
+    pixels.h = gdk_texture_get_height(tex);
+    pixels.data.resize(size_t(pixels.w) * pixels.h * 4);
+    GdkTextureDownloader *dl = gdk_texture_downloader_new(tex);
+    gdk_texture_downloader_set_format(dl, GDK_MEMORY_R8G8B8A8);
+    gdk_texture_downloader_download_into(dl, pixels.data.data(),
+                                         size_t(pixels.w) * 4);
+    gdk_texture_downloader_free(dl);
+  }
+  return pixels.at(int(x), int(y));
+}
+
 bool has_dark_pixel(GdkTexture *tex, graphene_rect_t r) {
   for (int y = 0; y < (int)r.size.height; y++) {
     for (int x = 0; x < (int)r.size.width; x++) {
-      auto p = rngtk::texture_pixel(tex, (int)r.origin.x + x,
-                                    (int)r.origin.y + y);
+      auto p = px(tex, r.origin.x + x, r.origin.y + y);
       if (p.r < 90 && p.g < 90 && p.b < 90) return true;
     }
   }
@@ -183,6 +237,332 @@ void verify_hello_world(GdkTexture *tex) {
         "Platform.constants.windowSystem matches the GDK backend");
 }
 
+
+// ---------------------------------------------------------------------------
+// Gallery (examples/hello-world/Gallery.js) checks
+
+bool is_gallery() { return opts.module == "Gallery"; }
+
+GtkWidget *by_id(const char *id) {
+  return app.host->mountingManager().viewForNativeId(id);
+}
+
+bool near_color(rngtk::Rgba8 p, int r, int g, int b, int tol = 40) {
+  return rngtk::near(p, rngtk::Rgba8{uint8_t(r), uint8_t(g), uint8_t(b), 0xFF},
+                     tol);
+}
+
+// Some pixel in `r` matches `pred`.
+template <typename Pred>
+bool any_pixel(GdkTexture *tex, graphene_rect_t r, Pred pred) {
+  for (int y = int(r.origin.y); y < int(r.origin.y + r.size.height); y++) {
+    for (int x = int(r.origin.x); x < int(r.origin.x + r.size.width); x++) {
+      if (pred(px(tex, float(x), float(y)))) return true;
+    }
+  }
+  return false;
+}
+
+// Every RNText draws the layout Yoga measured: the drawn layout at the
+// frame's width has the frame's height (within a pixel) and fits its width.
+void check_text_parity(GtkWidget *widget, int *checked, int *mismatched) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (RN_IS_TEXT(c)) {
+      graphene_rect_t f = rn_widget_get_frame(c);
+      float in[4];
+      rn_text_get_insets(RN_TEXT(c), in);
+      f.size.width -= in[1] + in[3];
+      f.size.height -= in[0] + in[2];
+      PangoLayout *layout = rn_text_get_layout(RN_TEXT(c));
+      float w = 0, h = 0;
+      rngtk::pango_layout_size_px(layout, &w, &h);
+      (*checked)++;
+      if (std::abs(h - f.size.height) > 1 || w > f.size.width + 1) {
+        (*mismatched)++;
+        printf("  text \"%.30s\": frame %.0fx%.0f, drawn %.0fx%.0f\n",
+               rn_text_get_text(RN_TEXT(c)), f.size.width, f.size.height, w, h);
+      }
+    }
+    check_text_parity(c, checked, mismatched);
+  }
+}
+
+void verify_gallery(GdkTexture *tex) {
+  auto &mm = app.host->mountingManager();
+  printf("mounted views: %zu, js errors: %d\n", mm.mountedViewCount(),
+         app.host->jsErrorCount());
+  check(app.host->jsErrorCount() == 0, "no JS errors");
+  if (!check(tex && gdk_texture_get_width(tex) == opts.width &&
+                 gdk_texture_get_height(tex) == opts.height,
+             "root rendered at the surface size") &&
+      tex) {
+    printf("  rendered %dx%d, root allocated %dx%d\n", gdk_texture_get_width(tex),
+           gdk_texture_get_height(tex), gtk_widget_get_width(app.root),
+           gtk_widget_get_height(app.root));
+  }
+  if (!tex) return;
+  const int bg[3] = {0xF5, 0xF5, 0xF7};
+
+  if (GtkWidget *v = by_id("borders")) {
+    graphene_rect_t b = bounds_in_root(v);
+    float x = b.origin.x, y = b.origin.y, w = b.size.width, h = b.size.height;
+    check(near_color(px(tex, x + w / 2, y + 1), 255, 0, 0) &&
+              near_color(px(tex, x + w - 3, y + h / 2), 0, 192, 0) &&
+              near_color(px(tex, x + w / 2, y + h - 5), 0, 0, 255) &&
+              near_color(px(tex, x + 7, y + h / 2), 255, 149, 0) &&
+              near_color(px(tex, x + w / 2, y + h / 2), 255, 255, 255),
+          "per-side border widths and colors");
+    // 16px left border: still orange at x+14, white past it.
+    check(near_color(px(tex, x + 14, y + h / 2), 255, 149, 0) &&
+              near_color(px(tex, x + 18, y + h / 2), 255, 255, 255),
+          "left border is 16px wide");
+  } else {
+    check(false, "borders view mounted");
+  }
+
+  if (GtkWidget *v = by_id("radii")) {
+    graphene_rect_t b = bounds_in_root(v);
+    float x = b.origin.x, y = b.origin.y, w = b.size.width, h = b.size.height;
+    check(near_color(px(tex, x + 1, y + 1), 0x58, 0x56, 0xD6) &&
+              near_color(px(tex, x + w - 2, y + 2), bg[0], bg[1], bg[2], 12) &&
+              near_color(px(tex, x + w - 4, y + h - 4), bg[0], bg[1], bg[2], 12),
+          "per-corner radii (square top-left, rounded right corners)");
+  }
+
+  if (GtkWidget *v = by_id("clip")) {
+    graphene_rect_t b = bounds_in_root(v);
+    float x = b.origin.x, y = b.origin.y, w = b.size.width, h = b.size.height;
+    check(near_color(px(tex, x + w / 2, y + h / 2), 0xFF, 0x3B, 0x30) &&
+              near_color(px(tex, x + 3, y + 3), bg[0], bg[1], bg[2], 12) &&
+              near_color(px(tex, x + w - 3, y + h - 3), bg[0], bg[1], bg[2], 12),
+          "overflow hidden clips children to the rounded corners");
+  }
+
+  if (GtkWidget *v = by_id("shadow")) {
+    graphene_rect_t b = bounds_in_root(v);
+    rngtk::Rgba8 below = px(tex, b.origin.x + b.size.width / 2,
+                            b.origin.y + b.size.height + 8);
+    printf("  shadow below the box: %d,%d,%d\n", below.r, below.g, below.b);
+    check(below.r < bg[0] - 40 && below.g < bg[1] - 40,
+          "boxShadow drawn below the view");
+  }
+
+  if (GtkWidget *v = by_id("inset")) {
+    graphene_rect_t b = bounds_in_root(v);
+    check(px(tex, b.origin.x + 2, b.origin.y + b.size.height / 2).b > 200 &&
+              near_color(px(tex, b.origin.x + b.size.width / 2,
+                            b.origin.y + b.size.height / 2),
+                         255, 255, 255, 30),
+          "inset boxShadow inside the edges");
+  }
+
+  if (GtkWidget *v = by_id("translated")) {
+    // The layout frame, without the transform...
+    graphene_rect_t parent = bounds_in_root(gtk_widget_get_parent(v));
+    graphene_rect_t f = rn_widget_get_frame(v);
+    float lx = parent.origin.x + f.origin.x, ly = parent.origin.y + f.origin.y;
+    // ...and where it's drawn: 40 right, 10 down.
+    check(near_color(px(tex, lx + 40 + 30, ly + 10 + 30), 0xFF, 0x2D, 0x55) &&
+              near_color(px(tex, lx + 5, ly + 5), bg[0], bg[1], bg[2], 12),
+          "transform translateX 40 / translateY 10 moves the view");
+    graphene_rect_t b = bounds_in_root(v);
+    check(std::abs(b.origin.x - (lx + 40)) < 1 && std::abs(b.origin.y - (ly + 10)) < 1,
+          "transformed bounds (used for hit-testing) follow the transform");
+  }
+
+  if (GtkWidget *v = by_id("rotated")) {
+    graphene_rect_t parent = bounds_in_root(gtk_widget_get_parent(v));
+    graphene_rect_t f = rn_widget_get_frame(v);
+    float cx = parent.origin.x + f.origin.x + f.size.width / 2;
+    float cy = parent.origin.y + f.origin.y + f.size.height / 2;
+    // Rotated 45° about its centre: the centre stays, a corner is empty.
+    check(near_color(px(tex, cx, cy), 0xFF, 0x2D, 0x55) &&
+              near_color(px(tex, cx - f.size.width / 2 + 2,
+                            cy - f.size.height / 2 + 2),
+                         bg[0], bg[1], bg[2], 12),
+          "rotate 45deg turns the view about its centre");
+  }
+
+  if (GtkWidget *v = by_id("grayscale")) {
+    graphene_rect_t b = bounds_in_root(v);
+    rngtk::Rgba8 p = px(tex, b.origin.x + b.size.width / 2, b.origin.y + b.size.height / 2);
+    check(std::abs(p.r - p.g) < 6 && std::abs(p.g - p.b) < 6,
+          "filter grayscale(1) removes color");
+  }
+
+  if (GtkWidget *v = by_id("linear")) {
+    graphene_rect_t b = bounds_in_root(v);
+    rngtk::Rgba8 l = px(tex, b.origin.x + 2, b.origin.y + b.size.height / 2);
+    rngtk::Rgba8 r = px(tex, b.origin.x + b.size.width - 3, b.origin.y + b.size.height / 2);
+    check(l.r > 200 && l.b < 60 && r.b > 200 && r.r < 60,
+          "linear-gradient(90deg, red, blue) runs left to right");
+  }
+
+  if (GtkWidget *v = by_id("dashed")) {
+    graphene_rect_t b = bounds_in_root(v);
+    int on = 0, off = 0;
+    for (int x = int(b.origin.x) + 12; x < int(b.origin.x + b.size.width) - 12; x++) {
+      if (px(tex, x, b.origin.y + 1).b > 200 && px(tex, x, b.origin.y + 1).r < 80) on++;
+      else off++;
+    }
+    check(on > 5 && off > 5, "dashed border has gaps");
+  }
+
+  if (GtkWidget *v = by_id("nested")) {
+    graphene_rect_t b = bounds_in_root(v);
+    check(any_pixel(tex, b, [](rngtk::Rgba8 p) { return p.r > 200 && p.g < 60 && p.b < 60; }) &&
+              any_pixel(tex, b, [](rngtk::Rgba8 p) { return p.b > 200 && p.r < 60 && p.g < 60; }) &&
+              any_pixel(tex, b, [](rngtk::Rgba8 p) { return p.r < 40 && p.g < 40 && p.b < 40; }) &&
+              any_pixel(tex, b, [](rngtk::Rgba8 p) { return p.r > 240 && p.g > 220 && p.b < 80; }),
+          "nested Text spans draw their own colors (black, red, blue, marked)");
+  }
+
+  if (GtkWidget *v = by_id("ellipsis")) {
+    PangoLayout *layout = rn_text_get_layout(RN_TEXT(v));
+    graphene_rect_t f = rn_widget_get_frame(v);
+    check(pango_layout_is_ellipsized(layout) && f.size.height < 14 * 1.6f &&
+              pango_layout_get_line_count(layout) == 1,
+          "numberOfLines 1 ellipsizes to one line");
+  }
+
+  pixels.tex = nullptr;
+  if (GtkWidget *v = by_id("pressable")) {
+    GdkCursor *cursor = gtk_widget_get_cursor(v);
+    check(cursor && !g_strcmp0(gdk_cursor_get_name(cursor), "pointer"),
+          "cursor: 'pointer' sets the GTK cursor");
+  }
+
+  int texts = 0, mismatched = 0;
+  check_text_parity(app.root, &texts, &mismatched);
+  printf("  %d texts measured\n", texts);
+  check(texts > 10 && mismatched == 0,
+        "every Text draws at the size Yoga measured (measure/draw parity)");
+}
+
+// The center of a mounted view, in root coordinates.
+graphene_point_t center_of(GtkWidget *v) {
+  graphene_rect_t b = bounds_in_root(v);
+  return graphene_point_t{b.origin.x + b.size.width / 2,
+                          b.origin.y + b.size.height / 2};
+}
+
+void send(rngtk::GtkPointerHandler::Phase phase, graphene_point_t p) {
+  rngtk::GtkPointerHandler::Input input{};
+  input.phase = phase;
+  input.x = p.x;
+  input.y = p.y;
+  input.timeMs = uint32_t(g_get_monotonic_time() / 1000);
+  app.host->pointerHandler()->dispatch(input);
+}
+
+// A click (press + release) on the view `id`, through the same dispatch
+// the GTK input controller uses; then wait for `expect` in any Text.
+Step click_step(const char *id, std::string expect) {
+  return Step{
+      std::string("click ") + id + " -> \"" + expect + "\"",
+      [id] {
+        GtkWidget *v = by_id(id);
+        if (!v) return;
+        graphene_point_t c = center_of(v);
+        send(rngtk::GtkPointerHandler::Phase::Down, c);
+        send(rngtk::GtkPointerHandler::Phase::Up, c);
+      },
+      [expect] { return has_text(app.root, expect); }};
+}
+
+rngtk::Rgba8 pixel_at_center(const char *id) {
+  GtkWidget *v = by_id(id);
+  if (!v) return {};
+  GdkTexture *tex = rngtk::render_widget(app.root);
+  if (!tex) return {};  // nothing drawn yet this frame
+  graphene_point_t c = center_of(v);
+  // Off the label: near the left edge, vertically centred.
+  graphene_rect_t b = bounds_in_root(v);
+  auto p = px(tex, b.origin.x + 6, c.y);
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return p;
+}
+
+void add_gallery_input_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(click_step("pressable", "pressed 1"));
+  app.steps.push_back(click_step("pressable", "pressed 2"));
+  app.steps.push_back(click_step("opacity", "opacity 1"));
+  // Holding TouchableOpacity fades it with a native-driver Animated.timing:
+  // C++ Animated drives the widget's opacity frame by frame, without a
+  // React commit.
+  app.steps.push_back(Step{
+      "TouchableOpacity fades while held (native Animated)",
+      [] {
+        if (GtkWidget *v = by_id("opacity")) send(Phase::Down, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("opacity");
+        return v && gtk_widget_get_opacity(v) < 0.5;
+      }});
+  app.steps.push_back(Step{
+      "TouchableOpacity fades back after release",
+      [] {
+        if (GtkWidget *v = by_id("opacity")) send(Phase::Up, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("opacity");
+        return v && gtk_widget_get_opacity(v) > 0.99 &&
+               has_text(app.root, "opacity 2");
+      }});
+  app.steps.push_back(click_step("highlight", "highlight 1"));
+  app.steps.push_back(click_step("button", "button 1"));
+  // Right-click on selectable text: a Copy menu that copies its text.
+  static std::string clipboard;
+  app.steps.push_back(Step{
+      "selectable Text: right-click Copy puts the text on the clipboard",
+      [] {
+        GtkWidget *v = by_id("selectable");
+        if (!v) return;
+        rngtk::GtkPointerHandler::Input input{};
+        graphene_point_t c = center_of(v);
+        input.x = c.x;
+        input.y = c.y;
+        input.button = 3;
+        input.phase = Phase::Down;
+        app.host->pointerHandler()->dispatch(input);
+        input.phase = Phase::Up;
+        app.host->pointerHandler()->dispatch(input);
+        // The menu is a popover on the root; pick its Copy item.
+        for (GtkWidget *c = gtk_widget_get_first_child(app.root); c;
+             c = gtk_widget_get_next_sibling(c)) {
+          if (GTK_IS_POPOVER(c)) {
+            gtk_widget_activate_action(c, "rngtk-text.copy", nullptr);
+            gtk_popover_popdown(GTK_POPOVER(c));
+          }
+        }
+        gdk_clipboard_read_text_async(
+            gdk_display_get_clipboard(gdk_display_get_default()), nullptr,
+            [](GObject *source, GAsyncResult *result, gpointer) {
+              char *text = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source),
+                                                          result, nullptr);
+              clipboard = text ? text : "";
+              g_free(text);
+            },
+            nullptr);
+      },
+      [] { return clipboard.rfind("Justified text spreads", 0) == 0; }});
+  // Hover: onHoverIn turns the Pressable lighter (#3395FF), and back.
+  app.steps.push_back(Step{
+      "hover in -> #3395FF",
+      [] {
+        if (GtkWidget *v = by_id("pressable")) send(Phase::Move, center_of(v));
+      },
+      [] { return near_color(pixel_at_center("pressable"), 0x33, 0x95, 0xFF, 12); }});
+  app.steps.push_back(Step{
+      "hover out -> #007AFF",
+      [] { send(Phase::Move, graphene_point_t{2, 2}); },
+      [] { return near_color(pixel_at_center("pressable"), 0x00, 0x7A, 0xFF, 12); }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -229,6 +609,9 @@ void next_check(Phase done) {
            app.views_before, app.instances_before);
     if (!app.reload_external) app.host->reload();
     enter(Phase::Reloading);
+  } else if (done == Phase::Initial && is_gallery() && app.steps.empty()) {
+    add_gallery_input_steps();
+    enter(Phase::Steps);
   } else if (done < Phase::ExpectText && !opts.expect_text.empty()) {
     app.instances_before = app.host->instanceCount();
     enter(Phase::ExpectText);
@@ -246,7 +629,13 @@ void check_app(bool first) {
   if (opts.screenshot && first) {
     check(rngtk::save_png(tex, opts.screenshot), "screenshot saved");
   }
-  if (opts.self_test) verify_hello_world(tex);
+  if (opts.self_test) {
+    if (is_gallery()) {
+      verify_gallery(tex);
+    } else {
+      verify_hello_world(tex);
+    }
+  }
   g_clear_object(&tex);
 }
 
@@ -301,8 +690,50 @@ gboolean on_tick(GtkWidget *, GdkFrameClock *, gpointer) {
               "LogBox screenshot saved");
         g_clear_object(&tex);
       }
+      if (opts.dismiss_logbox) {
+        // LogBox's own Dismiss button, clicked through LogBox's surface
+        // input handler.
+        app.host->logBoxPointerHandler()->setRealInputEnabled(false);
+        app.steps.push_back(Step{
+            "LogBox Dismiss button closes LogBox",
+            [] {
+              GtkWidget *root = app.host->logBoxRoot();
+              GtkWidget *dismiss = find_text(root, "Dismiss");
+              if (!dismiss) return;
+              graphene_rect_t b{};
+              if (!gtk_widget_compute_bounds(dismiss, root, &b)) return;
+              rngtk::GtkPointerHandler::Input input{};
+              input.x = b.origin.x + b.size.width / 2;
+              input.y = b.origin.y + b.size.height / 2;
+              input.phase = rngtk::GtkPointerHandler::Phase::Down;
+              app.host->logBoxPointerHandler()->dispatch(input);
+              input.phase = rngtk::GtkPointerHandler::Phase::Up;
+              app.host->logBoxPointerHandler()->dispatch(input);
+            },
+            [] { return !app.host->isLogBoxShowing(); }});
+        enter(Phase::Steps);
+        break;
+      }
       next_check(Phase::ExpectLogBox);
       break;
+    case Phase::Steps: {
+      if (app.step >= app.steps.size()) {
+        quit();
+        break;
+      }
+      Step &step = app.steps[app.step];
+      if (!app.step_started) {
+        app.step_started = true;
+        restart_timeout();
+        step.start();
+        break;
+      }
+      if (!app.host->isIdle() || !step.done()) break;
+      check(true, step.name.c_str());
+      app.step++;
+      app.step_started = false;
+      break;
+    }
     case Phase::Done:
       return G_SOURCE_REMOVE;
   }
@@ -313,7 +744,9 @@ gboolean on_timeout(gpointer) {
   const char *what = app.phase == Phase::Reloading      ? "the reload"
                      : app.phase == Phase::ExpectText   ? "the expected text"
                      : app.phase == Phase::ExpectLogBox ? "LogBox"
-                                                        : "the first mount";
+                     : app.phase == Phase::Steps && app.step < app.steps.size()
+                         ? app.steps[app.step].name.c_str()
+                         : "the first mount";
   fprintf(stderr, "FAIL timed out after %d ms waiting for %s\n",
           opts.timeout_ms, what);
   if (app.host->devUI() && !app.host->devUI()->bannerText().empty()) {
@@ -383,6 +816,11 @@ void activate(GtkApplication *gtk_app, gpointer) {
   gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
   app.overlay = gtk_overlay_new();
   app.root = rn_view_new();
+  // The surface has a fixed size: keep the root at it even when the window
+  // manager makes the window bigger (mutter maximizes near-screen-size
+  // windows).
+  gtk_widget_set_halign(app.root, GTK_ALIGN_START);
+  gtk_widget_set_valign(app.root, GTK_ALIGN_START);
   gtk_overlay_set_child(GTK_OVERLAY(app.overlay), app.root);
   gtk_window_set_child(GTK_WINDOW(window), app.overlay);
 
@@ -414,6 +852,9 @@ void set_up_feature_flags() {
   folly::dynamic flags = folly::dynamic::object();
   flags["enableBridgelessArchitecture"] = true;
   flags["cxxNativeAnimatedEnabled"] = true;
+  // Pressable's onHoverIn/onHoverOut from W3C pointerenter/pointerleave,
+  // which GtkPointerHandler sends for the mouse.
+  flags["shouldPressibilityUseW3CPointerEventsForHover"] = true;
   ReactNativeFeatureFlags::override(
       std::make_unique<ReactNativeFeatureFlagsDynamicProvider>(flags));
 }
@@ -427,7 +868,7 @@ int usage() {
           "         [--screenshot PNG] [--timeout MS] [--test-reload]\n"
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
-          "         [--logbox-screenshot PNG] [--verbose]\n");
+          "         [--logbox-screenshot PNG] [--dismiss-logbox] [--verbose]\n");
   return 2;
 }
 
@@ -453,6 +894,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--test-reload")) opts.test_reload = true;
     else if (!strcmp(argv[i], "--expect-reload")) opts.expect_reload = true;
     else if (!strcmp(argv[i], "--expect-logbox")) opts.expect_logbox = true;
+    else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {
