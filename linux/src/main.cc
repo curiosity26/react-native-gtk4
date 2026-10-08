@@ -78,14 +78,15 @@ bool has_dark_pixel(GdkTexture *tex, graphene_rect_t r) {
 }
 
 // Checks the examples/hello-world App.js layout: a centered 400x200 white
-// card with a 2px #007AFF border, radius 16, and two lines of text.
+// card with a 2px #007AFF border, radius 16, and three lines of text, the
+// last one built from Platform.OS and Platform.constants.
 void verify_hello_world(GdkTexture *tex) {
   auto &mm = app.host->mountingManager();
   printf("mounted views: %zu, mount transactions: %d, js errors: %d\n",
          mm.mountedViewCount(), mm.mountCount(), app.host->jsErrorCount());
   check(app.host->jsErrorCount() == 0, "no JS errors");
-  // root + app root + card + 2 paragraphs
-  check(mm.mountedViewCount() >= 5, "JS tree mounted (>= 5 views)");
+  // root + app root + card + 3 paragraphs
+  check(mm.mountedViewCount() >= 6, "JS tree mounted (>= 6 views)");
   check(tex && gdk_texture_get_width(tex) == opts.width &&
             gdk_texture_get_height(tex) == opts.height,
         "root rendered at the surface size");
@@ -121,6 +122,17 @@ void verify_hello_world(GdkTexture *tex) {
           "subtitle 8px below the title");
     check(has_dark_pixel(tex, t), "title text drawn");
   }
+
+  // The JS side of Platform: OS 'linux' from the .linux.js override, the
+  // window system from our PlatformConstants module.
+  n = 2;
+  GtkWidget *platform = find_nth(app.root, RN_TYPE_TEXT, &n);
+  std::string text = platform ? rn_text_get_text(RN_TEXT(platform)) : "";
+  printf("platform line: \"%s\"\n", text.c_str());
+  check(text.rfind("Running on linux ", 0) == 0, "Platform.OS is 'linux'");
+  std::string expected = "(" + rngtk::backend_name(app.root) + ")";
+  check(text.find(expected) != std::string::npos,
+        "Platform.constants.windowSystem matches the GDK backend");
 }
 
 void finish() {
@@ -159,7 +171,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
   app.root = rn_view_new();
   gtk_window_set_child(GTK_WINDOW(window), app.root);
 
-  app.host = new rngtk::RNGtkHost();
+  app.host = new rngtk::RNGtkHost(opts.self_test);
   if (!app.host->loadBundle(opts.bundle)) {
     fprintf(stderr, "could not load %s\n", opts.bundle.c_str());
     app.exit_code = 1;
