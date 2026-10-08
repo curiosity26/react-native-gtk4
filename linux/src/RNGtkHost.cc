@@ -161,6 +161,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         });
       });
   runLoopObservers_ = std::make_shared<RunLoopObserverManager>();
+  measure_native_controls();
 
   auto contextContainer = std::make_shared<const ContextContainer>();
   // Called once per JS instance, i.e. again on every reload.

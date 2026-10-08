@@ -4,6 +4,8 @@
 #include "PangoText.h"
 #include "rn_scroll_view.h"
 #include "rn_text.h"
+#include "rn_text_input.h"
+#include "GtkSwitchShadowNode.h"
 #include "rn_view.h"
 
 #include <glog/logging.h>
@@ -16,6 +18,8 @@
 #include <react/renderer/components/text/RawTextComponentDescriptor.h>
 #include <react/renderer/components/text/TextComponentDescriptor.h>
 #include <react/renderer/components/view/ViewComponentDescriptor.h>
+#include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
+#include <react/renderer/components/iostextinput/TextInputComponentDescriptor.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/PropsParserContext.h>
 #include <react/renderer/core/RawProps.h>
@@ -77,6 +81,7 @@ void GtkMountingManager::unregisterSurface(SurfaceId surfaceId) {
 void GtkMountingManager::forget(Tag tag) {
   forgetScrollView(tag);
   forgetImage(tag);
+  textInputs_.erase(tag);
   shadowViews_.erase(tag);
   if (auto it = views_.find(tag); it != views_.end()) {
     g_object_set_qdata(G_OBJECT(it->second), tag_quark(), nullptr);
@@ -245,13 +250,30 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
 }
 
 void GtkMountingManager::create(const ShadowView &view) {
-  bool scroll = std::strcmp(view.componentName, "ScrollView") == 0;
-  GtkWidget *widget = is_paragraph(view) ? rn_text_new("")
-                      : scroll           ? rn_scroll_view_new()
-                                         : rn_view_new();
+  const char *name = view.componentName;
+  bool scroll = std::strcmp(name, "ScrollView") == 0;
+  bool textInput = std::strcmp(name, "TextInput") == 0;
+  bool toggle = std::strcmp(name, "Switch") == 0;
+  GtkWidget *widget;
+  if (is_paragraph(view)) {
+    widget = rn_text_new("");
+  } else if (scroll) {
+    widget = rn_scroll_view_new();
+  } else if (textInput) {
+    auto props = std::dynamic_pointer_cast<const BaseTextInputProps>(view.props);
+    widget = rn_text_input_new(props && props->multiline);
+  } else if (toggle) {
+    widget = gtk_switch_new();
+  } else if (std::strcmp(name, "ActivityIndicatorView") == 0) {
+    widget = gtk_spinner_new();
+  } else {
+    widget = rn_view_new();
+  }
   views_[view.tag] = GTK_WIDGET(g_object_ref_sink(widget));
   g_object_set_qdata(G_OBJECT(widget), tag_quark(), GINT_TO_POINTER(view.tag));
   if (scroll) connectScrollView(widget, view.tag);
+  if (textInput) connectTextInput(widget, view.tag);
+  if (toggle) connectSwitch(widget, view.tag);
   update(ShadowView{}, view);
 }
 
@@ -267,6 +289,9 @@ void GtkMountingManager::update(const ShadowView &oldView,
   applyLayout(widget, newView);
   if (RN_IS_TEXT(widget)) applyParagraph(widget, newView);
   if (RN_IS_SCROLL_VIEW(widget)) updateScrollView(widget, oldView, newView);
+  if (RN_IS_TEXT_INPUT(widget)) updateTextInput(widget, oldView, newView);
+  if (GTK_IS_SWITCH(widget)) updateSwitch(widget, oldView, newView);
+  if (GTK_IS_SPINNER(widget)) updateSpinner(widget, oldView, newView);
   if (std::strcmp(newView.componentName, ImageComponentName) == 0) {
     updateImage(widget, oldView, newView);
   }
@@ -277,6 +302,10 @@ void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
     apply_view_props(widget, *props, view.layoutMetrics);
     if (RN_IS_SCROLL_VIEW(widget)) {
       apply_view_style(rn_scroll_view_get_background(RN_SCROLL_VIEW(widget)),
+                       *props, view.layoutMetrics);
+    }
+    if (RN_IS_TEXT_INPUT(widget)) {
+      apply_view_style(rn_text_input_get_background(RN_TEXT_INPUT(widget)),
                        *props, view.layoutMetrics);
     }
   }
@@ -311,7 +340,11 @@ void GtkMountingManager::applyLayout(GtkWidget *widget,
                                      const ShadowView &view) {
   const LayoutMetrics &lm = view.layoutMetrics;
   if (lm == EmptyLayoutMetrics) return;
-  gtk_widget_set_visible(widget, lm.displayType != DisplayType::None);
+  // A control can hide itself through its props (a stopped
+  // ActivityIndicator); display: none hides anything.
+  static GQuark hidden = g_quark_from_static_string("rngtk-hidden-by-props");
+  gtk_widget_set_visible(widget, lm.displayType != DisplayType::None &&
+                                     !g_object_get_qdata(G_OBJECT(widget), hidden));
   rn_widget_set_frame(widget, lm.frame.origin.x, lm.frame.origin.y,
                       lm.frame.size.width, lm.frame.size.height);
 }
@@ -362,6 +395,13 @@ void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
       scrollCommand(widget, commandName, args)) {
     return;
   }
+  if (widget && RN_IS_TEXT_INPUT(widget) &&
+      textInputCommand(widget, shadowView.tag, commandName, args)) {
+    return;
+  }
+  if (widget && GTK_IS_SWITCH(widget) && switchCommand(widget, commandName, args)) {
+    return;
+  }
   LOG(WARNING) << "Unsupported command " << commandName << " for "
                << shadowView.componentName;
 }
@@ -386,6 +426,12 @@ ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
           concreteComponentDescriptorProvider<ViewComponentDescriptor>());
       registry->add(concreteComponentDescriptorProvider<
                     ModalHostViewComponentDescriptor>());
+      registry->add(
+          concreteComponentDescriptorProvider<TextInputComponentDescriptor>());
+      registry->add(
+          concreteComponentDescriptorProvider<GtkSwitchComponentDescriptor>());
+      registry->add(concreteComponentDescriptorProvider<
+                    ActivityIndicatorViewComponentDescriptor>());
       return registry;
     }();
     auto registry = providers->createComponentDescriptorRegistry(

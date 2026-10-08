@@ -171,6 +171,24 @@ add_library(yoga ALIAS yogacore)
 # Our Pango text measurement replaces react/renderer/textlayoutmanager.
 add_subdirectory(textlayoutmanager)
 
+# TextInput: React Native's iOS C++ component (name "TextInput", which
+# TextInput.js renders off Android). It is plain C++; ReactCommon's own
+# CMake target builds the Android one.
+set(RNGTK_TEXTINPUT_DIR ${REACT_COMMON_DIR}/react/renderer/components/textinput)
+file(GLOB rngtk_textinput_SRC CONFIGURE_DEPENDS
+  ${RNGTK_TEXTINPUT_DIR}/*.cpp
+  ${RNGTK_TEXTINPUT_DIR}/platform/ios/react/renderer/components/iostextinput/*.cpp)
+add_library(rngtk_textinput OBJECT ${rngtk_textinput_SRC})
+target_include_directories(rngtk_textinput PUBLIC
+  ${RNGTK_TEXTINPUT_DIR} ${RNGTK_TEXTINPUT_DIR}/platform/ios)
+target_link_libraries(rngtk_textinput
+  glog folly_runtime jsi react_debug react_renderer_attributedstring
+  react_renderer_componentregistry react_renderer_core react_renderer_debug
+  react_renderer_graphics react_renderer_imagemanager react_renderer_mapbuffer
+  react_renderer_mounting react_renderer_textlayoutmanager
+  react_renderer_uimanager react_utils rrc_image rrc_text rrc_view yoga)
+target_compile_reactnative_options(rngtk_textinput PRIVATE)
+
 # ReactCxxPlatform
 foreach(dir
     react/coremodules
@@ -233,7 +251,8 @@ rngtk_relax_upstream_warnings(${CMAKE_CURRENT_SOURCE_DIR})
 
 # GTK widgets (also used by the Phase 0 spike)
 add_library(rngtk_widgets STATIC widgets/rn_view.cc widgets/rn_text.cc
-            widgets/rn_scroll_view.cc)
+            widgets/rn_scroll_view.cc widgets/rn_text_input.cc
+            widgets/rn_css.cc)
 target_include_directories(rngtk_widgets PUBLIC widgets)
 target_compile_definitions(rngtk_widgets PUBLIC
   GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_14
@@ -246,6 +265,9 @@ add_executable(rn-gtk-host
   src/GtkMountingManager.cc
   src/GtkPointerHandler.cc
   src/GtkScrollViews.cc
+  src/GtkTextInputs.cc
+  src/GtkControls.cc
+  components/GtkSwitchShadowNode.cpp
   src/GtkImageLoader.cc
   src/GtkImages.cc
   imagemanager/ImageManager.cpp
@@ -255,7 +277,7 @@ add_executable(rn-gtk-host
   src/SoupNetworking.cc
   src/main.cc
   ../spike/src/harness.cc)
-target_include_directories(rn-gtk-host PRIVATE src ../spike/src)
+target_include_directories(rn-gtk-host PRIVATE src components ../spike/src)
 target_compile_options(rn-gtk-host PRIVATE -Wall -Werror -fexceptions -frtti)
 
 # Platform.constants.reactNativeVersion, from rn-version.properties.
@@ -354,6 +376,7 @@ target_link_libraries(rn-gtk-host
     rrc_root
     rrc_scrollview
     rrc_text
+    rngtk_textinput
     rrc_view
     runtimeexecutor
     yogacore
@@ -384,6 +407,9 @@ add_test(NAME gallery-self-test
 add_test(NAME gallery-lists-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryLists --width 940 --height 680 --self-test)
+add_test(NAME gallery-controls-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryControls --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

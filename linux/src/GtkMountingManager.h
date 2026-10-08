@@ -26,6 +26,10 @@
 
 namespace rngtk {
 
+// Measures GTK controls the shadow nodes size to (the Switch); call on the
+// main thread before JS starts.
+void measure_native_controls();
+
 class GtkMountingManager
     : public facebook::react::IMountingManager,
       public std::enable_shared_from_this<GtkMountingManager> {
@@ -124,6 +128,32 @@ class GtkMountingManager
                      const folly::dynamic &args);
   void forgetScrollView(facebook::react::Tag tag);
   static GtkWidget *containerFor(GtkWidget *parent);
+
+  // TextInput (GtkTextInputs.cc)
+  struct TextInputTracking {
+    int nativeEventCount = 0;
+    facebook::react::Size contentSize{};
+    bool autoFocused = false;
+  };
+  void connectTextInput(GtkWidget *widget, facebook::react::Tag tag);
+  void updateTextInput(GtkWidget *widget,
+                       const facebook::react::ShadowView &oldView,
+                       const facebook::react::ShadowView &newView);
+  bool textInputCommand(GtkWidget *widget, facebook::react::Tag tag,
+                        const std::string &name, const folly::dynamic &args);
+  void onTextInputEvent(facebook::react::Tag tag, const std::string &type,
+                        const std::string &arg);
+  std::unordered_map<facebook::react::Tag, TextInputTracking> textInputs_;
+
+  // Switch and ActivityIndicator (GtkControls.cc)
+  void connectSwitch(GtkWidget *widget, facebook::react::Tag tag);
+  void updateSwitch(GtkWidget *widget, const facebook::react::ShadowView &oldView,
+                    const facebook::react::ShadowView &newView);
+  bool switchCommand(GtkWidget *widget, const std::string &name,
+                     const folly::dynamic &args);
+  void updateSpinner(GtkWidget *widget,
+                     const facebook::react::ShadowView &oldView,
+                     const facebook::react::ShadowView &newView);
 
   // Image (GtkImages.cc)
   class ImageObserver;
