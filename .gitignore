@@ -2,3 +2,7 @@ node_modules/
 spike/build/
 spike/out/
 *.log
+third-party/deps/
+
+# CMake build trees
+/build/

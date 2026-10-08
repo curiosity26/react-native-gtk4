@@ -86,6 +86,11 @@ void rn_text_set_font(RNText *self, const char *family, double size_px,
   gtk_widget_queue_resize(GTK_WIDGET(self));
 }
 
+void rn_text_set_layout(RNText *self, PangoLayout *layout) {
+  g_set_object(&self->layout, layout);
+  gtk_widget_queue_resize(GTK_WIDGET(self));
+}
+
 void rn_text_set_color(RNText *self, const GdkRGBA *color) {
   self->color = *color;
   gtk_widget_queue_draw(GTK_WIDGET(self));

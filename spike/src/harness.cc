@@ -25,7 +25,8 @@ GdkTexture *render_widget(GtkWidget *widget) {
   g_object_unref(paintable);
   if (!node) return nullptr;
   GskRenderer *renderer = gtk_native_get_renderer(gtk_widget_get_native(widget));
-  graphene_rect_t viewport = GRAPHENE_RECT_INIT(0, 0, (float)w, (float)h);
+  graphene_rect_t viewport;
+  graphene_rect_init(&viewport, 0, 0, (float)w, (float)h);
   GdkTexture *texture = gsk_renderer_render_texture(renderer, node, &viewport);
   gsk_render_node_unref(node);
   return texture;
