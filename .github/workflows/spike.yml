@@ -1,0 +1,37 @@
+name: GTK4 spike
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Ubuntu 24.04 ships GTK 4.14, our floor (same base as Linux Mint 22.3).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK4 and headless display servers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev cmake ninja-build g++ xvfb xauth mutter weston \
+            dbus-x11 fonts-dejavu-core
+      - name: Build
+        run: npm run spike:build
+      - name: Test on X11 (Xvfb)
+        run: npm run spike:test:x11
+      - name: Test on Wayland (GNOME mutter, headless)
+        run: npm run spike:test:wayland
+      - name: Screenshots
+        run: |
+          mkdir -p spike/out
+          scripts/run-headless.sh x11 -- spike/build/hello-world --self-test --screenshot spike/out/hello-x11.png
+          scripts/run-headless.sh wayland -- spike/build/hello-world --self-test --screenshot spike/out/hello-wayland.png
+      - name: Benchmark (software rendering, indicative only)
+        run: FRAMES=60 scripts/bench-matrix.sh spike/build spike/out/bench
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spike-output
+          path: spike/out
