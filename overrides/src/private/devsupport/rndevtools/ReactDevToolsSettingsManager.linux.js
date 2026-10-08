@@ -6,4 +6,4 @@
  * native module and does nothing without it. (iOS uses its Settings module,
  * which Linux does not have.)
  */
-export * from 'react-native/src/private/devsupport/rndevtools/ReactDevToolsSettingsManager.android';
+export * from 'react-native-upstream/src/private/devsupport/rndevtools/ReactDevToolsSettingsManager.android';
