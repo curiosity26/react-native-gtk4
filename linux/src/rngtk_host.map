@@ -1,0 +1,9 @@
+/* librngtk_host.so exports include/rngtk/App.h and nothing else. */
+{
+  global:
+    extern "C++" {
+      "rngtk::runApp(int, char**, rngtk::AppOptions const&)";
+      "rngtk::reactNativeVersion()";
+    };
+  local: *;
+};

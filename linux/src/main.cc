@@ -23,8 +23,6 @@
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
-#include <react/featureflags/ReactNativeFeatureFlags.h>
-#include <react/featureflags/ReactNativeFeatureFlagsDefaults.h>
 
 #include <cmath>
 #include <cstdio>
@@ -37,7 +35,9 @@
 #include <string>
 #include <vector>
 
+#include "DevControls.h"
 #include "DevUI.h"
+#include "FeatureFlags.h"
 #include "GtkMountingManager.h"
 #include "GtkPointerHandler.h"
 #include "PangoText.h"
@@ -1337,58 +1337,6 @@ gboolean on_timeout(gpointer) {
   return G_SOURCE_REMOVE;
 }
 
-void add_action(GActionMap *map, const char *name, void (*fn)()) {
-  GSimpleAction *action = g_simple_action_new(name, nullptr);
-  g_signal_connect(action, "activate",
-                   G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer fn) {
-                     reinterpret_cast<void (*)()>(fn)();
-                   }),
-                   reinterpret_cast<gpointer>(fn));
-  g_action_map_add_action(map, G_ACTION(action));
-  g_object_unref(action);
-}
-
-void add_shortcut(GtkShortcutController *controller, const char *trigger,
-                  const char *action) {
-  gtk_shortcut_controller_add_shortcut(
-      controller, gtk_shortcut_new(gtk_shortcut_trigger_parse_string(trigger),
-                                   gtk_named_action_new(action)));
-}
-
-// The dev menu's actions and Ctrl+R / Ctrl+D / Ctrl+M.
-void add_dev_controls(GtkWidget *window) {
-  GSimpleActionGroup *group = g_simple_action_group_new();
-  add_action(G_ACTION_MAP(group), "reload", [] { app.host->reload(); });
-  add_action(G_ACTION_MAP(group), "open-debugger",
-             [] { app.host->openDebugger(); });
-  add_action(G_ACTION_MAP(group), "menu", [] { app.host->showDevMenu(); });
-  gtk_widget_insert_action_group(window, "dev", G_ACTION_GROUP(group));
-  g_object_unref(group);
-
-  GtkEventController *controller = gtk_shortcut_controller_new();
-  gtk_shortcut_controller_set_scope(GTK_SHORTCUT_CONTROLLER(controller),
-                                    GTK_SHORTCUT_SCOPE_GLOBAL);
-  auto *shortcuts = GTK_SHORTCUT_CONTROLLER(controller);
-  add_shortcut(shortcuts, "<Control>r", "dev.reload");
-  add_shortcut(shortcuts, "<Control>d", "dev.menu");
-  add_shortcut(shortcuts, "<Control>m", "dev.menu");
-  gtk_widget_add_controller(window, controller);
-
-  if (opts.verbose) {
-    GtkEventController *keys = gtk_event_controller_key_new();
-    gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
-    g_signal_connect(keys, "key-pressed",
-                     G_CALLBACK(+[](GtkEventControllerKey *, guint keyval,
-                                    guint, GdkModifierType state, gpointer) {
-                       LOG(INFO) << "key " << gdk_keyval_name(keyval)
-                                 << " modifiers " << state;
-                       return FALSE;
-                     }),
-                     nullptr);
-    gtk_widget_add_controller(window, keys);
-  }
-}
-
 void activate(GtkApplication *gtk_app, gpointer) {
   GtkWidget *window = gtk_application_window_new(gtk_app);
   gtk_window_set_title(GTK_WINDOW(window), opts.module.c_str());
@@ -1411,7 +1359,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .inspector = opts.inspector,
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
-  if (opts.dev) add_dev_controls(window);
+  if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
   folly::dynamic props = folly::dynamic::object();
   if (!opts.initial_props.empty()) {
     try {
@@ -1436,23 +1384,6 @@ void activate(GtkApplication *gtk_app, gpointer) {
     restart_timeout();
   }
   gtk_window_present(GTK_WINDOW(window));
-}
-
-// React Native's feature flags for this host. (Not
-// ReactNativeFeatureFlagsDynamicProvider: its lookups insert into a shared
-// folly::dynamic, which races once the JS and main threads both read
-// flags.)
-class HostFeatureFlags : public ReactNativeFeatureFlagsDefaults {
- public:
-  bool enableBridgelessArchitecture() override { return true; }
-  bool cxxNativeAnimatedEnabled() override { return true; }
-  // Pressable's onHoverIn/onHoverOut from W3C pointerenter/pointerleave,
-  // which GtkPointerHandler sends for the mouse.
-  bool shouldPressibilityUseW3CPointerEventsForHover() override { return true; }
-};
-
-void set_up_feature_flags() {
-  ReactNativeFeatureFlags::override(std::make_unique<HostFeatureFlags>());
 }
 
 int usage() {
@@ -1516,7 +1447,7 @@ int main(int argc, char **argv) {
   google::InitGoogleLogging(argv[0]);
   FLAGS_logtostderr = true;
   FLAGS_minloglevel = opts.verbose ? 0 : 1;  // info, or warnings and up
-  set_up_feature_flags();
+  rngtk::setUpFeatureFlags();
 
   GtkApplication *gtk_app = gtk_application_new(
       "dev.curiosity26.RNGtk4.Host", G_APPLICATION_NON_UNIQUE);

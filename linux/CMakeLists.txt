@@ -1,6 +1,10 @@
 # The GTK4 host: React Native's C++ core (ReactCommon + ReactCxxPlatform),
 # Hermes, and GTK widgets that Fabric mounts into.
 #
+# Apps don't build this directly: `react-native run-linux` builds it once
+# into a shared cache and installs ReactNativeGtk::host (librngtk_host.so),
+# which apps link (see template/linux and docs/getting-started.md).
+#
 # Fetch and build the dependencies first (see docs/building-react-native.md):
 #   python3 scripts/fetch-rn-deps.py && scripts/build-hermes.sh
 #   cmake -S linux -B build/linux -G Ninja \
@@ -37,6 +41,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -Wno-deprecated-declara
 
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(WARNING "React Native's sources need clang (GCC rejects '#pragma mark' under -Werror)")
+endif()
+
+# In this repository (not in the npm package) the self-test harness and
+# examples come along.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../spike/src/harness.cc)
+  set(RNGTK_IN_REPO ON)
+else()
+  set(RNGTK_IN_REPO OFF)
 endif()
 
 set(RNGTK_DEPS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/deps"
@@ -259,8 +271,11 @@ target_compile_definitions(rngtk_widgets PUBLIC
   GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_14)
 target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 
-add_executable(rn-gtk-host
+# The host: our sources, shared by the app library and the test harness.
+add_library(rngtk_host_objs OBJECT
+  src/DevControls.cc
   src/DevUI.cc
+  src/FeatureFlags.cc
   src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/GtkPointerHandler.cc
@@ -274,11 +289,9 @@ add_executable(rn-gtk-host
   src/GtkViewProps.cc
   src/PlatformConstantsModule.cc
   src/RNGtkHost.cc
-  src/SoupNetworking.cc
-  src/main.cc
-  ../spike/src/harness.cc)
-target_include_directories(rn-gtk-host PRIVATE src components ../spike/src)
-target_compile_options(rn-gtk-host PRIVATE -Wall -Werror -fexceptions -frtti)
+  src/SoupNetworking.cc)
+target_include_directories(rngtk_host_objs PUBLIC src components include)
+target_compile_options(rngtk_host_objs PUBLIC -Wall -Werror -fexceptions -frtti)
 
 # Platform.constants.reactNativeVersion, from rn-version.properties.
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../rn-version.properties RNGTK_RN_VERSION
@@ -286,15 +299,17 @@ file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../rn-version.properties RNGTK_RN_VERSI
 if(NOT RNGTK_RN_VERSION MATCHES "^reactNative=([0-9]+)\\.([0-9]+)\\.([0-9]+)")
   message(FATAL_ERROR "no reactNative=X.Y.Z in rn-version.properties")
 endif()
-target_compile_definitions(rn-gtk-host PRIVATE
+set(RNGTK_RN_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
+target_compile_definitions(rngtk_host_objs PRIVATE
   RNGTK_RN_VERSION_MAJOR=${CMAKE_MATCH_1}
   RNGTK_RN_VERSION_MINOR=${CMAKE_MATCH_2}
   RNGTK_RN_VERSION_PATCH=${CMAKE_MATCH_3})
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
              ${CMAKE_CURRENT_SOURCE_DIR}/../rn-version.properties)
 
-target_link_libraries(rn-gtk-host
-  PRIVATE
+# Most React Native targets are OBJECT libraries, whose objects only reach
+# targets that link them directly: each binary links the whole list.
+set(RNGTK_REACT_NATIVE_LIBS
     rngtk_widgets
     PkgConfig::SOUP
     Threads::Threads
@@ -395,6 +410,54 @@ target_link_libraries(rn-gtk-host
     react_cxx_platform_react_threading
     react_cxx_platform_react_utils
 )
+target_link_libraries(rngtk_host_objs PUBLIC ${RNGTK_REACT_NATIVE_LIBS})
+
+function(rngtk_link_host target)
+  target_link_libraries(${target} PRIVATE rngtk_host_objs ${RNGTK_REACT_NATIVE_LIBS})
+endfunction()
+
+# JSI is React Native's one SHARED library; installed next to the host.
+set_target_properties(jsi PROPERTIES INSTALL_RPATH "$ORIGIN")
+
+# ReactNativeGtk::host for apps: librngtk_host.so, exporting only the
+# rngtk::runApp API (include/rngtk/App.h). Everything else, React Native
+# included, stays inside it.
+add_library(rngtk_host SHARED src/App.cc)
+rngtk_link_host(rngtk_host)
+target_link_libraries(rngtk_host PRIVATE atomic)
+target_compile_definitions(rngtk_host PRIVATE RNGTK_RN_VERSION="${RNGTK_RN_VERSION}")
+target_link_options(rngtk_host PRIVATE
+  -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/rngtk_host.map
+  -Wl,--no-undefined)
+set_property(TARGET rngtk_host APPEND PROPERTY LINK_DEPENDS
+             ${CMAKE_CURRENT_SOURCE_DIR}/src/rngtk_host.map)
+set_target_properties(rngtk_host PROPERTIES
+  BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+
+# Installed by `react-native run-linux` into the shared cache
+# (~/.cache/react-native-gtk4/<rn-version>/host/...), where app builds find
+# it with find_package(ReactNativeGtk).
+include(GNUInstallDirs)
+# With its shared dependencies: Hermes and JSI.
+install(TARGETS rngtk_host jsi LIBRARY DESTINATION lib)
+install(FILES ${LIB_HERMES} DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include)
+configure_file(cmake/ReactNativeGtkConfig.cmake.in
+               ${CMAKE_CURRENT_BINARY_DIR}/ReactNativeGtkConfig.cmake @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ReactNativeGtkConfig.cmake
+        DESTINATION lib/cmake/ReactNativeGtk)
+
+# The repository's test harness: self-tests, the gallery and the dev-loop
+# checks (not part of the package).
+option(RNGTK_BUILD_HARNESS "Build rn-gtk-host, the self-test harness"
+       ${RNGTK_IN_REPO})
+if(NOT RNGTK_BUILD_HARNESS)
+  return()
+endif()
+
+add_executable(rn-gtk-host src/main.cc ../spike/src/harness.cc)
+target_include_directories(rn-gtk-host PRIVATE ../spike/src)
+rngtk_link_host(rn-gtk-host)
 
 enable_testing()
 set(RNGTK_HELLO_BUNDLE
