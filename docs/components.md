@@ -185,6 +185,66 @@ http, assets, `defaultSource` and the load events.
 | `Image.getSize`, `Image.prefetch`, `queryCache` | Partial | wired to the loader through the ImageLoader module; not covered by the self-test |
 | Animated GIF/WebP | Not yet | the first frame shows |
 
+## TextInput, Switch, ActivityIndicator
+
+These are real GTK controls. Typing, selection, input methods (IBus...),
+clipboard and undo all come from GTK. The `GalleryControls` page
+(`--module GalleryControls --self-test`) types through GTK's editing path
+and checks:
+
+- a JS-uppercased controlled input, with the caret kept in place;
+- maxLength;
+- secure entry hiding the characters;
+- multiline growth via onContentSizeChange;
+- submit;
+- the focus/blur commands and their events;
+- that a TextInput inside a Pressable doesn't press it;
+- Switch toggling, and a controlled Switch flipping back;
+- the spinner animating and hiding when stopped.
+
+`<TextInput>` mounts an `RNTextInput` (`linux/widgets/rn_text_input.cc`): a
+GtkText for one line, a GtkTextView for multiline, over an RNView that draws
+the input's background and border. Natively it's React Native's iOS C++
+TextInput component, which TextInput.js renders on Linux through two small
+overrides (`TextInput`, `TextInputState`).
+
+Controlled values follow iOS's protocol. Each native edit bumps an event
+count, sends onChange with it, and updates the shadow node's state, so
+layout measures the new text. A value from JS is applied only once JS has
+seen every edit (its `mostRecentEventCount` matches). Typing never fights
+JS, and a value JS rewrites keeps the caret where it was.
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| `value` (controlled), `defaultValue`, `onChange`, `onChangeText` | Supported | iOS's event-count reconciliation |
+| `placeholder`, `placeholderTextColor` | Supported | |
+| `editable`, `readOnly` | Supported | |
+| `maxLength` | Supported | characters (code points) |
+| `secureTextEntry` | Supported | GTK's invisible characters; password input purpose |
+| `multiline`, auto-growing height, `onContentSizeChange` | Supported | measured with the same Pango layout as the shadow node |
+| `numberOfLines` | Partial | only from the style height; no line clamp in the editor |
+| `onSubmitEditing`, `submitBehavior`, `blurOnSubmit` | Supported | Enter in a single line; in multiline with submit/blurAndSubmit |
+| `onFocus`, `onBlur`, `onEndEditing`, `autoFocus` | Supported | |
+| Commands `focus`, `blur`, `clear`, `setTextAndSelection` | Supported | stale `setTextAndSelection` calls (older event count) are dropped |
+| `selection`, `onSelectionChange` | Supported | offsets in characters (UTF-16 indices differ outside the BMP) |
+| `selectTextOnFocus`, `clearTextOnFocus` | Supported | |
+| `selectionColor`, `cursorColor`, `caretHidden` | Supported | CSS on the editor |
+| `textAlign`, font props, `color`, `letterSpacing` | Supported | CSS on the editor |
+| `keyboardType` / `inputMode` | Supported | GtkInputPurpose (email, number, digits, phone, URL) |
+| `autoCapitalize`, `autoCorrect`, `spellCheck` | Supported | GtkInputHints, for input methods that use them |
+| `onKeyPress` | Supported | characters, Enter, Backspace, Tab, Escape, Delete; input-method commits send onChange only |
+| Copy, paste, undo, IME | Supported | GTK's (GtkText/GtkTextView with their GtkIMContext) |
+| `returnKeyType`, `enterKeyHint` | Not yet | no on-screen keyboard to label |
+| `inputAccessoryViewID`, `textContentType`, autofill | Not yet | |
+| `onScroll` (multiline) | Not yet | |
+| Nested `<Text>` children | Not yet | the text only |
+
+| Control | Status | Notes |
+| --- | --- | --- |
+| `<Switch>` `value`, `onValueChange`, `disabled` | Supported | GtkSwitch. A controlled Switch whose value JS keeps flips back through the setValue command, as on iOS. Clicks go to GTK, not to React's responder. |
+| `<Switch>` `trackColor`, `thumbColor` | Partial | backgrounds through widget CSS; the theme's borders and shadows stay |
+| `<ActivityIndicator>` `animating`, `hidesWhenStopped`, `color`, `size` (small, large, number) | Supported | GtkSpinner sized to the frame |
+
 ## Performance
 
 The richer styling keeps plain views cheap: the rarely used styles
