@@ -78,10 +78,12 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Alert/RCTAlertManager` | Android | no Linux dialog module yet; Android's dialog-manager shape is the plan |
 | `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
 | `Image/ImageViewNativeComponent` (not platform-split) | Android's view config | Image.android.js sends `defaultSource` as a string and `shouldNotifyLoadEvents`, which iOS's config drops |
+| `Components/TextInput/TextInput`, `Components/TextInput/TextInputState` (not platform-split) | iOS | they only render, focus and blur for 'ios' and 'android'; Linux uses the iOS native components (the host builds React Native's iOS C++ TextInput) |
 
 An override can also replace a file React Native doesn't split by
 platform; the resolver checks `overrides/` for every react-native module.
-`ImageViewNativeComponent.linux.js` is such a copy, with one line changed.
+`ImageViewNativeComponent.linux.js`, `TextInput.linux.js` and
+`TextInputState.linux.js` are such copies, each with a few lines changed.
 `ProgressBarAndroid`, `Settings` and `PlatformColorValueTypesIOS` need no
 override: their platform-less files are already the non-Android/non-iOS
 versions.

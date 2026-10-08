@@ -11,7 +11,8 @@ and Pango: borders, radii, shadows, transforms, filters, gradients, nested
 text. Mouse and touch input drive Pressable, the Touchables, Button and
 hover. ScrollView scrolls with GTK's kinetic scrolling, FlatList and
 SectionList virtualize 10k rows, and Image loads assets, http, files and
-data URIs. See [docs/components.md](docs/components.md). Apps bundle for
+data URIs. TextInput, Switch and ActivityIndicator are GTK's own
+controls (input methods, clipboard and undo included). See [docs/components.md](docs/components.md). Apps bundle for
 their own `linux` platform: `Platform.OS === 'linux'`, `.linux.js` files,
 and Linux `Platform.constants` (distro, GTK version, Wayland or X11). In
 development the host loads from Metro, with reload, fast refresh, LogBox and
