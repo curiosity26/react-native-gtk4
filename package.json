@@ -10,12 +10,34 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
-  "os": ["linux"],
-  "files": [],
+  "os": [
+    "linux"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts"
+    },
+    "./metro-config": "./metro-config.js",
+    "./package.json": "./package.json"
+  },
+  "types": "types/index.d.ts",
+  "files": [
+    "metro-config.js",
+    "overrides/",
+    "types/"
+  ],
   "scripts": {
+    "test": "node --test test/*.test.js",
+    "bundle:hello-world": "npm --prefix examples/hello-world run bundle",
     "spike:build": "cmake -S spike -B spike/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build spike/build",
     "spike:test:x11": "scripts/run-headless.sh x11 -- ctest --test-dir spike/build --output-on-failure",
     "spike:test:wayland": "scripts/run-headless.sh wayland -- ctest --test-dir spike/build --output-on-failure",
     "spike:bench": "scripts/bench-matrix.sh"
+  },
+  "peerDependencies": {
+    "react-native": "0.87.1"
   }
 }

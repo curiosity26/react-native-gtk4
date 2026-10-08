@@ -3,6 +3,7 @@
 #include "GtkMessageQueueThread.h"
 #include "GtkMountingManager.h"
 #include "PangoText.h"
+#include "PlatformConstantsModule.h"
 #include "rn_view.h"
 
 #include <glog/logging.h>
@@ -46,7 +47,7 @@ gboolean RNGtkHost::beforeWaiting(GSource *source, gint *timeout) {
   return FALSE;
 }
 
-RNGtkHost::RNGtkHost() {
+RNGtkHost::RNGtkHost(bool isTesting) {
   mountingManager_ =
       std::make_shared<GtkMountingManager>([this](SurfaceId surfaceId) {
         reactHost_->runOnScheduler([surfaceId](Scheduler &scheduler) {
@@ -75,13 +76,30 @@ RNGtkHost::RNGtkHost() {
   config.enableDevMode = false;
   config.enableInspector = false;
 
+  // Providers are asked before ReactCxxPlatform's built-in modules, so
+  // these replace its Android-shaped PlatformConstants.
+  TurboModuleProviders turboModuleProviders{
+      [constants = collectPlatformConstants(gdk_display_get_default(),
+                                            isTesting)](
+          const std::string &name,
+          const std::shared_ptr<CallInvoker> &jsInvoker)
+          -> std::shared_ptr<TurboModule> {
+        if (name == PlatformConstantsModule::kModuleName) {
+          return std::make_shared<PlatformConstantsModule>(jsInvoker,
+                                                           constants);
+        }
+        return nullptr;
+      },
+  };
+
   reactHost_ = std::make_unique<ReactHost>(
       config, mountingManager_, runLoopObservers_, std::move(contextContainer),
       [this](facebook::jsi::Runtime &, const JsErrorHandler::ProcessedError &error) {
         jsErrors_++;
         LOG(ERROR) << "JS error: " << error;
       },
-      logToConsole);
+      logToConsole, /*devUIDelegate=*/nullptr,
+      std::move(turboModuleProviders));
 
   static GSourceFuncs funcs = {beforeWaiting, nullptr, nullptr, nullptr,
                                nullptr, nullptr};

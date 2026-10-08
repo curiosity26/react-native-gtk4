@@ -5,7 +5,13 @@ in the spirit of [react-native-windows](https://github.com/microsoft/react-nativ
 and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
-**Status: Phase 0 (bootstrap).** Nothing here runs React Native yet.
+**Status: Phase 1 (core) in progress.** The GTK host runs React Native
+0.87.1 (Hermes, Fabric) and renders `<View>` and `<Text>`. Apps bundle for
+their own `linux` platform: `Platform.OS === 'linux'`, `.linux.js` files,
+and Linux `Platform.constants` (distro, GTK version, Wayland or X11).
+See [docs/building-react-native.md](docs/building-react-native.md).
+
+![Hello World on GTK4 under Wayland](docs/images/hello-world-linux-wayland.png)
 
 ## Targets
 

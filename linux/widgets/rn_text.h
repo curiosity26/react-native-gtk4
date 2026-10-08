@@ -23,6 +23,9 @@ void rn_text_set_color(RNText *self, const GdkRGBA *color);
 // gtk_widget_get_pango_context() so it follows the widget's font settings.
 void rn_text_set_layout(RNText *self, PangoLayout *layout);
 
+// The paragraph's text (owned by the widget).
+const char *rn_text_get_text(RNText *self);
+
 // Measures text the way Yoga's measure function will: max_width < 0 means
 // unconstrained. Safe to call from any thread.
 graphene_size_t rn_text_measure(const char *text, const char *family,

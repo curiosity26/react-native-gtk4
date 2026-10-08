@@ -214,12 +214,26 @@ target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 add_executable(rn-gtk-host
   src/GtkMessageQueueThread.cc
   src/GtkMountingManager.cc
+  src/PlatformConstantsModule.cc
   src/RNGtkHost.cc
   src/StubNetworking.cc
   src/main.cc
   ../spike/src/harness.cc)
 target_include_directories(rn-gtk-host PRIVATE src ../spike/src)
 target_compile_options(rn-gtk-host PRIVATE -Wall -Werror -fexceptions -frtti)
+
+# Platform.constants.reactNativeVersion, from rn-version.properties.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../rn-version.properties RNGTK_RN_VERSION
+     REGEX "^reactNative=")
+if(NOT RNGTK_RN_VERSION MATCHES "^reactNative=([0-9]+)\\.([0-9]+)\\.([0-9]+)")
+  message(FATAL_ERROR "no reactNative=X.Y.Z in rn-version.properties")
+endif()
+target_compile_definitions(rn-gtk-host PRIVATE
+  RNGTK_RN_VERSION_MAJOR=${CMAKE_MATCH_1}
+  RNGTK_RN_VERSION_MINOR=${CMAKE_MATCH_2}
+  RNGTK_RN_VERSION_PATCH=${CMAKE_MATCH_3})
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             ${CMAKE_CURRENT_SOURCE_DIR}/../rn-version.properties)
 
 target_link_libraries(rn-gtk-host
   PRIVATE

@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Platform, StyleSheet, Text, View} from 'react-native';
 
 export default function App() {
   return (
@@ -7,6 +7,9 @@ export default function App() {
       <View style={styles.card}>
         <Text style={styles.title}>Hello, World!</Text>
         <Text style={styles.subtitle}>React Native on GTK4</Text>
+        <Text style={styles.platform}>
+          Running on {Platform.OS} ({Platform.constants.windowSystem})
+        </Text>
       </View>
     </View>
   );
@@ -38,5 +41,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 16,
     color: '#6E6E73',
+  },
+  platform: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#8E8E93',
   },
 });

@@ -20,7 +20,8 @@ class GtkMountingManager;
 
 class RNGtkHost {
  public:
-  RNGtkHost();
+  // isTesting is reported to JS as Platform.isTesting (in dev bundles).
+  explicit RNGtkHost(bool isTesting = false);
   ~RNGtkHost();
   RNGtkHost(const RNGtkHost &) = delete;
   RNGtkHost &operator=(const RNGtkHost &) = delete;

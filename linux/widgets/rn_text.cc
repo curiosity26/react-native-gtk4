@@ -91,6 +91,10 @@ void rn_text_set_layout(RNText *self, PangoLayout *layout) {
   gtk_widget_queue_resize(GTK_WIDGET(self));
 }
 
+const char *rn_text_get_text(RNText *self) {
+  return pango_layout_get_text(self->layout);
+}
+
 void rn_text_set_color(RNText *self, const GdkRGBA *color) {
   self->color = *color;
   gtk_widget_queue_draw(GTK_WIDGET(self));
