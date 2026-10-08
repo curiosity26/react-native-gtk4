@@ -99,9 +99,88 @@ transforms, rounded overflow clips, `pointerEvents`, and nested Text spans.
 | Hover: pointerover/out, pointerenter/leave | Supported | `onHoverIn`/`onHoverOut` on Pressable (W3C hover flag on) |
 | Modifier keys, buttons, pointerType | Supported | `ctrlKey`... `buttons`, `button`, `mouse`/`touch` |
 | Right/middle button | Partial | pointer events only; right-click opens Copy on selectable text |
-| Scroll wheel | Not yet | slice 4 (ScrollView) |
+| Scroll wheel, touchpad | Supported | handled by the ScrollView's GtkScrolledWindow (smooth and kinetic) |
 | Keyboard focus, `onKeyDown` | Not yet | Phase 2 |
 | Pen pressure/tilt | Not yet | |
+
+## ScrollView and lists
+
+`<ScrollView>` mounts an `RNScrollView` (`linux/widgets/rn_scroll_view.cc`).
+It's a GtkScrolledWindow and GtkViewport around an RNView that holds the
+content. React children mount into the content box, sized from Fabric's
+`ScrollViewState`. FlatList, SectionList and VirtualizedList are JS on top
+of it. The `GalleryLists` page (`--module GalleryLists --self-test`) tests:
+
+- wheel scrolling through the input path;
+- onScroll reaching JS;
+- `scrollTo`;
+- pressing a row through the scroll offset;
+- a scroll during a press cancelling it;
+- horizontal scrolling;
+- FlatList `scrollToIndex`/`scrollToEnd`/`onEndReached` over 10,000 rows with
+  bounded mounted views;
+- sticky SectionList headers.
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Vertical and horizontal scrolling | Supported | whichever axis the content overflows, like UIScrollView |
+| Mouse wheel, touchpad (smooth, kinetic), touchscreen drag | Supported | GTK's scrolled window; a vertical wheel scrolls a sideways-only list sideways |
+| Overlay scrollbars, `showsVertical/HorizontalScrollIndicator` | Supported | hidden indicators still scroll |
+| `scrollEnabled` | Supported | |
+| `onScroll` with `scrollEventThrottle` | Supported | at most one per frame (16 ms) or per throttle, plus a trailing event |
+| `contentOffset`, `contentSize`, `layoutMeasurement` in events | Supported | |
+| `onScrollBeginDrag/EndDrag`, `onMomentumScrollBegin/End` | Partial | from touchpad and touch gestures and GTK's kinetic deceleration; a mouse wheel only sends `onScroll` |
+| `ScrollViewState.contentOffset` | Supported | updated from native (throttled to 100 ms and at rest), as on iOS |
+| Commands `scrollTo`, `scrollToEnd` (animated or not), `flashScrollIndicators` | Supported | flash is a no-op (overlay scrollbars show on motion) |
+| `contentOffset` prop | Supported | initial offset |
+| `contentInset`, `scrollIndicatorInsets` | Not yet | |
+| `pagingEnabled`, `snapToInterval`, `snapToOffsets` | Not yet | GTK's scrolled window has no snapping; needs our own deceleration |
+| `stickyHeaderIndices` / sticky section headers | Supported | native-driver `Animated.event` on onScroll |
+| Nested scroll views | Supported | the innermost one under the pointer scrolls |
+| Presses inside, and scroll cancelling a press | Supported | a user scroll sends touchCancel to touches in progress |
+| `RefreshControl` | Not yet | needs a native pull-to-refresh component |
+| `maintainVisibleContentPosition`, zoom | Not yet | |
+| `FlatList`, `SectionList`, `VirtualizedList` (windowing, `inverted`, `horizontal`, `onEndReached`, `scrollToIndex`) | Supported | |
+
+FlatList with 10,000 rows (`getItemLayout`, stable callbacks), scrolled
+by a wheel step every frame on the GNOME Wayland session:
+
+| Scroll speed | frame p50 | frame p95 | max mounted views |
+| --- | --- | --- | --- |
+| 15 px/frame | 16.7 ms | 30.6 ms | 915 |
+| 59 px/frame | 16.7 ms | 33.0 ms | 1003 |
+
+Mounting costs about 0.1 ms per frame. The slow frames are VirtualizedList
+rendering new batches of rows in JS, which runs on the GTK main thread for
+now. X11 measures the same.
+
+## Image
+
+`<Image>` is an RNView that draws a texture, so View styling (border radius,
+borders, shadows) applies to it too. `linux/imagemanager/ImageManager.cpp`
+replaces ReactCommon's stub ImageManager. `GtkImageLoader` handles the
+sources below and decodes on a worker thread with GDK (PNG, JPEG, TIFF) or
+gdk-pixbuf (other formats). The `GalleryImages` page
+(`--module GalleryImages --self-test`, which serves its own http images)
+checks pixels for every resize mode, tint, rounded corners, data URIs,
+http, assets, `defaultSource` and the load events.
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| `require('./x.png')` assets | Supported | dev: Metro's asset URLs; release: `react-native bundle --platform linux --assets-dest` copies them next to the bundle, which the host reports as a `file://` script URL |
+| http(s) | Supported | libsoup; `headers` are sent; 128 MB in-memory cache, no disk cache yet |
+| `file://` and absolute paths | Supported | |
+| `data:` URIs | Supported | base64 or percent-encoded |
+| `resizeMode` cover, contain, stretch, center, repeat, none | Supported | |
+| `tintColor` | Supported | |
+| `borderRadius` and borders | Supported | the image is clipped to the rounded padding box |
+| `blurRadius` | Supported | GSK blur |
+| `onLoadStart`, `onLoad` (with the source size), `onLoadEnd`, `onError` | Supported | always sent, as on iOS |
+| `defaultSource` | Supported | shown until the image loads, and kept if it fails |
+| `onProgress`, `loadingIndicatorSource`, `capInsets`, `fadeDuration` | Not yet | |
+| `ImageBackground` | Supported | |
+| `Image.getSize`, `Image.prefetch`, `queryCache` | Partial | wired to the loader through the ImageLoader module; not covered by the self-test |
+| Animated GIF/WebP | Not yet | the first frame shows |
 
 ## Performance
 
