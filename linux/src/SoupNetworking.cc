@@ -70,10 +70,12 @@ class NetworkThread {
       soup_session_set_timeout(session_, 0);
       GMainLoop *loop = g_main_loop_new(context_, FALSE);
       {
+        // Notify under the lock: the constructor's `ready` lives on its
+        // stack and goes away as soon as it sees `started`.
         std::lock_guard<std::mutex> lock(mutex);
         started = true;
+        ready.notify_one();
       }
-      ready.notify_one();
       g_main_loop_run(loop);
     });
     std::unique_lock<std::mutex> lock(mutex);

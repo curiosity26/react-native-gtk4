@@ -134,26 +134,54 @@ void GtkMountingManager::executeMount(SurfaceId surfaceId,
                                       MountingTransaction &&transaction) {
   {
     std::lock_guard<std::mutex> lock(pendingMutex_);
-    if (std::this_thread::get_id() != mainThread_ || !pending_.empty()) {
-      pending_.emplace_back(surfaceId, std::move(transaction));
-      if (!flushScheduled_) {
-        flushScheduled_ = true;
-        g_idle_add_full(
-            G_PRIORITY_DEFAULT,
-            [](gpointer data) -> gboolean {
-              auto *weak = static_cast<std::weak_ptr<GtkMountingManager> *>(data);
-              if (auto self = weak->lock()) self->flushPending();
-              return G_SOURCE_REMOVE;
-            },
-            new std::weak_ptr<GtkMountingManager>(weak_from_this()),
-            [](gpointer data) {
-              delete static_cast<std::weak_ptr<GtkMountingManager> *>(data);
-            });
-      }
+    if (!onMainThread() || !pending_.empty()) {
+      PendingWork work;
+      work.surfaceId = surfaceId;
+      work.transaction.emplace(std::move(transaction));
+      pending_.push_back(std::move(work));
+      scheduleFlushLocked();
       return;
     }
   }
   apply(surfaceId, transaction);
+}
+
+void GtkMountingManager::runOnMainInOrder(std::function<void()> fn) {
+  {
+    std::lock_guard<std::mutex> lock(pendingMutex_);
+    if (!onMainThread() || !pending_.empty()) {
+      pending_.push_back(PendingWork{0, std::nullopt, std::move(fn)});
+      scheduleFlushLocked();
+      return;
+    }
+  }
+  fn();
+}
+
+void GtkMountingManager::scheduleFlushLocked() {
+  if (flushScheduled_) return;
+  flushScheduled_ = true;
+  g_idle_add_full(
+      G_PRIORITY_DEFAULT,
+      [](gpointer data) -> gboolean {
+        auto *weak = static_cast<std::weak_ptr<GtkMountingManager> *>(data);
+        if (auto self = weak->lock()) self->flushPending();
+        return G_SOURCE_REMOVE;
+      },
+      new std::weak_ptr<GtkMountingManager>(weak_from_this()),
+      [](gpointer data) {
+        delete static_cast<std::weak_ptr<GtkMountingManager> *>(data);
+      });
+}
+
+bool GtkMountingManager::isIdle() {
+  std::lock_guard<std::mutex> lock(pendingMutex_);
+  return pending_.empty();
+}
+
+void GtkMountingManager::setUIManager(
+    std::weak_ptr<UIManager> /*uiManager*/) noexcept {
+  if (onUIManagerChanged_) onUIManagerChanged_();
 }
 
 void GtkMountingManager::flushPending() {
@@ -163,10 +191,14 @@ void GtkMountingManager::flushPending() {
       flushScheduled_ = false;
       return;
     }
-    auto [surfaceId, transaction] = std::move(pending_.front());
+    PendingWork work = std::move(pending_.front());
     pending_.pop_front();
     lock.unlock();
-    apply(surfaceId, transaction);
+    if (work.transaction) {
+      apply(work.surfaceId, *work.transaction);
+    } else if (work.work) {
+      work.work();
+    }
   }
 }
 
@@ -252,6 +284,14 @@ void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
 
 void GtkMountingManager::synchronouslyUpdateViewOnUIThread(
     Tag tag, const folly::dynamic &props) {
+  if (!onMainThread()) {
+    runOnMainInOrder([weak = weak_from_this(), tag, props] {
+      if (auto self = weak.lock()) {
+        self->synchronouslyUpdateViewOnUIThread(tag, props);
+      }
+    });
+    return;
+  }
   // Native Animated (opacity, transforms...) on the main thread, between
   // commits: clone the mounted props with the animated values and apply.
   auto registry = registry_.lock();
@@ -308,6 +348,15 @@ void GtkMountingManager::applyParagraph(GtkWidget *widget,
 void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
                                          const std::string &commandName,
                                          const folly::dynamic &args) {
+  if (!onMainThread()) {
+    // From the JS thread: after the mounts queued before it.
+    runOnMainInOrder([weak = weak_from_this(), shadowView, commandName, args] {
+      if (auto self = weak.lock()) {
+        self->dispatchCommand(shadowView, commandName, args);
+      }
+    });
+    return;
+  }
   GtkWidget *widget = viewForTag(shadowView.tag);
   if (widget && RN_IS_SCROLL_VIEW(widget) &&
       scrollCommand(widget, commandName, args)) {

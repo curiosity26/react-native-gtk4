@@ -15,7 +15,9 @@ inline constexpr const char *kDefaultFontFamily = "Sans";
 
 // Registers the Pango context to measure with on the GTK main thread. Pass
 // one made by gtk_widget_create_pango_context() so measuring uses the same
-// font options (hinting, antialiasing) as drawing.
+// font options (hinting, antialiasing) as drawing. Contexts on other
+// threads (the JS thread measures text for Yoga) copy its font options and
+// resolution. Call it before JS starts.
 void set_main_thread_pango_context(PangoContext *context);
 
 // A Pango context safe to use on the calling thread: the registered one on

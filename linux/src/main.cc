@@ -10,7 +10,8 @@
 // Hello World example drew what its App.js describes, and exits 0/1. Dev-loop
 // checks follow it, in this order (scripts/test-dev-loop.sh drives them):
 //   --test-reload          reload (what Ctrl+R does), then check again, with
-//                          no leaked widgets
+//                          no leaked widgets or threads
+//   --reloads N            how many such reloads (default 1)
 //   --expect-reload        then print "READY expect-reload", wait for a
 //                          reload from outside (Metro's `r`), check again
 //   --expect-text TEXT     print "READY expect-text", then wait for a Text
@@ -23,12 +24,15 @@
 #include <folly/json.h>
 #include <libsoup/soup.h>
 #include <react/featureflags/ReactNativeFeatureFlags.h>
-#include <react/featureflags/ReactNativeFeatureFlagsDynamicProvider.h>
+#include <react/featureflags/ReactNativeFeatureFlagsDefaults.h>
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 #include <functional>
 #include <string>
 #include <vector>
@@ -63,6 +67,7 @@ struct Options {
   bool self_test = false;
   const char *screenshot = nullptr;
   bool test_reload = false;
+  int reloads = 1;  // with --test-reload
   bool expect_reload = false;
   std::string expect_text;
   bool expect_logbox = false;
@@ -92,6 +97,7 @@ struct App {
   size_t views_before = 0;
   int instances_before = 0;
   bool reload_external = false;
+  int threads_after_first_reload = 0;
   int reloads_done = 0;
   guint timeout_id = 0;
   int exit_code = 0;
@@ -99,6 +105,15 @@ struct App {
   size_t step = 0;
   bool step_started = false;
 } app;
+
+int thread_count() {
+  int n = 0;
+  if (GDir *dir = g_dir_open("/proc/self/task", 0, nullptr)) {
+    while (g_dir_read_name(dir)) n++;
+    g_dir_close(dir);
+  }
+  return n;
+}
 
 bool check(bool ok, const char *what) {
   printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -616,7 +631,24 @@ struct ScrollTiming {
   std::vector<double> frames;
   gint64 last = 0;
   size_t maxViews = 0;
+  double cpuStartMs = 0;
 } timing;
+
+// CPU time this thread (the GTK main thread) has used, in ms.
+double thread_cpu_ms() {
+  std::ifstream in("/proc/thread-self/stat");
+  std::string stat((std::istreambuf_iterator<char>(in)), {});
+  auto close = stat.rfind(')');
+  if (close == std::string::npos) return 0;
+  std::istringstream fields(stat.substr(close + 2));
+  std::string f;
+  unsigned long long utime = 0, stime = 0;
+  for (int i = 3; i <= 15 && fields >> f; i++) {
+    if (i == 14) utime = std::stoull(f);
+    if (i == 15) stime = std::stoull(f);
+  }
+  return double(utime + stime) * 1000.0 / sysconf(_SC_CLK_TCK);
+}
 
 void add_lists_steps() {
   using Phase = rngtk::GtkPointerHandler::Phase;
@@ -734,13 +766,14 @@ void add_lists_steps() {
 
   // Frame times while the 10k list scrolls: a wheel step every frame, fast
   // (a whole notch, ~58 px) and moderate (a quarter notch, ~15 px).
-  for (double notch : {1.0, 0.25}) {
+  for (double notch : {1.0, 0.25, 0.0}) {
     app.steps.push_back(Step{
-        notch == 1.0 ? "FlatList (10k rows) scroll timing, 1 notch/frame"
+        notch == 0.0 ? "frame timing with no scrolling (baseline)" : notch == 1.0 ? "FlatList (10k rows) scroll timing, 1 notch/frame"
                      : "FlatList (10k rows) scroll timing, 1/4 notch/frame",
         [] {
           rn_scroll_view_scroll_to(scroll_by_id("flatlist"), 0, 0, FALSE);
           timing = ScrollTiming{};
+          timing.cpuStartMs = thread_cpu_ms();
         },
         [&mm, notch] {
           GdkFrameClock *clock = gtk_widget_get_frame_clock(app.root);
@@ -752,12 +785,14 @@ void add_lists_steps() {
             wheel("flatlist", 0, notch);
             return false;
           }
-                    auto stats = rngtk::summarize(timing.frames);
+                    double cpu = thread_cpu_ms() - timing.cpuStartMs;
+          auto stats = rngtk::summarize(timing.frames);
           printf("  scrolled %.0f px in %zu frames (%.0f px/frame): frame p50 "
-                 "%.1f ms, p95 %.1f ms, max mounted views %zu\n",
+                 "%.1f ms, p95 %.1f ms, main thread CPU %.1f ms/frame, max "
+                 "mounted views %zu\n",
                  offset_of("flatlist"), timing.frames.size(),
                  offset_of("flatlist") / timing.frames.size(), stats.p50,
-                 stats.p95, timing.maxViews);
+                 stats.p95, cpu / timing.frames.size(), timing.maxViews);
           return true;
         }});
   }
@@ -907,13 +942,15 @@ void next_check(Phase done) {
   if (!opts.self_test) {
     quit();
   } else if (done <= Phase::Reloading && opts.dev &&
-             app.reloads_done < int(opts.test_reload) + int(opts.expect_reload)) {
+             app.reloads_done <
+                 (opts.test_reload ? opts.reloads : 0) + int(opts.expect_reload)) {
     auto &mm = app.host->mountingManager();
     app.views_before = mm.mountedViewCount();
     app.mounts_before = mm.mountCount();
     app.instances_before = app.host->instanceCount();
     // The host's own reload first, then one from outside.
-    app.reload_external = !opts.test_reload || app.reloads_done == 1;
+    // The host's own reloads first, then one from outside.
+    app.reload_external = !opts.test_reload || app.reloads_done >= opts.reloads;
     printf("reloading %s (views %zu, JS instances %d)\n",
            app.reload_external ? "from outside" : "via the dev menu action",
            app.views_before, app.instances_before);
@@ -1001,6 +1038,18 @@ void on_after_paint(GdkFrameClock *, gpointer) {
             "reload re-mounted the same views (no leaked widgets)");
       check_app(false);
       app.reloads_done++;
+      {
+        // Each reload replaces the JS thread (and Hermes' helpers): the
+        // process's thread count must not grow from one reload to the next.
+        int threads = thread_count();
+        printf("threads after reload %d: %d\n", app.reloads_done, threads);
+        if (app.reloads_done == 1) {
+          app.threads_after_first_reload = threads;
+        } else {
+          check(threads <= app.threads_after_first_reload,
+                "no threads leaked across reloads");
+        }
+      }
       next_check(Phase::Reloading);
       break;
     case Phase::ExpectText:
@@ -1193,15 +1242,21 @@ void activate(GtkApplication *gtk_app, gpointer) {
   gtk_window_present(GTK_WINDOW(window));
 }
 
-void set_up_feature_flags() {
-  folly::dynamic flags = folly::dynamic::object();
-  flags["enableBridgelessArchitecture"] = true;
-  flags["cxxNativeAnimatedEnabled"] = true;
+// React Native's feature flags for this host. (Not
+// ReactNativeFeatureFlagsDynamicProvider: its lookups insert into a shared
+// folly::dynamic, which races once the JS and main threads both read
+// flags.)
+class HostFeatureFlags : public ReactNativeFeatureFlagsDefaults {
+ public:
+  bool enableBridgelessArchitecture() override { return true; }
+  bool cxxNativeAnimatedEnabled() override { return true; }
   // Pressable's onHoverIn/onHoverOut from W3C pointerenter/pointerleave,
   // which GtkPointerHandler sends for the mouse.
-  flags["shouldPressibilityUseW3CPointerEventsForHover"] = true;
-  ReactNativeFeatureFlags::override(
-      std::make_unique<ReactNativeFeatureFlagsDynamicProvider>(flags));
+  bool shouldPressibilityUseW3CPointerEventsForHover() override { return true; }
+};
+
+void set_up_feature_flags() {
+  ReactNativeFeatureFlags::override(std::make_unique<HostFeatureFlags>());
 }
 
 int usage() {
@@ -1239,6 +1294,7 @@ int main(int argc, char **argv) {
     else if (arg("--logbox-screenshot")) opts.logbox_screenshot = argv[++i];
     else if (!strcmp(argv[i], "--self-test")) opts.self_test = true;
     else if (!strcmp(argv[i], "--test-reload")) opts.test_reload = true;
+    else if (arg("--reloads")) opts.reloads = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--expect-reload")) opts.expect_reload = true;
     else if (!strcmp(argv[i], "--expect-logbox")) opts.expect_logbox = true;
     else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
