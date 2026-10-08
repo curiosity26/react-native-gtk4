@@ -162,6 +162,12 @@ Phase 4.
   app; without one (or without a display) it starts Metro in the
   background and logs to `linux/build/metro.log`. Pass `--terminal kgx` or
   set `REACT_TERMINAL`.
+- **`j` (DevTools) fails with "The SUID sandbox helper binary was found,
+  but is not configured correctly".** Ubuntu 24.04 and Mint 22 block the
+  sandbox React Native DevTools (Electron) uses. Add the AppArmor profile in
+  [dev-loop.md](dev-loop.md#j-fails-the-suid-sandbox-helper-binary-was-found-but-is-not-configured-correctly)
+  (recommended), or `chown root` and `chmod 4755` the `chrome-sandbox` the
+  error names.
 - **A broken or half-built cache.** Delete `~/.cache/react-native-gtk4/`
   (or just `<version>/host/`) and run again.
 - **X11 instead of Wayland.** GTK picks the session's; `GDK_BACKEND=x11`
