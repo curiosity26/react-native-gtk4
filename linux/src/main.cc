@@ -3374,6 +3374,21 @@ void add_dragdrop_steps() {
         ptr->drop(p.x, p.y, data);
       },
       [] { return zone_says("zone-any", "files [drop-") && zone_says("zone-any", ".png:image/png:"); }});
+  app.steps.push_back(Step{
+      "an image offered both as a file and as image data arrives once, as the file",
+      [ptr] {
+        auto p = center_in_root("zone-any");
+        Data data;
+        gchar *uri = g_filename_to_uri((dnd_dir + "/pic.png").c_str(), nullptr, nullptr);
+        data.uris = {uri};
+        g_free(uri);
+        data.texture = picture;
+        ptr->drop(p.x, p.y, data);
+      },
+      [] {
+        return zone_says("zone-any", "files [pic.png:image/png:") &&
+               !zone_says("zone-any", ",drop-");
+      }});
   app.steps.push_back(Step{"a view without draggedTypes takes nothing",
                            [ptr] {
                              auto p = center_in_root("no-zone");

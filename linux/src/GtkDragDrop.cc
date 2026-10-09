@@ -357,7 +357,9 @@ bool GtkPointerHandler::drop(double x, double y, const DropData &data) {
     }
     if (!data.uris.empty()) types.push_back("text/uri-list");
   }
-  if (takes("image") && data.texture) {
+  // An image that comes as a file too (a dragged Image, a picture from
+  // Files) is that file: only image data alone becomes a saved PNG.
+  if (takes("image") && data.texture && files.empty()) {
     folly::dynamic entry = save_texture(data.texture);
     if (!entry.isNull()) files.push_back(std::move(entry));
     types.push_back("image/png");
