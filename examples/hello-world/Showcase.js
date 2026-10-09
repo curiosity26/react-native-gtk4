@@ -112,7 +112,12 @@ function ViewsText() {
     'GTK draws this paragraph with Pango. Tap "toggle numberOfLines" to ' +
     'switch between two lines with an ellipsis and the full text. React ' +
     'Native lays it out with Yoga, then measures it with the same font map ' +
-    'GTK paints with, so the two always agree.';
+    'GTK paints with, so the two always agree. ' +
+    'This paragraph is deliberately long so it wraps well past two lines ' +
+    'even in a wide window: with numberOfLines set, everything after the ' +
+    'second line is cut and an ellipsis ends it. Without it, you can read ' +
+    'all of it, down to this last sentence, which only shows when the full ' +
+    'text is visible.';
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Section title="Borders, radii and shadows">
@@ -159,6 +164,7 @@ function ViewsText() {
         <Text>Unicode: Привет · こんにちは · مرحبا · 👋🎉</Text>
       </Section>
       <Section title="numberOfLines" hint="Toggle between two lines and the full paragraph.">
+        <Text style={styles.hint}>numberOfLines = {lines || 'unset'}</Text>
         <Text numberOfLines={lines} style={styles.body}>
           {long}
         </Text>
@@ -169,9 +175,12 @@ function ViewsText() {
           />
         </View>
       </Section>
-      <Section title="Selectable text" hint="Drag across this text to select it.">
+      <Section
+        title="Selectable text"
+        hint="Right-click for a Copy menu that copies the whole paragraph. Drag selection isn't supported yet.">
         <Text selectable style={styles.body}>
-          This paragraph is selectable. Select some of it and copy with Ctrl+C.
+          This paragraph is selectable. Right-click it, choose Copy, and paste
+          into the name field on the Inputs page.
         </Text>
       </Section>
     </ScrollView>
