@@ -4,7 +4,7 @@
   "linux": {
     "appId": "dev.curiosity26.RNGtk4.Showcase",
     "displayName": "React Native GTK4 Showcase",
-    "summary": "A tour of React Native's components and APIs on GTK4",
+    "summary": "Tour of React Native's components and APIs on GTK4",
     "description": "A hands-on tour of React Native for Linux: its components, the platform APIs and the desktop features (windows, menus, dialogs, drag and drop, notifications). Each page says what to try, and a log shows the events that reach JavaScript.",
     "icon": "linux/icon.svg",
     "categories": [
