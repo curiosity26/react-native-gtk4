@@ -24,6 +24,10 @@ std::atomic<std::thread::id> g_main_thread;
 std::mutex g_options_mutex;
 cairo_font_options_t *g_font_options = nullptr;
 double g_resolution = -1;
+// GTK 4.16 and later position glyphs fractionally (unless font metrics
+// are hinted): a context that rounds them measures text narrower than it
+// draws, and the last word wraps or is cut off.
+bool g_round_glyph_positions = true;
 
 struct ThreadPango {
   PangoFontMap *font_map = pango_cairo_font_map_new();
@@ -32,6 +36,7 @@ struct ThreadPango {
     std::lock_guard<std::mutex> lock(g_options_mutex);
     if (g_font_options) pango_cairo_context_set_font_options(context, g_font_options);
     if (g_resolution > 0) pango_cairo_context_set_resolution(context, g_resolution);
+    pango_context_set_round_glyph_positions(context, g_round_glyph_positions);
   }
   ~ThreadPango() {
     g_object_unref(context);
@@ -229,6 +234,7 @@ void set_main_thread_pango_context(PangoContext *context) {
       pango_cairo_context_get_font_options(context);
   g_font_options = options ? cairo_font_options_copy(options) : nullptr;
   g_resolution = pango_cairo_context_get_resolution(context);
+  g_round_glyph_positions = pango_context_get_round_glyph_positions(context);
 }
 
 PangoContext *pango_context_for_current_thread() {
