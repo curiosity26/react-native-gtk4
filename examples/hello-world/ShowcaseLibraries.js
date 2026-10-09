@@ -5,7 +5,7 @@
 // the pages say the native side is missing.
 //   cd examples/hello-world && npx react-native run-linux
 import React, {useCallback, useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions} from 'react-native';
+import {Image, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions} from 'react-native';
 
 // Loaded when a page opens: netinfo throws at import without its native
 // module.
@@ -22,6 +22,10 @@ function load(name) {
         return require('@react-native-vector-icons/ionicons');
       case 'fontawesome6':
         return require('@react-native-vector-icons/fontawesome6');
+      case 'svg':
+        return require('react-native-svg');
+      case 'webview':
+        return require('react-native-webview');
     }
   } catch (e) {
     return {error: e};
@@ -255,7 +259,178 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- SVG: react-native-svg ---------------------------------------------------
+
+  const LOGO_XML = `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#20232a"/>
+    <g fill="none" stroke="#61dafb" stroke-width="4"><ellipse cx="50" cy="50" rx="38" ry="14"/>
+    <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(60 50 50)"/>
+    <ellipse cx="50" cy="50" rx="38" ry="14" transform="rotate(120 50 50)"/></g>
+    <circle cx="50" cy="50" r="7" fill="#61dafb"/></svg>`;
+
+  function SvgPage() {
+    const {Section, Btn, styles, useLog} = helpers();
+    const log = useLog();
+    const lib = load('svg');
+    const [angle, setAngle] = useState(0);
+    const [png, setPng] = useState(null);
+    const ref = React.useRef(null);
+    if (lib?.error || !lib?.Svg) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="SVG (react-native-svg)">
+            <Missing what="react-native-svg" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {Svg, Circle, Rect, Path, G, Text: SvgText, TSpan, Defs, LinearGradient, RadialGradient, Stop, ClipPath, Pattern, Line, Ellipse, Polygon, Filter, FeGaussianBlur, FeOffset, Use, SvgXml} = lib;
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <Section
+          title="SVG (react-native-svg)"
+          hint="The library's components on Linux (packages/svg): each <Svg> turns its elements back into an SVG document, which librsvg draws. Shapes, paths, gradients, clip paths, patterns, text, filters and <Use>.">
+          <View style={[styles.row, {flexWrap: 'wrap', gap: 12}]}>
+            <Svg width={160} height={120} viewBox="0 0 160 120" ref={ref}>
+              <Defs>
+                <LinearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0" stopColor="#007AFF" />
+                  <Stop offset="1" stopColor="#AF52DE" />
+                </LinearGradient>
+                <RadialGradient id="sun" cx="50%" cy="50%" r="50%">
+                  <Stop offset="0" stopColor="#FFD60A" />
+                  <Stop offset="1" stopColor="#FF9500" stopOpacity="0.6" />
+                </RadialGradient>
+              </Defs>
+              <Rect x="0" y="0" width="160" height="120" rx="12" fill="url(#sky)" />
+              <Circle cx="120" cy="36" r="22" fill="url(#sun)" />
+              <Path d="M0 120 L50 60 L80 90 L110 55 L160 120 Z" fill="#34C759" stroke="#1E7F3A" strokeWidth="2" />
+            </Svg>
+            <Svg width={120} height={120} viewBox="-60 -60 120 120">
+              <G rotation={angle} origin="0, 0">
+                <Polygon points="0,-50 14,-15 50,-15 21,6 32,42 0,20 -32,42 -21,6 -50,-15 -14,-15" fill="#FF3B30" stroke="#8E1E17" strokeWidth="3" strokeLinejoin="round" />
+              </G>
+            </Svg>
+            <Svg width={120} height={120}>
+              <Defs>
+                <ClipPath id="clip">
+                  <Circle cx="60" cy="60" r="50" />
+                </ClipPath>
+                <Pattern id="stripes" width="12" height="12" patternUnits="userSpaceOnUse">
+                  <Rect width="6" height="12" fill="#5856D6" />
+                </Pattern>
+              </Defs>
+              <Rect width="120" height="120" fill="url(#stripes)" clipPath="url(#clip)" />
+              <Line x1="10" y1="110" x2="110" y2="10" stroke="#FF9500" strokeWidth="6" strokeLinecap="round" strokeDasharray="12 10" />
+            </Svg>
+            <Svg width={180} height={120}>
+              <Defs>
+                <Filter id="shadow">
+                  <FeOffset in="SourceAlpha" dx="3" dy="4" result="moved" />
+                  <FeGaussianBlur in="moved" stdDeviation="3" />
+                </Filter>
+                <Ellipse id="pill" cx="40" cy="30" rx="34" ry="18" />
+              </Defs>
+              <Use href="#pill" x="4" y="2" fill="#000" opacity="0.4" filter="url(#shadow)" />
+              <Use href="#pill" fill="#FF2D55" />
+              <SvgText x="10" y="90" fontSize="22" fontWeight="bold" fill="#007AFF">
+                Hello <TSpan fill="#FF9500" fontStyle="italic">SVG</TSpan>
+              </SvgText>
+            </Svg>
+            <SvgXml xml={LOGO_XML} width={120} height={120} />
+          </View>
+          <View style={styles.row}>
+            <Btn title="Rotate the star" onPress={() => setAngle(a => (a + 30) % 360)} />
+            <Btn
+              title="toDataURL()"
+              onPress={() =>
+                ref.current?.toDataURL(data => {
+                  setPng(data);
+                  log(`svg toDataURL: ${data.length} base64 characters`);
+                })
+              }
+            />
+          </View>
+          {png ? (
+            <View style={styles.row}>
+              <Text style={styles.hint}>The first drawing, back as a PNG:</Text>
+              <Image source={{uri: `data:image/png;base64,${png}`}} style={{width: 80, height: 60}} />
+            </View>
+          ) : null}
+        </Section>
+      </ScrollView>
+    );
+  }
+
+  // ---- WebView: react-native-webview ---------------------------------------------
+
+  const PAGE = `<!doctype html><html><body style="font-family: sans-serif; padding: 12px">
+    <h3>Hello from WebKitGTK</h3>
+    <button onclick="window.ReactNativeWebView.postMessage('clicked at ' + new Date().toLocaleTimeString())">Send a message to React Native</button>
+    <p id="got">Nothing from React Native yet.</p>
+    <script>window.addEventListener('message', e => { document.getElementById('got').textContent = 'From React Native: ' + e.data; });</script>
+    </body></html>`;
+
+  function WebViewPage() {
+    const {Section, Btn, styles, useLog} = helpers();
+    const log = useLog();
+    const lib = load('webview');
+    const htmlRef = React.useRef(null);
+    const webRef = React.useRef(null);
+    const [nav, setNav] = useState(null);
+    const WebView = lib?.WebView || lib?.default;
+    if (lib?.error || !WebView) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="WebView (react-native-webview)">
+            <Missing what="react-native-webview" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <Section
+          title="WebView (react-native-webview)"
+          hint="The library's own JS (its iOS variant) on WebKitGTK 6.0 (packages/webview). The page and React Native talk through window.ReactNativeWebView.postMessage and webView.postMessage.">
+          <View style={local.web}>
+            <WebView
+              ref={htmlRef}
+              originWhitelist={['*']}
+              source={{html: PAGE}}
+              onMessage={e => log(`webview message: ${e.nativeEvent.data}`)}
+              onLoadEnd={() => log('webview (html) loaded')}
+            />
+          </View>
+          <View style={styles.row}>
+            <Btn title="postMessage to the page" onPress={() => htmlRef.current?.postMessage(`hello at ${new Date().toLocaleTimeString()}`)} />
+            <Btn title="injectJavaScript" onPress={() => htmlRef.current?.injectJavaScript("document.body.style.background = '#E5F1FF'; window.ReactNativeWebView.postMessage('the injected script ran'); true;")} />
+          </View>
+        </Section>
+        <Section title="A web page" hint="reactnative.dev, with the navigation state from onNavigationStateChange.">
+          <View style={styles.row}>
+            <Btn title="Back" onPress={() => webRef.current?.goBack()} />
+            <Btn title="Forward" onPress={() => webRef.current?.goForward()} />
+            <Btn title="Reload" onPress={() => webRef.current?.reload()} />
+          </View>
+          <Text style={styles.mono}>
+            {nav ? `${nav.loading ? 'loading' : 'loaded'} ${nav.url} (back ${nav.canGoBack}, forward ${nav.canGoForward})` : '…'}
+          </Text>
+          <View style={[local.web, {height: 320}]}>
+            <WebView
+              ref={webRef}
+              source={{uri: 'https://reactnative.dev'}}
+              onNavigationStateChange={setNav}
+              onError={e => log(`webview error: ${e.nativeEvent.description}`)}
+            />
+          </View>
+        </Section>
+      </ScrollView>
+    );
+  }
+
   return [
+    ['SVG', SvgPage],
+    ['WebView', WebViewPage],
     ['Storage', StoragePage],
     ['NetInfo', NetInfoPage],
     ['Safe Area', SafeAreaPage],
@@ -277,4 +452,5 @@ const local = StyleSheet.create({
   grid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   cell: {width: 96, alignItems: 'center', paddingVertical: 8, gap: 4},
   caption: {fontSize: 11, color: '#8E8E93'},
+  web: {height: 200, borderWidth: 1, borderColor: '#C7C7CC', borderRadius: 8, overflow: 'hidden'},
 });

@@ -54,6 +54,13 @@ struct NativeComponent {
   // A command from JS (Commands.myCommand(ref, ...args)). Optional.
   std::function<void(GtkWidget *widget, const std::string &name, const folly::dynamic &args)>
       command;
+  // A container: its children (the views React mounts inside it, which can
+  // be other components of the library's) are handed to these instead of
+  // the host placing them, in order (index). The host still creates,
+  // updates and destroys each child. Optional: without them the component
+  // has no children.
+  std::function<void(GtkWidget *parent, GtkWidget *child, int index)> insertChild;
+  std::function<void(GtkWidget *parent, GtkWidget *child)> removeChild;
 };
 
 // What a library adds: TurboModules and native components.

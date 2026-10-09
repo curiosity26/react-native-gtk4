@@ -35,6 +35,24 @@ const UPSTREAM_PREFIXES = ['react-native-upstream/', 'react-native/'];
 const JS_FALLBACK_PLATFORMS = {
   'react-native-safe-area-context': 'windows',
 };
+// Packages whose JS for another platform drives the native side a Linux
+// port (packages/ in this repository) adds: used when the app has the port.
+// react-native-webview's iOS JS drives RNCWebView, as on iOS and macOS.
+const PORT_JS_PLATFORMS = {
+  'react-native-webview': {port: '@curiosity26/react-native-gtk4-webview', platform: 'ios'},
+};
+
+/** JS_FALLBACK_PLATFORMS, and PORT_JS_PLATFORMS' entries the app has the port for. */
+function fallbackPlatforms(projectRoot) {
+  const out = {...JS_FALLBACK_PLATFORMS};
+  for (const [name, {port, platform}] of Object.entries(PORT_JS_PLATFORMS)) {
+    try {
+      require.resolve(`${port}/package.json`, {paths: [projectRoot || process.cwd()]});
+      out[name] = platform;
+    } catch {}
+  }
+  return out;
+}
 const NM_SEGMENT = `${path.sep}node_modules${path.sep}`;
 
 function isFile(p) {
@@ -96,12 +114,12 @@ function linuxReplacement(rnDir, modulePath, resolvedNormally) {
  * For a file in a package listed in JS_FALLBACK_PLATFORMS, its variant for
  * that platform (Foo.windows.tsx next to Foo.tsx), or null.
  */
-function jsFallback(filePath) {
+function jsFallback(filePath, platforms = JS_FALLBACK_PLATFORMS) {
   const i = filePath.lastIndexOf(NM_SEGMENT);
   if (i === -1) return null;
   const parts = filePath.slice(i + NM_SEGMENT.length).split(path.sep);
   const name = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
-  const platform = JS_FALLBACK_PLATFORMS[name];
+  const platform = platforms[name];
   if (!platform) return null;
   const base = stripSourceExt(filePath);
   if (base === filePath || /\.(linux|native)$/.test(base)) return null;
@@ -118,6 +136,7 @@ function jsFallback(filePath) {
  * packages resolve normally, except the JS_FALLBACK_PLATFORMS ones.
  */
 function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
+  const platforms = fallbackPlatforms(projectRoot);
   let knownRnDir;
   if (projectRoot) {
     try {
@@ -175,7 +194,7 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
       if (resolution.type !== 'sourceFile') return resolution;
       const rnDir = reactNativeDirOf(resolution.filePath, knownRnDir);
       if (!rnDir) {
-        const fallback = jsFallback(resolution.filePath);
+        const fallback = jsFallback(resolution.filePath, platforms);
         return fallback ? {type: 'sourceFile', filePath: fallback} : resolution;
       }
       const replacement = linuxReplacement(
