@@ -153,7 +153,7 @@ run_linux "$app" "release-build($app)" --release --build-only
 release=$work/$app/linux/build/Release
 if [[ -s $release/index.bundle.js && -f $release/librngtk_host.so &&
       -f $release/libhermesvm.so && -f $release/libjsi.so ]] &&
-   readelf -d "$release/$app" | grep -q 'RUNPATH.*\[\$ORIGIN\]$'; then
+   readelf -d "$release/$app" | grep -q "RUNPATH.*\[\\\$ORIGIN:\\\$ORIGIN/../lib/$app\]$"; then
   pass "$app: the Release build is self-contained (bundle, libraries, RUNPATH \$ORIGIN)"
 else
   fail "$app: the Release build is not self-contained"
@@ -165,6 +165,21 @@ done
 # Release app attached with --smoke.
 GDK_BACKEND=${backends[0]} run_linux "$app" "release-run($app)" \
   --release --smoke --screenshot "$work/$app-run-linux.png"
+
+# package-linux: the installed tree (init-linux's app.json block and icon),
+# its metadata valid, and the packaged app running.
+package_dir=$work/$app/linux/build/package/$app-0.0.1-$(uname -m)
+echo "== $app: react-native package-linux --smoke"
+start=$(date +%s)
+if (cd "$work/$app" && GDK_BACKEND=${backends[0]} npx react-native package-linux --smoke) &&
+   [[ -x $package_dir/bin/$app && -f $package_dir/lib/$app/librngtk_host.so &&
+      -s $package_dir/share/$app/index.bundle.js && -x $package_dir/install.sh &&
+      -f $package_dir/share/applications/com.$(tr A-Z a-z <<<"$app").desktop ]]; then
+  note_time "package-linux($app)" "$(($(date +%s) - start))s"
+  pass "$app: package-linux --format dir (installed tree, --smoke)"
+else
+  fail "$app: package-linux --format dir"
+fi
 
 # A native library: `react-native init-linux-library` in a library of its
 # own, which the first app installs and run-linux autolinks; its module
