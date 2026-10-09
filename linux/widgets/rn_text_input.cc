@@ -269,7 +269,10 @@ GtkWidget *rn_text_input_new(gboolean multiline) {
     gtk_widget_set_can_target(self->placeholder, FALSE);
     gtk_widget_set_parent(self->placeholder, GTK_WIDGET(self));
   } else {
-    self->editor = gtk_text_new();
+    // GtkText alone is presented inside a GtkEntry (role none); here it's
+    // the text box itself.
+    self->editor = GTK_WIDGET(g_object_new(
+        GTK_TYPE_TEXT, "accessible-role", GTK_ACCESSIBLE_ROLE_TEXT_BOX, nullptr));
     gtk_widget_set_parent(self->editor, GTK_WIDGET(self));
     g_signal_connect(self->editor, "changed", G_CALLBACK(on_changed), self);
     g_signal_connect(self->editor, "notify::cursor-position",

@@ -14,7 +14,11 @@
 G_BEGIN_DECLS
 
 #define RN_TYPE_VIEW (rn_view_get_type())
-G_DECLARE_FINAL_TYPE(RNView, rn_view, RN, VIEW, GtkWidget)
+G_DECLARE_DERIVABLE_TYPE(RNView, rn_view, RN, VIEW, GtkWidget)
+
+struct _RNViewClass {
+  GtkWidgetClass parent_class;
+};
 
 typedef enum {
   RN_LINE_SOLID,
@@ -130,6 +134,19 @@ GdkTexture *rn_view_get_image(RNView *self);
 // at half opacity, inside its rounded box, like Adwaita's buttons) unless
 // turned off (react-native-macos' enableFocusRing).
 void rn_view_set_focus_ring(RNView *self, gboolean enabled);
+
+// Accessibility: an RNRangeView is an RNView that is a GtkAccessibleRange,
+// so it has AT-SPI's Value interface (GTK picks interfaces by type): for a
+// view with a value (accessibilityValue, an adjustable role). A screen
+// reader setting the value emits "set-accessible-value" (double value),
+// which returns TRUE if handled.
+// Hides the view and everything in it from assistive technologies
+// (accessibilityElementsHidden, aria-hidden).
+void rn_view_set_accessible_hidden(RNView *self, gboolean hidden);
+
+#define RN_TYPE_RANGE_VIEW (rn_range_view_get_type())
+G_DECLARE_FINAL_TYPE(RNRangeView, rn_range_view, RN, RANGE_VIEW, RNView)
+GtkWidget *rn_range_view_new(void);
 
 // Inserts child at index (RN mount instruction "Insert"); -1 appends.
 void rn_view_insert_child(RNView *self, GtkWidget *child, int index);

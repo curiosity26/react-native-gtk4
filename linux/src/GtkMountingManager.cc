@@ -233,6 +233,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         }
         rn_view_insert_child(RN_VIEW(parent), child, m.index);
         applyLayout(child, m.newChildShadowView);
+        refreshContentLabels(parent);
         break;
       }
       case ShadowViewMutation::Remove: {
@@ -240,6 +241,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         GtkWidget *child = viewForTag(m.oldChildShadowView.tag);
         if (parent && child && gtk_widget_get_parent(child) == parent) {
           rn_view_remove_child(RN_VIEW(parent), child);
+          refreshContentLabels(parent);
         }
         break;
       }
@@ -271,11 +273,18 @@ void GtkMountingManager::create(const ShadowView &view) {
     widget = gtk_switch_new();
   } else if (std::strcmp(name, "ActivityIndicatorView") == 0) {
     widget = gtk_spinner_new();
+  } else if (hasAccessibleValue(view)) {
+    widget = rn_range_view_new();  // AT-SPI's Value interface
   } else {
     widget = rn_view_new();
   }
   views_[view.tag] = GTK_WIDGET(g_object_ref_sink(widget));
   g_object_set_qdata(G_OBJECT(widget), tag_quark(), GINT_TO_POINTER(view.tag));
+  // GTK fixes the accessible role once the widget is realized.
+  if (RN_IS_VIEW(widget) || RN_IS_TEXT(widget)) {
+    g_object_set(widget, "accessible-role", accessibleRoleFor(view, widget),
+                 nullptr);
+  }
   if (scroll) connectScrollView(widget, view.tag);
   if (textInput) connectTextInput(widget, view.tag);
   if (toggle) connectSwitch(widget, view.tag);
@@ -301,6 +310,7 @@ void GtkMountingManager::update(const ShadowView &oldView,
     updateImage(widget, oldView, newView);
   }
   if (RN_IS_VIEW(widget)) updateFocus(widget, newView);
+  updateAccessibility(widget, oldView, newView);
 }
 
 void GtkMountingManager::updateFocus(GtkWidget *widget, const ShadowView &view) {
@@ -423,6 +433,7 @@ void GtkMountingManager::applyParagraph(GtkWidget *widget,
       view.layoutMetrics.frame.size.width - in.left - in.right);
   rn_text_set_layout(RN_TEXT(widget), layout);
   g_object_unref(layout);
+  updateTextAccessibility(widget, view, data.attributedString.getString());
 
   if (auto props = std::dynamic_pointer_cast<const ParagraphProps>(view.props)) {
     // Selectable text: an I-beam (unless `cursor` says otherwise) and

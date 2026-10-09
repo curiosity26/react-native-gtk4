@@ -68,6 +68,11 @@ class GtkMountingManager
   }
   // No transactions or commands waiting for the main thread.
   bool isIdle();
+  // Main thread: has screen readers speak `text` (an AccessibilityInfo
+  // announcement or a live region's change); the last one, for tests.
+  void announce(GtkWidget *from, const std::string &text,
+                GtkAccessibleAnnouncementPriority priority);
+  const std::string &lastAnnouncement() const { return lastAnnouncement_; }
   // Main thread: re-applies every mounted view's colors, after the light
   // or dark palette PlatformColors resolve to changed.
   void refreshColors();
@@ -178,6 +183,21 @@ class GtkMountingManager
   void forgetImage(facebook::react::Tag tag);
   void forget(facebook::react::Tag tag);
   void applyLayout(GtkWidget *widget, const facebook::react::ShadowView &view);
+  // Accessibility (GtkAccessibility.cc)
+  // A view screen readers should see a value for (accessibilityValue, or
+  // a range role): it mounts as an RNRangeView.
+  static bool hasAccessibleValue(const facebook::react::ShadowView &view);
+  static GtkAccessibleRole accessibleRoleFor(
+      const facebook::react::ShadowView &view, GtkWidget *widget);
+  void updateAccessibility(GtkWidget *widget,
+                           const facebook::react::ShadowView &oldView,
+                           const facebook::react::ShadowView &newView);
+  void updateAccessibilityActions(GtkWidget *widget,
+                                  const facebook::react::ShadowView &view);
+  void updateTextAccessibility(GtkWidget *widget,
+                               const facebook::react::ShadowView &view,
+                               const std::string &text);
+  void refreshContentLabels(GtkWidget *from);
   // View: autoFocus, and the focus/blur commands (ref.focus()).
   void updateFocus(GtkWidget *widget, const facebook::react::ShadowView &view);
   bool focusCommand(GtkWidget *widget, const std::string &name);
@@ -206,6 +226,7 @@ class GtkMountingManager
   std::unordered_map<facebook::react::Tag, ImageTracking> images_;
   std::shared_ptr<class GtkImageLoader> imageLoader_;
   int mountCount_{0};
+  std::string lastAnnouncement_;
 
   std::thread::id mainThread_;
   std::mutex pendingMutex_;

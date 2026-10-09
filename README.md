@@ -26,7 +26,9 @@ Native app: `init-linux` and `run-linux`.
 style, [docs/apis.md](docs/apis.md)); text selection by mouse; keyboard
 focus, Tab order, focus rings and key events, `onMouseEnter`/`Leave`,
 `onAuxClick` and `tooltip`, with react-native-windows / react-native-macos
-props ([docs/components.md](docs/components.md#keyboard)).
+props ([docs/components.md](docs/components.md#keyboard)); accessibility
+for Orca through AT-SPI, and `AccessibilityInfo`
+([docs/components.md](docs/components.md#accessibility)).
 
 ## Quick start
 

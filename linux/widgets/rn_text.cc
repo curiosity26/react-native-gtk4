@@ -135,6 +135,7 @@ static void rn_text_class_init(RNTextClass *klass) {
   widget_class->snapshot = rn_text_snapshot;
   widget_class->state_flags_changed = rn_text_state_flags_changed;
   gtk_widget_class_set_css_name(widget_class, "rn-text");
+  gtk_widget_class_set_accessible_role(widget_class, GTK_ACCESSIBLE_ROLE_LABEL);
 }
 
 static void rn_text_init(RNText *self) {

@@ -1,5 +1,6 @@
 #include "RNGtkHost.h"
 
+#include "AccessibilityInfo.h"
 #include "Appearance.h"
 #include "DevUI.h"
 #include "GtkImageLoader.h"
@@ -9,6 +10,7 @@
 #include "JsMessageQueueThread.h"
 #include "PangoText.h"
 #include "PlatformConstantsModule.h"
+#include "rn_text_input.h"
 #include "rn_view.h"
 
 #include <glog/logging.h>
@@ -231,6 +233,13 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   appearance_ = std::make_shared<Appearance>(
       gtk_widget_get_display(GTK_WIDGET(overlay_)),
       options_.followSystemAppearance, [this] { onAppearanceChanged(); });
+  accessibilityStatus_ = std::make_shared<AccessibilityStatus>(
+      gtk_widget_get_display(GTK_WIDGET(overlay_)),
+      options_.followSystemAccessibility, [this](const char *event, bool value) {
+        if (loaded_ && reactHost_) {
+          reactHost_->emitDeviceEvent(folly::dynamic::array(event, value));
+        }
+      });
   measure_native_controls();
 
   auto contextContainer = std::make_shared<const ContextContainer>();
@@ -295,6 +304,17 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
           -> std::shared_ptr<TurboModule> {
         if (name == DeviceInfoModule::kModuleName) {
           return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
+        }
+        if (name == AccessibilityManagerModule::kModuleName) {
+          return std::make_shared<AccessibilityManagerModule>(
+              jsInvoker,
+              AccessibilityManagerModule::Host{
+                  accessibilityStatus_,
+                  [this](int tag) { focusForAccessibility(tag); },
+                  [this](const std::string &text,
+                         GtkAccessibleAnnouncementPriority priority) {
+                    announce(text, priority);
+                  }});
         }
         if (name == AppearanceModule::kModuleName) {
           return std::make_shared<AppearanceModule>(
@@ -682,6 +702,36 @@ void RNGtkHost::onAppearanceChanged() {
       "appearanceChanged",
       folly::dynamic::object("colorScheme",
                              appearance_->isDark() ? "dark" : "light")));
+}
+
+// GTK has no screen reader focus apart from keyboard focus, which Orca
+// follows: the view takes it, made focusable until it loses it if needed.
+void RNGtkHost::focusForAccessibility(Tag tag) {
+  GtkWidget *widget = mountingManager_->viewForTag(tag);
+  if (!widget) return;
+  if (RN_IS_TEXT_INPUT(widget)) {
+    rn_text_input_focus(RN_TEXT_INPUT(widget));
+    return;
+  }
+  if (!gtk_widget_get_focusable(widget)) {
+    gtk_widget_set_focusable(widget, TRUE);
+    g_signal_connect(widget, "notify::has-focus",
+                     G_CALLBACK(+[](GtkWidget *w, GParamSpec *, gpointer) {
+                       if (gtk_widget_has_focus(w)) return;
+                       g_signal_handlers_disconnect_matched(
+                           w, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr,
+                           GINT_TO_POINTER(0x0a11));
+                       gtk_widget_set_focusable(w, FALSE);
+                     }),
+                     GINT_TO_POINTER(0x0a11));
+  }
+  gtk_widget_grab_focus(widget);
+}
+
+void RNGtkHost::announce(const std::string &text,
+                         GtkAccessibleAnnouncementPriority priority) {
+  mountingManager_->announce(root_ ? root_ : GTK_WIDGET(overlay_), text,
+                             priority);
 }
 
 void RNGtkHost::openDebugger() { reactHost_->openDebugger(); }
