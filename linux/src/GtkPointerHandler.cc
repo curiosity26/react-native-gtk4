@@ -79,9 +79,11 @@ GtkPointerHandler::GtkPointerHandler(GtkMountingManager &mountingManager,
                          gtk_callback_action_new(onCopyShortcut, this, nullptr)));
   }
   gtk_widget_add_controller(root_, shortcuts_);
+  setUpDragAndDrop();
 }
 
 GtkPointerHandler::~GtkPointerHandler() {
+  tearDownDragAndDrop();
   g_signal_handlers_disconnect_by_data(controller_, this);
   gtk_widget_remove_controller(root_, controller_);
   gtk_widget_remove_controller(root_, shortcuts_);
@@ -313,6 +315,12 @@ void GtkPointerHandler::dispatch(const Input &input) {
       if (!beginSelection(input, target, clickCount(input))) clearSelection();
     } else if (input.phase == Phase::Move && selecting_) {
       extendSelection(input);
+    } else if (input.phase == Phase::Up && pressInSelection_) {
+      // A click in the selection (no drag): the caret goes there.
+      pressInSelection_ = false;
+      if (selectionWidget_) {
+        rn_text_set_selection(RN_TEXT(selectionWidget_.get()), pressIndex_, pressIndex_);
+      }
     } else if (input.phase == Phase::Up && selecting_) {
       selecting_ = false;
       // X11 and Wayland's primary selection: middle-click pastes it.
@@ -587,6 +595,18 @@ bool GtkPointerHandler::beginSelection(const Input &input, const Target &target,
     return true;
   }
   int start = rn_text_index_at(text, local.x, local.y, clicks == 1);
+  // A press inside the selection may start dragging it out: keep it (a
+  // release without a drag puts the caret there).
+  int selStart = 0, selEnd = 0;
+  if (clicks == 1 && rn_text_get_selection(text, &selStart, &selEnd) && selStart != selEnd) {
+    int at = rn_text_index_at(text, local.x, local.y, FALSE);
+    if (at >= std::min(selStart, selEnd) && at < std::max(selStart, selEnd)) {
+      pressInSelection_ = true;
+      pressIndex_ = start;
+      selecting_ = false;
+      return true;
+    }
+  }
   int end = start;
   if (clicks == 2) rn_text_extend_to_words(text, &start, &end);
   if (clicks == 3) rn_text_extend_to_paragraph(text, &start, &end);

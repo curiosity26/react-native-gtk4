@@ -87,7 +87,7 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Components/DrawerAndroid/DrawerLayoutAndroid`, `Components/ToastAndroid/ToastAndroid` | iOS | Android-only APIs: the "unsupported" fallbacks |
 | `Components/AccessibilityInfo/legacySendAccessibilityEvent` | iOS | pre-Fabric only; the iOS one tolerates a missing module |
 | `Image/Image`, `Network/RCTNetworking`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
-| `NativeComponent/BaseViewConfig` | Android, plus | Android's view config, plus the host's keyboard, mouse, context menu and iOS accessibility props ([components.md](components.md#keyboard)) |
+| `NativeComponent/BaseViewConfig` | Android, plus | Android's view config, plus the host's keyboard, mouse, context menu, drag and drop and iOS accessibility props ([components.md](components.md#keyboard)) |
 | `Alert/Alert` (not platform-split), `Alert/RCTAlertManager` | own | the host's AlertManager (a GTK message dialog) for both alert and prompt, with iOS's and Android's options together ([apis.md](apis.md#alert)); `alertWithArgs` keeps iOS's shape |
 | `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
 | `Share/Share` (not platform-split) | own | rejects every platform but iOS and Android; a stub that resolves dismissed ([apis.md](apis.md#share-and-vibration)) |

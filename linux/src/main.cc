@@ -3274,6 +3274,192 @@ void add_windows_steps() {
       [] { return false; }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryDragDrop checks
+
+bool is_dragdrop() { return opts.module == "GalleryDragDrop"; }
+
+std::string dnd_dir;
+
+// A folder with hello.txt (5 bytes) and pic.png, for the drops and the
+// draggable image (passed as the `image` prop).
+std::string make_dnd_folder() {
+  char tmpl[] = "/tmp/rngtk-dnd-XXXXXX";
+  if (!g_mkdtemp(tmpl)) return "";
+  dnd_dir = tmpl;
+  g_file_set_contents((dnd_dir + "/hello.txt").c_str(), "hello", 5, nullptr);
+  std::string png = std::string(RNGTK_SOURCE_DIR) + "/examples/hello-world/assets/tile.png";
+  gchar *data = nullptr;
+  gsize size = 0;
+  if (g_file_get_contents(png.c_str(), &data, &size, nullptr)) {
+    g_file_set_contents((dnd_dir + "/pic.png").c_str(), data, gssize(size), nullptr);
+    g_free(data);
+  }
+  gchar *uri = g_filename_to_uri((dnd_dir + "/pic.png").c_str(), nullptr, nullptr);
+  std::string out = uri ? uri : "";
+  g_free(uri);
+  return out;
+}
+
+graphene_point_t center_in_root(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v ? center_of(v) : graphene_point_t{-1, -1};
+}
+
+bool zone_says(const char *zone, const std::string &text) {
+  GtkWidget *v = by_id(zone);
+  return v && has_text(v, text);
+}
+
+void add_dragdrop_steps() {
+  using Data = rngtk::GtkPointerHandler::DropData;
+  auto *ptr = app.host->pointerHandler();
+  ptr->setRealInputEnabled(false);
+  static GdkTexture *picture = nullptr;
+  app.steps.push_back(Step{
+      "a file drag over a view whose draggedTypes take files: onDragEnter, with the types",
+      [ptr] {
+        auto p = center_in_root("zone-files");
+        ptr->dragMotion(p.x, p.y, {"fileUrl"}, {"text/uri-list"});
+      },
+      [] { return zone_says("zone-files", "enter text/uri-list"); }});
+  app.steps.push_back(Step{
+      "  ...over one that takes only text: onDragLeave on the first, nothing on it",
+      [ptr] {
+        auto p = center_in_root("zone-text");
+        check(!ptr->dragMotion(p.x, p.y, {"fileUrl"}, {"text/uri-list"}),
+              "  the text zone doesn't take files");
+      },
+      [] { return zone_says("zone-files", "enter text/uri-list · leave") && !zone_says("zone-text", "enter"); }});
+  app.steps.push_back(Step{
+      "onDrop: files with name, type and size; links that aren't files as urls",
+      [ptr] {
+        auto p = center_in_root("zone-files");
+        ptr->dragMotion(p.x, p.y, {"fileUrl"}, {"text/uri-list"});
+        Data data;
+        gchar *uri = g_filename_to_uri((dnd_dir + "/hello.txt").c_str(), nullptr, nullptr);
+        data.uris = {uri, "https://reactnative.dev/"};
+        g_free(uri);
+        check(ptr->drop(p.x, p.y, data), "  the drop was taken");
+      },
+      [] {
+        return zone_says("zone-files",
+                         "files [hello.txt:text/plain:5] urls [https://reactnative.dev/] text null "
+                         "types [text/uri-list]");
+      }});
+  app.steps.push_back(Step{
+      "a text drop: dataTransfer.text",
+      [ptr] {
+        auto p = center_in_root("zone-text");
+        ptr->dragMotion(p.x, p.y, {"string"}, {"text/plain;charset=utf-8"});
+        Data data;
+        data.hasText = true;
+        data.text = "dropped words";
+        ptr->drop(p.x, p.y, data);
+      },
+      [] {
+        return zone_says("zone-text", "enter text/plain;charset=utf-8 · drop") &&
+               zone_says("zone-text", "text \"dropped words\" types [text/plain]");
+      }});
+  app.steps.push_back(Step{
+      "an image dropped as data: saved to a PNG the app can read",
+      [ptr] {
+        picture = gdk_texture_new_from_filename((dnd_dir + "/pic.png").c_str(), nullptr);
+        auto p = center_in_root("zone-any");
+        Data data;
+        data.texture = picture;
+        ptr->drop(p.x, p.y, data);
+      },
+      [] { return zone_says("zone-any", "files [drop-") && zone_says("zone-any", ".png:image/png:"); }});
+  app.steps.push_back(Step{"a view without draggedTypes takes nothing",
+                           [ptr] {
+                             auto p = center_in_root("no-zone");
+                             Data data;
+                             data.hasText = true;
+                             data.text = "x";
+                             check(!ptr->drop(p.x, p.y, data), "  not taken");
+                           },
+                           [] { return true; }});
+  static std::string word;
+  app.steps.push_back(Step{
+      "selected text drags out as text (a press inside the selection keeps it)",
+      [] {
+        // Double-click "some", then press inside it.
+        clicks(text_point("drag-text", 8), 2);
+        word = selected();
+        mouse(rngtk::GtkPointerHandler::Phase::Down, text_point("drag-text", 9));
+      },
+      [ptr] {
+        if (word != "some" || selected() != "some") return false;
+        auto at = text_point("drag-text", 9);
+        GdkContentProvider *content = ptr->dragContentAt(at.x, at.y);
+        if (!content) return false;
+        GValue value = G_VALUE_INIT;
+        g_value_init(&value, G_TYPE_STRING);
+        bool ok = gdk_content_provider_get_value(content, &value, nullptr) &&
+                  std::string(g_value_get_string(&value)) == "some";
+        g_value_unset(&value);
+        g_object_unref(content);
+        return ok;
+      }});
+  app.steps.push_back(Step{"  ...a release without a drag puts the caret there instead",
+                           [] { mouse(rngtk::GtkPointerHandler::Phase::Up, text_point("drag-text", 9)); },
+                           [] { return selected().empty(); }});
+  app.steps.push_back(Step{
+      "outside a selection, text doesn't drag", [] {},
+      [ptr] {
+        auto at = text_point("drag-text", 30);
+        GdkContentProvider *content = ptr->dragContentAt(at.x, at.y);
+        if (content) g_object_unref(content);
+        return content == nullptr;
+      }});
+  app.steps.push_back(Step{
+      "an Image with draggable drags out its picture and its file",
+      [] {},
+      [ptr] {
+        auto p = center_in_root("drag-image");
+        GdkContentProvider *content = ptr->dragContentAt(p.x, p.y);
+        if (!content) return false;
+        GdkContentFormats *formats = gdk_content_provider_ref_formats(content);
+        bool ok = gdk_content_formats_contain_gtype(formats, GDK_TYPE_TEXTURE) &&
+                  gdk_content_formats_contain_gtype(formats, G_TYPE_FILE);
+        GValue value = G_VALUE_INIT;
+        g_value_init(&value, G_TYPE_FILE);
+        if (ok && gdk_content_provider_get_value(content, &value, nullptr)) {
+          char *path = g_file_get_path(G_FILE(g_value_get_object(&value)));
+          ok = path && std::string(path) == dnd_dir + "/pic.png";
+          g_free(path);
+        }
+        g_value_unset(&value);
+        gdk_content_formats_unref(formats);
+        g_object_unref(content);
+        return ok;
+      }});
+  app.steps.push_back(Step{"  ...an Image without it doesn't", [] {},
+                           [ptr] {
+                             auto p = center_in_root("still-image");
+                             GdkContentProvider *content = ptr->dragContentAt(p.x, p.y);
+                             if (content) g_object_unref(content);
+                             return content == nullptr;
+                           }});
+  app.steps.push_back(Step{
+      "the window's root has GTK's drop target and drag source",
+      [] {},
+      [] {
+        bool drop = false, drag = false;
+        GListModel *controllers = gtk_widget_observe_controllers(app.root);
+        for (guint i = 0; i < g_list_model_get_n_items(controllers); i++) {
+          auto *c = G_OBJECT(g_list_model_get_item(controllers, i));
+          drop |= GTK_IS_DROP_TARGET_ASYNC(c);
+          drag |= GTK_IS_DRAG_SOURCE(c);
+          g_object_unref(c);
+        }
+        g_object_unref(controllers);
+        g_clear_object(&picture);
+        return drop && drag;
+      }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -3372,6 +3558,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_dragdrop() && app.steps.empty()) {
+    add_dragdrop_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_windows() && app.steps.empty()) {
     add_windows_steps();
     enter(Phase::Steps);
@@ -3425,7 +3614,7 @@ void check_app(bool first) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
-               is_dialogs() || is_menus() || is_windows()) {
+               is_dialogs() || is_menus() || is_windows() || is_dragdrop()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -3657,6 +3846,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
   if (opts.self_test && is_images()) props["imageServer"] = start_image_server();
   // GalleryDialogs' file dialogs open in a folder of the self-test's own.
   if (opts.self_test && is_dialogs()) props["folder"] = make_dialogs_folder();
+  if (opts.self_test && is_dragdrop()) props["image"] = make_dnd_folder();
   if (!app.host->run(opts.dev ? opts.entry : opts.bundle, kSurfaceId,
                      opts.module, app.root, opts.width, opts.height,
                      std::move(props))) {
@@ -3759,6 +3949,7 @@ int main(int argc, char **argv) {
   delete app.host;
   if (!xdg_dir.empty()) remove_tree(xdg_dir);
   if (!dialogs_dir.empty()) remove_tree(dialogs_dir);
+  if (!dnd_dir.empty()) remove_tree(dnd_dir);
   g_object_unref(gtk_app);
   return status ? status : app.exit_code;
 }

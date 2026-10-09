@@ -317,6 +317,7 @@ add_library(rngtk_host_objs OBJECT
   src/GtkModals.cc
   src/GtkMenus.cc
   src/GtkPointerHandler.cc
+  src/GtkDragDrop.cc
   src/GtkScrollViews.cc
   src/GtkTextInputs.cc
   src/GtkControls.cc
@@ -552,6 +553,9 @@ add_test(NAME gallery-menus-self-test
 add_test(NAME gallery-windows-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryWindows --width 940 --height 680 --self-test)
+add_test(NAME gallery-dragdrop-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryDragDrop --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

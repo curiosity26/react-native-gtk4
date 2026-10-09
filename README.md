@@ -43,7 +43,10 @@ submenus, checkbox and radio items and shortcuts
 ([docs/components.md](docs/components.md#context-menus)). More windows
 (`Windows.open`), each a registered component in the same JS runtime,
 with their own size for `useWindowDimensions`
-([docs/apis.md](docs/apis.md#windows)).
+([docs/apis.md](docs/apis.md#windows)). Drag and drop with
+react-native-macos' props (`draggedTypes`, `onDrop`): files, links, text
+and images in, selected text and `draggable` images out
+([docs/components.md](docs/components.md#drag-and-drop)).
 
 ## Quick start
 

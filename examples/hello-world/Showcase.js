@@ -1111,6 +1111,80 @@ function WindowsPage() {
   );
 }
 
+// ---- Drag and drop -----------------------------------------------------------
+
+function DropZone({types, title}) {
+  const log = useLog();
+  const [over, setOver] = useState(false);
+  const [dropped, setDropped] = useState(null);
+  return (
+    <View
+      draggedTypes={types}
+      onDragEnter={e => {
+        setOver(true);
+        log(`${title}: drag enter (${e.nativeEvent.dataTransfer.types.join(', ')})`);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={e => {
+        setOver(false);
+        const t = e.nativeEvent.dataTransfer;
+        log(`${title}: drop, ${t.files.length} file(s)`);
+        setDropped(t);
+      }}
+      style={[
+        styles.pad,
+        {flex: 1, height: 190, padding: 12, borderStyle: 'dashed', borderWidth: 2},
+        over && {borderColor: PlatformColor('accent_bg_color'), backgroundColor: PlatformColor('shade_color')},
+      ]}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.hint}>draggedTypes={JSON.stringify(types)}</Text>
+      {dropped?.files.slice(0, 3).map(f =>
+        f.type.startsWith('image/') ? (
+          <Image key={f.uri} source={{uri: f.uri}} style={{width: 48, height: 48, borderRadius: 4}} />
+        ) : (
+          <Text key={f.uri} style={styles.mono} numberOfLines={1}>
+            {f.name} · {f.type} · {f.size} bytes
+          </Text>
+        ),
+      )}
+      {dropped?.urls?.map(u => (
+        <Text key={u} style={styles.mono} numberOfLines={1}>
+          {u}
+        </Text>
+      ))}
+      {dropped?.text != null ? (
+        <Text style={styles.mono} numberOfLines={3}>
+          “{dropped.text}”
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function DragDropPage() {
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Dropping in"
+        hint="Drag files from Files, links or text from a browser, or an image, onto these. Each takes what its draggedTypes say (react-native-macos' props), and gets onDragEnter, onDragLeave and onDrop.">
+        <View style={styles.row}>
+          <DropZone title="Files and links" types={['fileUrl']} />
+          <DropZone title="Text" types={['string']} />
+          <DropZone title="Images" types={['image', 'fileUrl']} />
+        </View>
+      </Section>
+      <Section
+        title="Dragging out"
+        hint="Select some text, then drag the selection (to a text editor, a browser, or the Text zone above). The image has draggable: drag it to Files or an image editor.">
+        <Text selectable style={styles.body}>
+          Select a few words of this sentence and drag them somewhere else.
+        </Text>
+        <Image draggable source={halves} style={{width: 96, height: 96, borderRadius: 8}} />
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1523,6 +1597,7 @@ const PAGES = [
   ['Dialogs', DialogsPage],
   ['Menus', MenusPage],
   ['Windows', WindowsPage],
+  ['Drag & Drop', DragDropPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.
