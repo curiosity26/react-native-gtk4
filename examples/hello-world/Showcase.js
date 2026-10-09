@@ -1,16 +1,19 @@
-// A hands-on tour of every Phase 1 component. Each page says what to try,
-// and the log at the bottom shows the events that reach JS.
+// A hands-on tour of the components and APIs. Each page says what to try,
+// and the log at the bottom shows the events that reach JS. The chrome
+// uses PlatformColor, so it follows light and dark (Appearance page).
 //   npm run start:hello-world
 //   npm run dev:hello-world -- --module Showcase --width 1100 --height 780
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Appearance,
   Button,
   Easing,
   FlatList,
   Image,
   Platform,
+  PlatformColor,
   Pressable,
   ScrollView,
   SectionList,
@@ -21,7 +24,9 @@ import {
   TouchableHighlight,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  TurboModuleRegistry,
   View,
+  useColorScheme,
   useWindowDimensions,
 } from 'react-native';
 
@@ -71,10 +76,10 @@ function Btn({title, onPress, color = '#007AFF'}) {
 
 // ---- Home ----------------------------------------------------------------
 
-// Not shown yet: the color scheme (no Appearance module).
 function Home() {
   const c = Platform.constants;
   const window = useWindowDimensions();
+  const scheme = useColorScheme();
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.hero}>
@@ -95,6 +100,7 @@ function Home() {
         <Text style={styles.mono}>
           {String(c.Release)} · GTK {String(c.gtkVersion)} · desktop {String(c.desktop || '-')}
         </Text>
+        <Text style={styles.mono}>color scheme = {scheme} (see the Appearance page)</Text>
       </Section>
       <Section title="How to use this app">
         <Text style={styles.body}>
@@ -137,7 +143,11 @@ function ViewsText() {
           <View
             style={[
               styles.swatch,
-              {backgroundColor: '#fff', boxShadow: '0 6px 16px rgba(0,0,0,0.35)', borderRadius: 12},
+              {
+                backgroundColor: PlatformColor('view_bg_color'),
+                boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+                borderRadius: 12,
+              },
             ]}
           />
           <View
@@ -151,20 +161,22 @@ function ViewsText() {
         </View>
       </Section>
       <Section title="Text styling">
-        <Text style={{fontSize: 24, fontWeight: 'bold'}}>Bold 24</Text>
+        <Text style={[styles.fg, {fontSize: 24, fontWeight: 'bold'}]}>Bold 24</Text>
         <Text style={{fontStyle: 'italic', color: '#FF3B30'}}>Italic red</Text>
-        <Text style={{textDecorationLine: 'underline line-through'}}>Underline and strike</Text>
-        <Text style={{letterSpacing: 4, textTransform: 'uppercase'}}>letter spaced</Text>
-        <Text style={{fontFamily: 'monospace'}}>monospace 0123456789</Text>
-        <Text>
+        <Text style={[styles.fg, {textDecorationLine: 'underline line-through'}]}>
+          Underline and strike
+        </Text>
+        <Text style={[styles.fg, {letterSpacing: 4, textTransform: 'uppercase'}]}>letter spaced</Text>
+        <Text style={[styles.fg, {fontFamily: 'monospace'}]}>monospace 0123456789</Text>
+        <Text style={styles.fg}>
           Nested: <Text style={{fontWeight: 'bold'}}>bold</Text>,{' '}
-          <Text style={{color: '#007AFF'}} onPress={() => log('nested link pressed')}>
+          <Text style={{color: PlatformColor('accent_color')}} onPress={() => log('nested link pressed')}>
             a tappable link
           </Text>
-          , and <Text style={{backgroundColor: '#FFEB3B'}}>highlighted</Text>.
+          , and <Text style={{backgroundColor: '#FFEB3B', color: '#000000'}}>highlighted</Text>.
         </Text>
-        <Text style={{textAlign: 'right'}}>Right aligned</Text>
-        <Text>Unicode: Привет · こんにちは · مرحبا · 👋🎉</Text>
+        <Text style={[styles.fg, {textAlign: 'right'}]}>Right aligned</Text>
+        <Text style={styles.fg}>Unicode: Привет · こんにちは · مرحبا · 👋🎉</Text>
       </Section>
       <Section title="numberOfLines" hint="Toggle between two lines and the full paragraph.">
         <Text numberOfLines={lines} style={styles.body}>
@@ -630,10 +642,149 @@ function Network() {
   );
 }
 
+// ---- Appearance ---------------------------------------------------------------
+
+// Harness-only (rn-gtk-host): flips GNOME's own dark style.
+const desktop = TurboModuleRegistry.get('ShowcaseDesktop');
+
+const SCHEMES = [
+  ['System', 'unspecified'],
+  ['Light', 'light'],
+  ['Dark', 'dark'],
+];
+
+const NAMED_COLORS = [
+  'window_bg_color',
+  'window_fg_color',
+  'view_bg_color',
+  'view_fg_color',
+  'card_bg_color',
+  'headerbar_bg_color',
+  'sidebar_bg_color',
+  'accent_bg_color',
+  'accent_color',
+  'destructive_bg_color',
+  'success_bg_color',
+  'warning_bg_color',
+  'error_color',
+  'borders',
+];
+
+function Segmented({options, value, onChange}) {
+  return (
+    <View style={styles.segmented}>
+      {options.map(([label, key]) => (
+        <Pressable
+          key={key}
+          onPress={() => onChange(key)}
+          style={[styles.segment, key === value && styles.segmentActive]}>
+          <Text style={[styles.segmentText, key === value && styles.segmentTextActive]}>
+            {label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function AppearancePage() {
+  const log = useLog();
+  const scheme = useColorScheme();
+  // Appearance has no getter for the override; the Showcase remembers it.
+  const [override, setOverride] = useState(appearanceOverride);
+  const [events, setEvents] = useState(0);
+  const [gnome, setGnome] = useState(() => desktop?.getColorScheme() ?? null);
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({colorScheme}) => {
+      setEvents(n => n + 1);
+      setGnome(desktop?.getColorScheme() ?? null);
+      log(`appearanceChanged: ${colorScheme}`);
+    });
+    return () => sub.remove();
+  }, [log]);
+  const gnomeDark = gnome === 'prefer-dark';
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Color scheme"
+        hint="System follows the desktop's style; Light and Dark override it for this app (Appearance.setColorScheme).">
+        <Segmented
+          options={SCHEMES}
+          value={override}
+          onChange={key => {
+            appearanceOverride = key;
+            setOverride(key);
+            Appearance.setColorScheme(key);
+            log(`setColorScheme('${key}')`);
+          }}
+        />
+        <Text style={styles.mono}>useColorScheme() = {scheme}</Text>
+        <Text style={styles.mono}>Appearance.getColorScheme() = {Appearance.getColorScheme()}</Text>
+        <Text style={styles.mono}>change events on this page: {events}</Text>
+      </Section>
+      <Section
+        title="Follow the system"
+        hint="With System selected above, flip GNOME's own dark style (Settings > Appearance writes the same setting). The host follows it through the XDG Settings portal.">
+        {desktop && gnome != null ? (
+          <View style={styles.row}>
+            <Btn
+              title={gnomeDark ? "Turn GNOME's dark style off" : "Turn GNOME's dark style on"}
+              onPress={() => {
+                const next = gnomeDark ? 'default' : 'prefer-dark';
+                desktop.setColorScheme(next);
+                setGnome(next);
+                log(`gsettings color-scheme ${next}`);
+              }}
+            />
+            <Text style={styles.body}>
+              org.gnome.desktop.interface color-scheme = '{gnome}' · read from{' '}
+              {desktop.getAppearanceSource()}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.body}>
+            Not available here (GNOME's settings schema or rn-gtk-host's ShowcaseDesktop module is missing).
+          </Text>
+        )}
+      </Section>
+      <Section
+        title="PlatformColor"
+        hint="libadwaita's named colors: PlatformColor('window_bg_color'). They repaint when the scheme changes.">
+        <View style={styles.wrap}>
+          {NAMED_COLORS.map(name => (
+            <View key={name} style={styles.namedColor}>
+              <View style={[styles.namedSwatch, {backgroundColor: PlatformColor(name)}]} />
+              <Text style={styles.namedLabel}>{name}</Text>
+            </View>
+          ))}
+        </View>
+      </Section>
+      <Section title="GTK widgets" hint="GTK draws these from its theme's light or dark variant.">
+        <View style={styles.row}>
+          <Switch value={true} />
+          <Switch value={false} />
+          <ActivityIndicator />
+          <Button title="Button" onPress={() => log('Button onPress')} />
+          <Button title="Suggested" color="#3584E4" onPress={() => log('suggested Button onPress')} />
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Type, then right-click for GTK's menu"
+          placeholderTextColor="#8E8E93"
+        />
+      </Section>
+    </ScrollView>
+  );
+}
+
+// Kept across page switches.
+let appearanceOverride = 'unspecified';
+
 // ---- Shell -------------------------------------------------------------------
 
 const PAGES = [
   ['Home', Home],
+  ['Appearance', AppearancePage],
   ['Views & Text', ViewsText],
   ['Buttons', Buttons],
   ['Inputs', Inputs],
@@ -644,8 +795,15 @@ const PAGES = [
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.
-// rn-gtk-host --module Showcase --initial-props '{"initialPage":"Lists"}'.
-export default function Showcase({initialPage = 0}) {
+// rn-gtk-host --module Showcase --initial-props '{"initialPage":"Lists"}';
+// colorScheme ('light' or 'dark') starts with that override.
+export default function Showcase({initialPage = 0, colorScheme}) {
+  useState(() => {
+    if (colorScheme) {
+      appearanceOverride = colorScheme;
+      Appearance.setColorScheme(colorScheme);
+    }
+  });
   const [page, setPage] = useState(() => {
     const i = PAGES.findIndex(([name]) => name === initialPage);
     return i >= 0 ? i : Number(initialPage) || 0;
@@ -697,7 +855,7 @@ export default function Showcase({initialPage = 0}) {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, flexDirection: 'row', backgroundColor: '#F5F5F7'},
+  root: {flex: 1, flexDirection: 'row', backgroundColor: PlatformColor('window_bg_color')},
   sidebar: {width: 180, backgroundColor: '#1C1C1E', paddingTop: 16, paddingHorizontal: 8},
   brand: {color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 16, marginLeft: 8},
   nav: {paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, marginBottom: 2, cursor: 'pointer'},
@@ -714,21 +872,28 @@ const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
     padding: 32,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: PlatformColor('card_bg_color'),
     borderRadius: 16,
     borderWidth: 2,
     borderColor: '#007AFF',
     marginBottom: 16,
   },
-  heroTitle: {fontSize: 36, fontWeight: 'bold', color: '#1C1C1E'},
+  heroTitle: {fontSize: 36, fontWeight: 'bold', color: PlatformColor('card_fg_color')},
   heroSub: {marginTop: 8, fontSize: 16, color: '#6E6E73'},
-  section: {backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16},
-  sectionTitle: {fontSize: 17, fontWeight: '600', color: '#1C1C1E'},
+  section: {backgroundColor: PlatformColor('card_bg_color'), borderRadius: 12, padding: 16, marginBottom: 16},
+  sectionTitle: {fontSize: 17, fontWeight: '600', color: PlatformColor('card_fg_color')},
   hint: {fontSize: 13, color: '#8E8E93', marginTop: 2},
   sectionBody: {marginTop: 12, gap: 8},
-  sectionHeader: {backgroundColor: '#E5E5EA', paddingVertical: 4, paddingHorizontal: 12, fontWeight: '600'},
-  body: {fontSize: 14, color: '#1C1C1E'},
-  mono: {fontFamily: 'monospace', fontSize: 13, color: '#1C1C1E'},
+  sectionHeader: {
+    backgroundColor: PlatformColor('headerbar_bg_color'),
+    color: PlatformColor('headerbar_fg_color'),
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    fontWeight: '600',
+  },
+  body: {fontSize: 14, color: PlatformColor('card_fg_color')},
+  fg: {color: PlatformColor('card_fg_color')},
+  mono: {fontFamily: 'monospace', fontSize: 13, color: PlatformColor('card_fg_color')},
   row: {flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap'},
   wrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'center'},
   swatch: {width: 80, height: 80, backgroundColor: '#E5E5EA'},
@@ -739,9 +904,9 @@ const styles = StyleSheet.create({
   pad: {
     height: 160,
     borderRadius: 12,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: PlatformColor('view_bg_color'),
     borderWidth: 1,
-    borderColor: '#D1D1D6',
+    borderColor: PlatformColor('borders'),
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -749,23 +914,44 @@ const styles = StyleSheet.create({
   dot: {position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: '#FF2D55'},
   input: {
     borderWidth: 1,
-    borderColor: '#C7C7CC',
+    borderColor: PlatformColor('borders'),
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 14,
-    backgroundColor: '#FFFFFF',
-    color: '#1C1C1E',
+    backgroundColor: PlatformColor('view_bg_color'),
+    color: PlatformColor('view_fg_color'),
   },
   chip: {width: 48, height: 48, borderRadius: 24, marginRight: 8, alignItems: 'center', justifyContent: 'center'},
-  listCol: {flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, gap: 6},
-  list: {flex: 1, borderTopWidth: 1, borderColor: '#E5E5EA'},
+  listCol: {flex: 1, backgroundColor: PlatformColor('card_bg_color'), borderRadius: 12, padding: 12, gap: 6},
+  list: {flex: 1, borderTopWidth: 1, borderColor: PlatformColor('borders')},
   listRow: {height: 40, justifyContent: 'center', paddingHorizontal: 12, cursor: 'pointer'},
-  listRowSelected: {backgroundColor: '#007AFF'},
-  listRowHover: {backgroundColor: '#F2F2F7'},
+  listRowSelected: {backgroundColor: PlatformColor('accent_bg_color')},
+  listRowHover: {backgroundColor: PlatformColor('shade_color')},
   image: {width: 100, height: 100, backgroundColor: '#E5E5EA'},
   imageBig: {width: 260, height: 160, backgroundColor: '#E5E5EA'},
   spinner: {width: 80, height: 80, borderRadius: 12, backgroundColor: '#FF9500'},
   slider: {width: 60, height: 60, borderRadius: 30, backgroundColor: '#34C759'},
+  segmented: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    padding: 3,
+    gap: 2,
+    backgroundColor: PlatformColor('shade_color'),
+  },
+  segment: {paddingVertical: 6, paddingHorizontal: 18, borderRadius: 6, cursor: 'pointer'},
+  segmentActive: {backgroundColor: PlatformColor('accent_bg_color')},
+  segmentText: {color: PlatformColor('card_fg_color'), fontWeight: '600'},
+  segmentTextActive: {color: PlatformColor('accent_fg_color')},
+  namedColor: {width: 130, alignItems: 'center', gap: 4},
+  namedSwatch: {
+    width: 64,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PlatformColor('borders'),
+  },
+  namedLabel: {fontSize: 11, color: PlatformColor('card_fg_color')},
   pulse: {width: 80, height: 80, borderRadius: 40, backgroundColor: '#AF52DE', alignSelf: 'flex-start', margin: 20},
 });

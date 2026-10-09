@@ -113,15 +113,17 @@ looks like a GTK (Adwaita) button.
 | Prop | Linux |
 | --- | --- |
 | default | 34px tall, 6px corners, a light neutral background (`#E6E6E6`), dark bold label |
+| dark color scheme (`useColorScheme() === 'dark'`) | Adwaita dark: `#3A3A3A` background, white label; hover and press lighten by 5% and 20% |
 | `color` | the background (like Android), with a white label; `#3584E4` is Adwaita's accent (suggested-action) |
 | `disabled` (or `accessibilityState.disabled`, `aria-disabled`) | half opacity, presses ignored, no hover or pressed shading |
 | hover / pressed | 5% darker on hover (10% lighter on a `color`), 20% darker while pressed |
 | `title`, `onPress`, `accessibilityLabel`, `testID`, `nativeID`, accessibility and `aria-*` props | as upstream |
 
-The title isn't uppercased (Android does). The look is fixed (light
-Adwaita); it doesn't follow the GTK theme or dark mode yet. The Gallery
-self-test checks its colors, corners, hover shade and that a disabled
-Button doesn't press.
+The title isn't uppercased (Android does). It follows light and dark
+(see [apis.md](apis.md#appearance-and-dark-mode)), not the GTK theme's
+own colors. The Gallery self-test checks its colors, corners, hover shade
+and that a disabled Button doesn't press; GalleryAppearance checks the
+dark variant.
 
 ## ScrollView and lists
 

@@ -26,6 +26,7 @@
 //   --test-animation       before the first reload and after each one,
 //                          hold the card (a TouchableOpacity) and check
 //                          that its native-driver fade runs, then release
+#include <ReactCommon/TurboModule.h>
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
@@ -1093,6 +1094,57 @@ void restore_desktop_color_scheme() {
   }
 }
 
+// ShowcaseDesktop: a harness-only TurboModule for the Showcase's
+// Appearance page, which flips GNOME's own dark style (what Settings >
+// Appearance writes) so following the system can be tried from the app.
+class ShowcaseDesktopModule : public facebook::react::TurboModule {
+ public:
+  explicit ShowcaseDesktopModule(
+      std::shared_ptr<facebook::react::CallInvoker> jsInvoker)
+      : TurboModule("ShowcaseDesktop", std::move(jsInvoker)) {
+    using facebook::jsi::Runtime;
+    using facebook::jsi::Value;
+    // GNOME's color-scheme: 'default', 'prefer-dark', 'prefer-light', or
+    // null without GNOME's schema.
+    methodMap_["getColorScheme"] = MethodMetadata{
+        0, [](Runtime &rt, TurboModule &, const Value *, size_t) -> Value {
+          GSettings *settings = interface_settings();
+          if (!settings) return Value::null();
+          gchar *value = g_settings_get_string(settings, "color-scheme");
+          auto result = facebook::jsi::String::createFromUtf8(rt, value);
+          g_free(value);
+          g_object_unref(settings);
+          return result;
+        }};
+    methodMap_["setColorScheme"] = MethodMetadata{
+        1, [](Runtime &rt, TurboModule &, const Value *args,
+              size_t count) -> Value {
+          if (count < 1 || !args[0].isString()) return Value::undefined();
+          auto *value = new std::string(args[0].asString(rt).utf8(rt));
+          g_idle_add_once(
+              [](gpointer data) {
+                auto *value = static_cast<std::string *>(data);
+                if (GSettings *settings = interface_settings()) {
+                  g_settings_set_string(settings, "color-scheme",
+                                        value->c_str());
+                  g_settings_sync();
+                  g_object_unref(settings);
+                }
+                delete value;
+              },
+              value);
+          return Value::undefined();
+        }};
+    // Where the host reads the system's style from: "portal",
+    // "gtk-settings" or "none".
+    methodMap_["getAppearanceSource"] = MethodMetadata{
+        0, [](Runtime &rt, TurboModule &, const Value *, size_t) -> Value {
+          return facebook::jsi::String::createFromUtf8(
+              rt, app.host->appearance().systemSource());
+        }};
+  }
+};
+
 void click(const char *id);
 
 void add_appearance_steps() {
@@ -1702,6 +1754,13 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .inspector = opts.inspector,
       .followsWindowSize = !opts.self_test,
       .followSystemAppearance = !opts.self_test || opts.system_appearance,
+      .extraTurboModules = {[](const std::string &name,
+                               const std::shared_ptr<facebook::react::CallInvoker>
+                                   &jsInvoker)
+                                -> std::shared_ptr<facebook::react::TurboModule> {
+        if (name != "ShowcaseDesktop") return nullptr;
+        return std::make_shared<ShowcaseDesktopModule>(jsInvoker);
+      }},
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
