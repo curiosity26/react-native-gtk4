@@ -173,6 +173,27 @@ describe('initLinux', () => {
     assert.equal(pkg.scripts.linux, 'react-native run-linux');
     assert.equal(r.metro.status, 'edited');
     assert.ok(projectConfig(root));
+    const app = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8'));
+    assert.deepEqual(app.linux, {
+      appId: 'com.myapp',
+      displayName: 'My App',
+      summary: 'My App, a React Native app',
+      icon: 'linux/icon.svg',
+      categories: ['Utility'],
+    });
+    assert.ok(fs.existsSync(path.join(root, 'linux', 'icon.svg')));
+  });
+
+  test("app.json's linux block names the app afterwards; --app-id changes it", () => {
+    initLinux(root, {log: quiet});
+    const appJson = path.join(root, 'app.json');
+    const app = JSON.parse(fs.readFileSync(appJson, 'utf8'));
+    app.linux.displayName = 'Mine';
+    fs.writeFileSync(appJson, JSON.stringify(app));
+    assert.equal(appNames(root).title, 'Mine');
+    const r = initLinux(root, {log: quiet, appId: 'org.example.Mine'});
+    assert.deepEqual(r.appJsonChanges, ['set linux.appId to org.example.Mine']);
+    assert.equal(appNames(root).appId, 'org.example.Mine');
   });
 
   test('a second run changes nothing', () => {
@@ -185,7 +206,8 @@ describe('initLinux', () => {
     const before = snapshot(root);
     const r = initLinux(root, {log: quiet});
     assert.deepEqual(r.written, []);
-    assert.equal(r.skipped.length, 3);
+    assert.equal(r.skipped.length, 4);
+    assert.deepEqual(r.appJsonChanges, []);
     assert.deepEqual(r.packageChanges, []);
     assert.equal(r.metro.status, 'unchanged');
     assert.deepEqual(snapshot(root), before);
@@ -223,7 +245,7 @@ describe('platform config', () => {
     const config = require('../react-native.config');
     assert.deepEqual(Object.keys(config.platforms), ['linux']);
     assert.deepEqual(Object.keys(config.platforms.linux).sort(), ['dependencyConfig', 'projectConfig']);
-    assert.deepEqual(config.commands.map(c => c.name), ['init-linux', 'run-linux', 'init-linux-library']);
+    assert.deepEqual(config.commands.map(c => c.name), ['init-linux', 'run-linux', 'package-linux', 'init-linux-library']);
     for (const c of config.commands) {
       assert.equal(typeof c.func, 'function');
       for (const o of c.options) assert.match(o.name, /^--[a-z-]+( <[a-z]+>)?$/);
