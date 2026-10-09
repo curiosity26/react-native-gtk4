@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "React Native for Linux on GTK4, an out-of-tree platform like react-native-windows and react-native-macos",
   "license": "MIT",
   "repository": {
@@ -41,7 +41,9 @@
     "!linux/tests/",
     "scripts/fetch-rn-deps.py",
     "scripts/build-hermes.sh",
-    "rn-version.properties"
+    "rn-version.properties",
+    "prebuilt-hosts.json",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
