@@ -309,6 +309,7 @@ add_library(rngtk_host_objs OBJECT
   src/Appearance.cc
   src/DevControls.cc
   src/DevUI.cc
+  src/Dialogs.cc
   src/FeatureFlags.cc
   src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
@@ -540,6 +541,9 @@ add_test(NAME gallery-appearance-self-test
 add_test(NAME gallery-modal-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryModal --width 940 --height 680 --self-test)
+add_test(NAME gallery-dialogs-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryDialogs --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

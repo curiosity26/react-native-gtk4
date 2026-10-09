@@ -157,6 +157,11 @@ describe('createLinuxResolver', () => {
     assert.equal(resolve(from, 'react-native').filePath, path.join(rn, 'index.js'));
   });
 
+  test("resolves the package's own JS imports (js/) from the app", () => {
+    const from = path.join(OVERRIDES_DIR, '..', 'js', 'Dialogs.js');
+    assert.equal(resolve(from, 'react-native').filePath, path.join(rn, 'index.js'));
+  });
+
   test('does not touch third-party packages', () => {
     assert.throws(
       () => resolve(path.join(app, 'App.js'), 'other'),
@@ -220,7 +225,7 @@ describe('createLinuxResolver', () => {
 });
 
 describe('withLinux', () => {
-  test('adds the platform, the resolver and the overrides folder', () => {
+  test('adds the platform, the resolver and the overrides and js folders', () => {
     const existing = () => null;
     const config = withLinux({
       projectRoot: app,
@@ -230,14 +235,17 @@ describe('withLinux', () => {
     assert.deepEqual(config.resolver.platforms, ['ios', 'android', 'linux']);
     assert.equal(typeof config.resolver.resolveRequest, 'function');
     assert.notEqual(config.resolver.resolveRequest, existing);
-    assert.deepEqual(config.watchFolders, [fs.realpathSync(OVERRIDES_DIR)]);
+    assert.deepEqual(config.watchFolders, [
+      fs.realpathSync(OVERRIDES_DIR),
+      fs.realpathSync(path.join(OVERRIDES_DIR, '..', 'js')),
+    ]);
   });
 
-  test('is idempotent about the platform and watch folder', () => {
+  test('is idempotent about the platform and watch folders', () => {
     const once = withLinux({projectRoot: app});
     const twice = withLinux(once);
     assert.deepEqual(twice.resolver.platforms, ['ios', 'android', 'linux']);
-    assert.equal(twice.watchFolders.length, 1);
+    assert.equal(twice.watchFolders.length, 2);
   });
 });
 

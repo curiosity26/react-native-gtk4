@@ -18,15 +18,18 @@
   },
   "exports": {
     ".": {
-      "types": "./types/index.d.ts"
+      "types": "./types/index.d.ts",
+      "default": "./js/index.js"
     },
     "./metro-config": "./metro-config.js",
     "./package.json": "./package.json",
     "./react-native.config.js": "./react-native.config.js"
   },
+  "main": "js/index.js",
   "types": "types/index.d.ts",
   "files": [
     "metro-config.js",
+    "js/",
     "overrides/",
     "types/",
     "react-native.config.js",

@@ -2,7 +2,9 @@
 
 React Native's JS APIs as the GTK host implements them: Appearance,
 PlatformColor, AccessibilityInfo, Linking, AppState, Clipboard,
-PixelRatio, I18nManager, Share, Vibration.
+PixelRatio, I18nManager, Share, Vibration, Alert. Then the Linux APIs
+React Native has none for, which `@curiosity26/react-native-gtk4` exports:
+[Dialogs](#dialogs).
 
 Components are in [components.md](components.md).
 
@@ -165,6 +167,60 @@ Linux desktops have neither. `Share.share()` (an override of
 arguments and resolves `{action: 'dismissedAction'}`. `Vibration` accepts
 every call and does nothing.
 
+## Alert
+
+`Alert.alert` and `Alert.prompt` show a GTK message dialog (the one
+GtkAlertDialog shows), modal over the app's active window: the main
+window, a Modal's, or another app window. `Alert.linux.js` replaces
+React Native's Alert and takes iOS's and Android's options together.
+
+| | Status | Notes |
+| --- | --- | --- |
+| `title`, `message` | Supported | the heading and the text under it; a message alone is the heading |
+| `buttons` | Supported | any number, in order, with the `cancel` one first (GNOME puts it on the left). `destructive` is red; `isPreferred`, or else the last plain button, is the default: suggested-action, and Enter presses it. None given: one OK. Buttons without `text` say GTK's own (translated) OK or Cancel |
+| Escape, the close button | Supported | press the `cancel` button. With none, `options.cancelable` lets them dismiss the alert, calling `options.onDismiss` (Android's meaning); otherwise the alert stays open |
+| `Alert.prompt` types | Supported | `plain-text`, `secure-text` (a password field with a peek icon), `login-password` (onPress gets `{login, password}`), `default`; `defaultValue`; `keyboardType` sets the field's input purpose (email, number, phone, URL) |
+| `userInterfaceStyle` | Not applicable | alerts follow the app's style (Appearance) |
+
+Screen readers get an alert dialog (`GTK_ACCESSIBLE_ROLE_ALERT_DIALOG`)
+named by the title, with the message as its description, which Orca reads
+when it opens. `RCTAlertManager.alertWithArgs` (iOS's shape) shows the same
+dialog, for code that calls it directly.
+
+## Dialogs
+
+File dialogs, from `@curiosity26/react-native-gtk4`, on GtkFileDialog: the
+desktop's file chooser through its portal when there is one (GNOME's, and
+always under Flatpak), GTK's own otherwise. They are modal over the app's
+active window.
+
+```js
+import {Dialogs} from '@curiosity26/react-native-gtk4';
+
+const [path] = await Dialogs.openFile({
+  title: 'Open an image',
+  filters: [
+    {name: 'Images', mimeTypes: ['image/*']},
+    {name: 'Text', extensions: ['txt', 'md']},
+  ],
+});
+const paths = await Dialogs.openFile({multiple: true, defaultPath: '/home/me/Documents'});
+const target = await Dialogs.saveFile({defaultName: 'notes.txt', buttonLabel: 'Export'});
+const [folder] = await Dialogs.openFolder();
+```
+
+| Method | Resolves to | Options |
+| --- | --- | --- |
+| `openFile(options)` | the paths picked, `[]` if cancelled | `multiple` |
+| `saveFile(options)` | the path, `null` if cancelled | `defaultName`; GTK asks before replacing a file |
+| `openFolder(options)` | the folders picked, `[]` if cancelled | `multiple` |
+
+Every method takes `title`, `buttonLabel` (the accept button), `defaultPath`
+(a folder to start in, or a file to select or to save as) and `filters`
+(`{name, extensions, mimeTypes, patterns}`; the first is selected). Paths
+are local paths; a file without one (a remote location) comes back as its
+URI. Other failures reject.
+
 ## Testing
 
 The `GalleryPlatform` page (`--module GalleryPlatform --self-test --url
@@ -175,6 +231,14 @@ focus/blur events, the clipboard, Vibration, Share, the font scale (by
 changing `gtk-xft-dpi`; Text grows, `allowFontScaling={false}` doesn't)
 and RTL layout, on Wayland and X11. GNOME's real text scaling and URLs
 handed to a running app were checked by hand on both.
+
+`--module GalleryDialogs --self-test` opens each kind of alert and answers
+it (buttons, Escape, Enter, typing), checks the dialog (modal over the app,
+an alert dialog, button order and styles) and what JS got; then the file
+dialogs, picking files and folders in a folder it fills, and cancelling.
+It answers GTK's own chooser (it sets `GDK_DEBUG=no-portals`): the portal's
+runs in another process. The portal's chooser was checked by hand
+(`GDK_DEBUG=portals` with `--step-delay`).
 
 ### Appearance and PlatformColor
 

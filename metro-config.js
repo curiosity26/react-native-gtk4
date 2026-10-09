@@ -21,6 +21,10 @@ const path = require('path');
 const PLATFORM = 'linux';
 const PACKAGE_DIR = __dirname;
 const OVERRIDES_DIR = path.join(PACKAGE_DIR, 'overrides');
+// The package's own JS (Dialogs, Menu...): its imports resolve from the app
+// too, and Metro watches it like overrides/.
+const JS_DIR = path.join(PACKAGE_DIR, 'js');
+const SOURCE_DIRS = [OVERRIDES_DIR, JS_DIR];
 const RN_SEGMENT = `${path.sep}node_modules${path.sep}react-native${path.sep}`;
 const SOURCE_EXTS = ['.js', '.jsx', '.ts', '.tsx'];
 const UPSTREAM_PREFIXES = ['react-native-upstream/', 'react-native/'];
@@ -140,7 +144,7 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     // above it.
     if (
       projectRoot &&
-      isInside(context.originModulePath, OVERRIDES_DIR) &&
+      SOURCE_DIRS.some(dir => isInside(context.originModulePath, dir)) &&
       !moduleName.startsWith('.') &&
       !path.isAbsolute(moduleName)
     ) {
@@ -221,19 +225,23 @@ function withLinux(config) {
   const projectRoot = config.projectRoot ?? process.cwd();
   const resolver = config.resolver ?? {};
   const platforms = resolver.platforms ?? ['ios', 'android'];
-  // Metro only serves files under watched folders. Watch overrides/ alone:
-  // a linked checkout of this package also holds native build trees.
-  const watchFolders = config.watchFolders ?? [];
-  const overridesDir = realpath(OVERRIDES_DIR);
-  const needsWatch =
-    !isInside(overridesDir, realpath(projectRoot)) &&
-    !watchFolders.some(dir => {
-      const real = realpath(dir);
-      return real === overridesDir || isInside(overridesDir, real);
-    });
+  // Metro only serves files under watched folders. Watch overrides/ and
+  // js/ alone: a linked checkout of this package also holds native build
+  // trees.
+  const watchFolders = [...(config.watchFolders ?? [])];
+  for (const sourceDir of SOURCE_DIRS) {
+    const dir = realpath(sourceDir);
+    const watched =
+      isInside(dir, realpath(projectRoot)) ||
+      watchFolders.some(folder => {
+        const real = realpath(folder);
+        return real === dir || isInside(dir, real);
+      });
+    if (!watched) watchFolders.push(dir);
+  }
   return {
     ...config,
-    watchFolders: needsWatch ? [...watchFolders, overridesDir] : watchFolders,
+    watchFolders,
     resolver: {
       ...resolver,
       platforms: platforms.includes(PLATFORM)

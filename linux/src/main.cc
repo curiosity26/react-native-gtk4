@@ -2563,6 +2563,261 @@ void add_modal_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryDialogs checks
+
+bool is_dialogs() { return opts.module == "GalleryDialogs"; }
+
+std::string dialogs_dir;
+
+// A folder for the file dialogs: a.txt, b.txt, pic.png and sub/.
+std::string make_dialogs_folder() {
+  char tmpl[] = "/tmp/rngtk-dialogs-XXXXXX";
+  if (!g_mkdtemp(tmpl)) return "";
+  dialogs_dir = tmpl;
+  for (const char *name : {"a.txt", "b.txt", "pic.png"}) {
+    g_file_set_contents((dialogs_dir + "/" + name).c_str(), "x", 1, nullptr);
+  }
+  g_mkdir((dialogs_dir + "/sub").c_str(), 0700);
+  return dialogs_dir;
+}
+
+// The first visible toplevel `pred` accepts.
+GtkWidget *find_toplevel(const std::function<bool(GtkWidget *)> &pred) {
+  GListModel *toplevels = gtk_window_get_toplevels();
+  GtkWidget *found = nullptr;
+  for (guint i = 0; i < g_list_model_get_n_items(toplevels) && !found; i++) {
+    auto *w = GTK_WIDGET(g_list_model_get_item(toplevels, i));
+    if (gtk_widget_get_visible(w) && pred(w)) found = w;
+    g_object_unref(w);
+  }
+  return found;
+}
+
+GtkWidget *alert_dialog() {
+  return find_toplevel([](GtkWidget *w) { return GTK_IS_MESSAGE_DIALOG(w); });
+}
+
+GtkWidget *file_chooser() {
+  return find_toplevel([](GtkWidget *w) { return GTK_IS_FILE_CHOOSER(w); });
+}
+
+// The button under `widget` whose label is `label`.
+GtkWidget *button_labeled(GtkWidget *widget, const std::string &label) {
+  if (GTK_IS_BUTTON(widget)) {
+    const char *l = gtk_button_get_label(GTK_BUTTON(widget));
+    if (l && label == l) return widget;
+  }
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    if (GtkWidget *b = button_labeled(c, label)) return b;
+  }
+  return nullptr;
+}
+
+std::string property_string(GObject *object, const char *name) {
+  char *value = nullptr;
+  g_object_get(object, name, &value, nullptr);
+  std::string s = value ? value : "";
+  g_free(value);
+  return s;
+}
+
+GtkWidget *first_of_type(GtkWidget *widget, GType type) {
+  int n = 0;
+  return find_nth(widget, type, &n);
+}
+
+bool result_is(const std::string &text) { return has_text(app.root, text); }
+
+// Answers the open file chooser once it has shown a few frames: `answer`
+// picks (or not), then the response.
+Step chooser_step(std::string name, const char *button, std::function<void(GtkFileChooser *)> answer,
+                  int response, std::string expect) {
+  // DIR: the self-test's folder.
+  for (size_t at; (at = expect.find("DIR")) != std::string::npos;) {
+    expect.replace(at, 3, dialogs_dir);
+  }
+  auto frames = std::make_shared<int>(0);
+  return Step{name, [button, frames] {
+                *frames = 0;
+                click(button);
+              },
+              [answer, response, expect, frames] {
+                GtkWidget *chooser = file_chooser();
+                if (chooser) {
+                  if (++*frames == 10) answer(GTK_FILE_CHOOSER(chooser));
+                  if (*frames == 40) gtk_dialog_response(GTK_DIALOG(chooser), response);
+                  return false;
+                }
+                return *frames >= 40 && result_is(expect);
+              }};
+}
+
+void add_dialogs_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "Alert.alert: a modal alert dialog over the app, title and message",
+      [] { click("alert-three"); },
+      [] {
+        GtkWidget *d = alert_dialog();
+        if (!d || !gtk_widget_get_mapped(d)) return false;
+        return gtk_window_get_transient_for(GTK_WINDOW(d)) == GTK_WINDOW(app.window) &&
+               gtk_window_get_modal(GTK_WINDOW(d)) &&
+               gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(d)) ==
+                   GTK_ACCESSIBLE_ROLE_ALERT_DIALOG &&
+               property_string(G_OBJECT(d), "text") == "Delete “notes.txt”?" &&
+               property_string(G_OBJECT(d), "secondary-text") == "It will be gone for good.";
+      }});
+  app.steps.push_back(Step{
+      "  ...buttons: Cancel first, then the app's order; Delete red, Keep the default", [] {},
+      [] {
+        GtkWidget *d = alert_dialog();
+        GtkWidget *cancel = button_labeled(d, "Cancel"), *keep = button_labeled(d, "Keep"),
+                  *del = button_labeled(d, "Delete");
+        if (!cancel || !keep || !del) return false;
+        graphene_rect_t c{}, k{}, x{};
+        (void)gtk_widget_compute_bounds(cancel, d, &c);
+        (void)gtk_widget_compute_bounds(keep, d, &k);
+        (void)gtk_widget_compute_bounds(del, d, &x);
+        return c.origin.x < k.origin.x && k.origin.x < x.origin.x &&
+               gtk_widget_has_css_class(del, "destructive-action") &&
+               gtk_widget_has_css_class(keep, "suggested-action") &&
+               gtk_window_get_default_widget(GTK_WINDOW(d)) == keep;
+      }});
+  app.steps.push_back(Step{"  ...pressing Delete calls its onPress and closes it",
+                           [] { gtk_widget_activate(button_labeled(alert_dialog(), "Delete")); },
+                           [] { return !alert_dialog() && result_is("#1 delete"); }});
+  app.steps.push_back(Step{"Escape presses the cancel button",
+                           [] { click("alert-three"); },
+                           [] {
+                             GtkWidget *d = alert_dialog();
+                             if (d && gtk_widget_get_mapped(d)) g_signal_emit_by_name(d, "close");
+                             return !alert_dialog() && result_is("#2 cancel");
+                           }});
+  static int frames = 0;
+  app.steps.push_back(Step{"without a cancel button or cancelable, Escape leaves it open",
+                           [] {
+                             frames = 0;
+                             click("alert-ok");
+                           },
+                           [] {
+                             GtkWidget *d = alert_dialog();
+                             if (!d || !gtk_widget_get_mapped(d)) return false;
+                             if (++frames == 3) g_signal_emit_by_name(d, "close");
+                             return frames > 15 && result_is("#2 cancel");
+                           }});
+  app.steps.push_back(Step{"  ...its button closes it",
+                           [] { gtk_widget_activate(button_labeled(alert_dialog(), "OK")); },
+                           [] { return !alert_dialog() && result_is("#3 ok"); }});
+  app.steps.push_back(Step{"cancelable: Escape dismisses it (onDismiss)",
+                           [] { click("alert-cancelable"); },
+                           [] {
+                             GtkWidget *d = alert_dialog();
+                             if (d && gtk_widget_get_mapped(d)) g_signal_emit_by_name(d, "close");
+                             return !alert_dialog() && result_is("#4 dismissed");
+                           }});
+  app.steps.push_back(Step{
+      "no buttons: one GTK OK (translated, with its mnemonic)",
+      [] { click("alert-default"); },
+      [] {
+        GtkWidget *d = alert_dialog();
+        GtkWidget *ok = d ? button_labeled(d, g_dgettext("gtk40", "_OK")) : nullptr;
+        if (!ok) return false;
+        bool underline = gtk_button_get_use_underline(GTK_BUTTON(ok));
+        gtk_widget_activate(ok);
+        return underline;
+      }});
+  app.steps.push_back(Step{"  ...which closes it", [] {},
+                           [] { return !alert_dialog() && result_is("#4 dismissed"); }});
+  app.steps.push_back(Step{
+      "Alert.prompt: a text field with defaultValue; Enter presses OK with the text",
+      [] { click("prompt"); },
+      [] {
+        GtkWidget *d = alert_dialog();
+        if (!d || !gtk_widget_get_mapped(d)) return false;
+        GtkWidget *entry = first_of_type(d, GTK_TYPE_ENTRY);
+        if (!entry || std::string(gtk_editable_get_text(GTK_EDITABLE(entry))) != "Ada") return false;
+        gtk_editable_set_text(GTK_EDITABLE(entry), "Grace");
+        // Enter: GtkText's key binding emits its activate signal.
+        g_signal_emit_by_name(first_of_type(entry, GTK_TYPE_TEXT), "activate");
+        return true;
+      }});
+  app.steps.push_back(Step{"  ...onPress got it", [] {},
+                           [] { return !alert_dialog() && result_is("#5 name: Grace"); }});
+  app.steps.push_back(Step{
+      "secure-text: a password field",
+      [] { click("prompt-secure"); },
+      [] {
+        GtkWidget *d = alert_dialog();
+        if (!d || !gtk_widget_get_mapped(d)) return false;
+        GtkWidget *entry = first_of_type(d, GTK_TYPE_PASSWORD_ENTRY);
+        if (!entry) return false;
+        gtk_editable_set_text(GTK_EDITABLE(entry), "hunter2");
+        gtk_widget_activate(button_labeled(d, "Unlock"));
+        return true;
+      }});
+  app.steps.push_back(Step{"  ...onPress got it", [] {},
+                           [] { return !alert_dialog() && result_is("#6 password: hunter2"); }});
+  app.steps.push_back(Step{
+      "login-password: login and password fields; onPress gets {login, password}",
+      [] { click("prompt-login"); },
+      [] {
+        GtkWidget *d = alert_dialog();
+        if (!d || !gtk_widget_get_mapped(d)) return false;
+        GtkWidget *login = first_of_type(d, GTK_TYPE_ENTRY);
+        GtkWidget *password = first_of_type(d, GTK_TYPE_PASSWORD_ENTRY);
+        if (!login || !password ||
+            std::string(gtk_editable_get_text(GTK_EDITABLE(login))) != "ada") {
+          return false;
+        }
+        gtk_editable_set_text(GTK_EDITABLE(password), "s3cret");
+        gtk_widget_activate(button_labeled(d, "Sign in"));
+        return true;
+      }});
+  app.steps.push_back(Step{"  ...onPress got both", [] {},
+                           [] { return !alert_dialog() && result_is("#7 login: ada / s3cret"); }});
+  app.steps.push_back(chooser_step(
+      "Dialogs.openFile: GTK's file chooser, modal; the picked file's path comes back",
+      "open-file",
+      [](GtkFileChooser *chooser) {
+        printf("  chooser over the app: %s, filters %u, title \"%s\"\n",
+               gtk_window_get_transient_for(GTK_WINDOW(chooser)) == GTK_WINDOW(app.window)
+                   ? "yes" : "no",
+               g_list_model_get_n_items(gtk_file_chooser_get_filters(chooser)),
+               gtk_window_get_title(GTK_WINDOW(chooser)));
+        GFile *file = g_file_new_for_path((dialogs_dir + "/a.txt").c_str());
+        gtk_file_chooser_set_file(chooser, file, nullptr);
+        g_object_unref(file);
+      },
+      GTK_RESPONSE_ACCEPT, "#8 open: [\"DIR/a.txt\"]"));
+  app.steps.push_back(chooser_step("  ...cancelled: []", "open-file", [](GtkFileChooser *) {},
+                                   GTK_RESPONSE_CANCEL, "#9 open: []"));
+  app.steps.push_back(chooser_step(
+      "  ...multiple: an array of the files picked", "open-files",
+      [](GtkFileChooser *chooser) {
+        GFile *file = g_file_new_for_path((dialogs_dir + "/b.txt").c_str());
+        gtk_file_chooser_set_file(chooser, file, nullptr);
+        g_object_unref(file);
+      },
+      GTK_RESPONSE_ACCEPT, "#10 open several: [\"DIR/b.txt\"]"));
+  app.steps.push_back(chooser_step(
+      "Dialogs.saveFile: the name typed, in the folder shown",
+      "save-file",
+      [](GtkFileChooser *chooser) {
+        gtk_file_chooser_set_current_name(chooser, "saved.txt");
+      },
+      GTK_RESPONSE_ACCEPT, "#11 save: \"DIR/saved.txt\""));
+  app.steps.push_back(chooser_step(
+      "Dialogs.openFolder: the folder picked",
+      "open-folder",
+      [](GtkFileChooser *chooser) {
+        GFile *file = g_file_new_for_path((dialogs_dir + "/sub").c_str());
+        gtk_file_chooser_set_file(chooser, file, nullptr);
+        g_object_unref(file);
+      },
+      GTK_RESPONSE_ACCEPT, "#12 folder: [\"DIR/sub\"]"));
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -2661,6 +2916,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_dialogs() && app.steps.empty()) {
+    add_dialogs_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_modal() && app.steps.empty()) {
     add_modal_steps();
     enter(Phase::Steps);
@@ -2704,7 +2962,8 @@ void check_app(bool first) {
     } else if (is_images()) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
-               is_mouse() || is_accessibility() || is_platform() || is_modal()) {
+               is_mouse() || is_accessibility() || is_platform() || is_modal() ||
+               is_dialogs()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -2922,6 +3181,8 @@ void activate(GtkApplication *gtk_app, gpointer) {
   }
   // GalleryImages' self-test serves its http images itself.
   if (opts.self_test && is_images()) props["imageServer"] = start_image_server();
+  // GalleryDialogs' file dialogs open in a folder of the self-test's own.
+  if (opts.self_test && is_dialogs()) props["folder"] = make_dialogs_folder();
   if (!app.host->run(opts.dev ? opts.entry : opts.bundle, kSurfaceId,
                      opts.module, app.root, opts.width, opts.height,
                      std::move(props))) {
@@ -3010,6 +3271,10 @@ int main(int argc, char **argv) {
   FLAGS_minloglevel = opts.verbose ? 0 : 1;  // info, or warnings and up
   rngtk::setUpFeatureFlags();
   if (opts.self_test && is_platform()) set_up_platform_xdg();
+  // GalleryDialogs answers GTK's own file chooser; the desktop's (the
+  // FileChooser portal, another process) can't be driven from here.
+  // (GDK_DEBUG=portals shows the portal's, to watch with --step-delay.)
+  if (opts.self_test && is_dialogs()) g_setenv("GDK_DEBUG", "no-portals", FALSE);
 
   GtkApplication *gtk_app = gtk_application_new(
       "dev.curiosity26.RNGtk4.Host", G_APPLICATION_NON_UNIQUE);
@@ -3019,6 +3284,7 @@ int main(int argc, char **argv) {
   if (restore_screen_reader) set_bus_screen_reader(false);
   delete app.host;
   if (!xdg_dir.empty()) remove_tree(xdg_dir);
+  if (!dialogs_dir.empty()) remove_tree(dialogs_dir);
   g_object_unref(gtk_app);
   return status ? status : app.exit_code;
 }

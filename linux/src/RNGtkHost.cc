@@ -3,6 +3,7 @@
 #include "AccessibilityInfo.h"
 #include "Appearance.h"
 #include "DevUI.h"
+#include "Dialogs.h"
 #include "GtkImageLoader.h"
 #include "GtkKeyboardHandler.h"
 #include "GtkMountingManager.h"
@@ -340,6 +341,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
           return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
         }
         if (auto module = makePlatformModule(name, jsInvoker, platform_)) {
+          return module;
+        }
+        if (auto module = makeDialogModule(name, jsInvoker, platform_)) {
           return module;
         }
         if (name == AccessibilityManagerModule::kModuleName) {
