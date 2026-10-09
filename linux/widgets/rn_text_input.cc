@@ -210,6 +210,22 @@ static void rn_text_input_dispose(GObject *object) {
   G_OBJECT_CLASS(rn_text_input_parent_class)->dispose(object);
 }
 
+// One Tab stop: Tab or Shift+Tab from elsewhere focuses the editor; from
+// the editor, both leave. (GTK's default focus handling for this container
+// keeps a focused GtkText on Shift+Tab.) Arrows: GTK's default.
+static gboolean rn_text_input_focus(GtkWidget *widget, GtkDirectionType direction) {
+  auto *self = RN_TEXT_INPUT(widget);
+  if (direction != GTK_DIR_TAB_FORWARD && direction != GTK_DIR_TAB_BACKWARD) {
+    return GTK_WIDGET_CLASS(rn_text_input_parent_class)->focus(widget, direction);
+  }
+  if (!self->editor || !gtk_widget_is_sensitive(self->editor) ||
+      !gtk_widget_get_visible(widget)) {
+    return FALSE;
+  }
+  if (gtk_widget_has_focus(self->editor)) return FALSE;
+  return gtk_widget_grab_focus(self->editor);
+}
+
 static void rn_text_input_class_init(RNTextInputClass *klass) {
   G_OBJECT_CLASS(klass)->dispose = rn_text_input_dispose;
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
@@ -217,6 +233,7 @@ static void rn_text_input_class_init(RNTextInputClass *klass) {
   widget_class->size_allocate = rn_text_input_size_allocate;
   widget_class->snapshot = rn_text_input_snapshot;
   widget_class->grab_focus = rn_text_input_grab_focus;
+  widget_class->focus = rn_text_input_focus;
   gtk_widget_class_set_css_name(widget_class, "rn-text-input");
   const char *names[] = {"text-changed", "selection-changed"};
   for (int i = 0; i < 2; i++) {

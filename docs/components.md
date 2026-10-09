@@ -188,6 +188,7 @@ sets a value through AT-SPI; on Wayland and X11.
 | `accessibilityElementsHidden`, `aria-hidden`, `importantForAccessibility="no-hide-descendants"` | Supported | the view and its subtree are left out |
 | `importantForAccessibility="no"` | Supported | presentation role: the view isn't an element, its children are |
 | `accessible` | Supported | one element (see the name above) |
+| Screen reader navigation | Supported | Orca reads what has keyboard focus. While a screen reader runs (AT-SPI's `ScreenReaderEnabled`), `accessible` Views and Texts outside such a View (or a Pressable) take focus too, so Tab visits each element, as VoiceOver and TalkBack swipes do; the Tab order is unchanged otherwise. Orca's flat review (KP_8 / KP_7 / KP_9, or Orca+Up/Down on a laptop layout) reads everything else |
 | `accessibilityLiveRegion`, `aria-live` | Supported | a Text's new content inside the region is announced (polite, or assertive at high priority) |
 | `accessibilityViewIsModal`, `aria-modal` | Partial | GTK's modal property; GTK doesn't confine screen readers with it |
 | TextInput, Switch | Supported | GTK's own text box and switch, with the label, hint, labelled-by and hidden props |
