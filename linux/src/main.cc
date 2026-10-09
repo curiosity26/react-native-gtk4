@@ -31,6 +31,8 @@
 //   --test-animation       before the first reload and after each one,
 //                          hold the card (a TouchableOpacity) and check
 //                          that its native-driver fade runs, then release
+//   --step-delay MS        wait before each self-test step (to watch it, or
+//                          to screenshot the desktop)
 #include <ReactCommon/TurboModule.h>
 #include <glib/gstdio.h>
 #include <glog/logging.h>
@@ -102,6 +104,9 @@ struct Options {
   // GalleryPlatform: start with I18nManager.forceRTL(true) saved.
   bool rtl = false;
   int timeout_ms = 20000;
+  // Waits this long before each self-test step (to watch, or take
+  // screenshots of the desktop).
+  int step_delay_ms = 0;
   bool verbose = false;
 } opts;
 
@@ -2360,6 +2365,204 @@ void add_platform_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryModal checks
+
+bool is_modal() { return opts.module == "GalleryModal"; }
+
+// The modal (ModalHostView tag) whose window shows `widget`, or 0.
+facebook::react::Tag modal_of(GtkWidget *widget) {
+  auto &mm = app.host->mountingManager();
+  for (auto tag : mm.modalTags()) {
+    GtkWidget *content = mm.viewForTag(tag);
+    if (widget == content || gtk_widget_is_ancestor(widget, content)) return tag;
+  }
+  return 0;
+}
+
+// A click on view `id`, in the app or in a modal's window.
+void click_anywhere(const char *id) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  auto &mm = app.host->mountingManager();
+  auto tag = modal_of(v);
+  GtkWidget *root = tag ? mm.viewForTag(tag) : app.root;
+  rngtk::GtkPointerHandler *handler =
+      tag ? mm.modalPointerHandler(tag) : app.host->pointerHandler();
+  graphene_rect_t b{};
+  if (!gtk_widget_compute_bounds(v, root, &b)) return;
+  rngtk::GtkPointerHandler::Input input{};
+  input.x = b.origin.x + b.size.width / 2;
+  input.y = b.origin.y + b.size.height / 2;
+  input.timeMs = uint32_t(g_get_monotonic_time() / 1000);
+  input.phase = rngtk::GtkPointerHandler::Phase::Down;
+  handler->dispatch(input);
+  input.phase = rngtk::GtkPointerHandler::Phase::Up;
+  handler->dispatch(input);
+}
+
+GtkWindow *modal_window(size_t i) {
+  auto tags = app.host->mountingManager().modalTags();
+  return i < tags.size() ? app.host->mountingManager().modalWindow(tags[i]) : nullptr;
+}
+
+// Escape, as the modal window's key controller gets it.
+void press_escape(GtkWindow *window) {
+  GListModel *controllers = gtk_widget_observe_controllers(GTK_WIDGET(window));
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); i++) {
+    auto *c = static_cast<GObject *>(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(c) && g_object_get_data(c, "rngtk-modal-tag")) {
+      gboolean handled = FALSE;
+      g_signal_emit_by_name(c, "key-pressed", GDK_KEY_Escape, 9u, GdkModifierType(0),
+                            &handled);
+    }
+    g_object_unref(c);
+  }
+  g_object_unref(controllers);
+}
+
+void add_modal_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "Modal: a window of its own, transient for and modal over the app's",
+      [] { click_anywhere("open-full"); },
+      [] {
+        GtkWindow *w = modal_window(0);
+        return w && gtk_widget_get_visible(GTK_WIDGET(w)) &&
+               gtk_window_get_transient_for(w) == GTK_WINDOW(app.window) &&
+               gtk_window_get_modal(w) && !gtk_window_get_decorated(w) &&
+               has_text(app.root, "shown 1 ");
+      }});
+  app.steps.push_back(Step{
+      "  ...focus moves in: its first focusable view", [] {},
+      [] {
+        GtkWidget *focus = gtk_root_get_focus(GTK_ROOT(modal_window(0)));
+        GtkWidget *first = by_id("open-nested");
+        return focus && first && (focus == first || gtk_widget_is_ancestor(focus, first));
+      }});
+  app.steps.push_back(Step{
+      "  ...a dialog to screen readers, named by accessibilityLabel", [] {},
+      [] {
+        GtkWindow *w = modal_window(0);
+        return gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(w)) ==
+                   GTK_ACCESSIBLE_ROLE_DIALOG &&
+               std::string(gtk_window_get_title(w)) == "Full screen modal";
+      }});
+  app.steps.push_back(Step{
+      "  ...full screen: laid out at the size of the app's content", [] {},
+      [] {
+        GtkWidget *body = by_id("full-body");
+        printf("  modal body %dx%d, app content %dx%d\n", body ? gtk_widget_get_width(body) : 0,
+               body ? gtk_widget_get_height(body) : 0, gtk_widget_get_width(app.overlay),
+               gtk_widget_get_height(app.overlay));
+        return body && gtk_widget_get_width(body) == gtk_widget_get_width(app.overlay) &&
+               gtk_widget_get_height(body) == gtk_widget_get_height(app.overlay);
+      }});
+  app.steps.push_back(Step{
+      "  ...AT-SPI (what Orca reads): a modal dialog named by accessibilityLabel",
+      [] { run_probe(); },
+      [] {
+        if (!probe_finished("the modal's AT-SPI node")) return false;
+        if (!a11y_bus) return true;
+        const folly::dynamic *n = probe_node("Full screen modal", "dialog");
+        if (n) printf("  dialog states: %s\n", folly::toJson((*n)["states"]).c_str());
+        return check(n && has((*n)["states"], "modal"), "AT-SPI: a modal dialog");
+      }});
+  app.steps.push_back(Step{
+      "a modal opened from a modal stacks over it (formSheet: a 540x620 dialog)",
+      [] { click_anywhere("open-nested"); },
+      [] {
+        GtkWindow *outer = modal_window(0), *inner = modal_window(1);
+        GtkWidget *body = by_id("nested-body");
+        if (!inner || !body || !has_text(app.root, "shown 2 ")) return false;
+        int h = gtk_widget_get_height(body);
+        printf("  nested body %dx%d, its window's content %dx%d\n", gtk_widget_get_width(body), h,
+               gtk_widget_get_width(gtk_window_get_child(inner)),
+               gtk_widget_get_height(gtk_window_get_child(inner)));
+        return gtk_window_get_transient_for(inner) == outer && gtk_window_get_decorated(inner) &&
+               gtk_widget_get_width(body) == 540 &&
+               h == 620;
+      }});
+  app.steps.push_back(Step{
+      "Escape asks to close (onRequestClose); it closes, then onDismiss",
+      [] { press_escape(modal_window(1)); },
+      [] {
+        return has_text(app.root, "dismissed 1 · requests 1 · last dismiss nested") &&
+               app.host->mountingManager().modalTags().size() == 1;
+      }});
+  app.steps.push_back(Step{
+      "a button inside closes the first one (after its slide): window gone",
+      [] { click_anywhere("close-full"); },
+      [] {
+        GtkWidget *focus = gtk_root_get_focus(GTK_ROOT(app.window));
+        GtkWidget *opener = by_id("open-full");
+        return has_text(app.root, "dismissed 2 · requests 1 · last dismiss full") &&
+               app.host->mountingManager().modalTags().empty() &&
+               check(focus && (focus == opener || gtk_widget_is_ancestor(focus, opener)),
+                     "  focus is back on the button that opened it");
+      }});
+  app.steps.push_back(Step{
+      "formSheet with fade: a decorated, resizable dialog, faded in",
+      [] { click_anywhere("open-sheet"); },
+      [] {
+        GtkWindow *w = modal_window(0);
+        GtkWidget *body = by_id("sheet-body");
+        return w && gtk_window_get_decorated(w) && gtk_window_get_resizable(w) && body &&
+               gtk_widget_get_width(body) == 540 &&
+               gtk_widget_get_opacity(GTK_WIDGET(w)) > 0.99 && has_text(app.root, "shown 3 ");
+      }});
+  app.steps.push_back(Step{
+      "the window's close button asks to close (onRequestClose), and it closes",
+      [] { gtk_window_close(modal_window(0)); },
+      [] {
+        return has_text(app.root, "dismissed 3 · requests 2 · last dismiss sheet") &&
+               app.host->mountingManager().modalTags().empty();
+      }});
+  app.steps.push_back(Step{
+      "transparent: the window paints nothing; the app shows through the backdrop",
+      [] { click_anywhere("open-clear"); },
+      [] {
+        GtkWindow *w = modal_window(0);
+        if (!w || !has_text(app.root, "shown 4 ")) return false;
+        GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(w));
+        if (!gdk_display_is_composited(display)) {
+          printf("  no compositor: a dimmed, opaque window\n");
+          return bool(gtk_widget_has_css_class(GTK_WIDGET(w), "rngtk-modal-dim"));
+        }
+        GdkTexture *tex = rngtk::render_widget(GTK_WIDGET(w));
+        if (!tex) return false;
+        auto p = px(tex, 4, 4);
+        pixels.tex = nullptr;
+        g_object_unref(tex);
+        printf("  backdrop pixel rgba(%d,%d,%d,%d)\n", p.r, p.g, p.b, p.a);
+        return gtk_widget_has_css_class(GTK_WIDGET(w), "rngtk-modal-clear") && p.a > 60 &&
+               p.a < 160;
+      }});
+  app.steps.push_back(Step{"  ...and closes", [] { click_anywhere("close-clear"); },
+                           [] {
+                             return has_text(app.root, "dismissed 4 ") &&
+                                    app.host->mountingManager().modalTags().empty();
+                           }});
+  app.steps.push_back(Step{
+      "a modal and one inside it, mounted together: the inner one opens over the outer",
+      [] { click_anywhere("open-both"); },
+      [] {
+        // (The inner one has the lower tag: React creates children first.)
+        GtkWindow *a = modal_window(0), *b = modal_window(1);
+        if (!a || !b) return false;
+        GtkWindow *outer = gtk_window_get_transient_for(a) == GTK_WINDOW(app.window) ? a : b;
+        GtkWindow *inner = outer == a ? b : a;
+        return gtk_window_get_transient_for(inner) == outer &&
+               gtk_widget_get_visible(GTK_WIDGET(inner)) && has_text(app.root, "shown 6 ");
+      }});
+  app.steps.push_back(Step{"  ...closing the outer one closes both",
+                           [] { click_anywhere("close-full"); },
+                           [] {
+                             return app.host->mountingManager().modalTags().empty() &&
+                                    has_text(app.root, "dismissed 6 ");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -2458,6 +2661,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_modal() && app.steps.empty()) {
+    add_modal_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_mouse() && app.steps.empty()) {
     add_mouse_steps();
     enter(Phase::Steps);
@@ -2498,7 +2704,7 @@ void check_app(bool first) {
     } else if (is_images()) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
-               is_mouse() || is_accessibility() || is_platform()) {
+               is_mouse() || is_accessibility() || is_platform() || is_modal()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -2618,6 +2824,14 @@ void on_after_paint(GdkFrameClock *, gpointer) {
       }
       Step &step = app.steps[app.step];
       if (!app.step_started) {
+        static gint64 waiting_since = 0;
+        if (opts.step_delay_ms > 0) {
+          gint64 now = g_get_monotonic_time();
+          if (!waiting_since) waiting_since = now;
+          if (now - waiting_since < gint64(opts.step_delay_ms) * 1000) break;
+          waiting_since = 0;
+          printf("STEP %s\n", step.name.c_str());
+        }
         app.step_started = true;
         restart_timeout();
         step.start();
@@ -2736,7 +2950,8 @@ int usage() {
           "         [--expect-text TEXT] [--expect-logbox]\n"
           "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
           "         [--test-animation] [--system-appearance]\n"
-          "         [--system-accessibility] [--url URL] [--rtl] [--verbose]\n");
+          "         [--system-accessibility] [--url URL] [--rtl]\n"
+          "         [--step-delay MS] [--verbose]\n");
   return 2;
 }
 
@@ -2755,6 +2970,7 @@ int main(int argc, char **argv) {
     else if (arg("--height")) opts.height = atoi(argv[++i]);
     else if (arg("--screenshot")) opts.screenshot = argv[++i];
     else if (arg("--timeout")) opts.timeout_ms = atoi(argv[++i]);
+    else if (arg("--step-delay")) opts.step_delay_ms = atoi(argv[++i]);
     else if (arg("--entry")) opts.entry = argv[++i];
     else if (arg("--initial-props")) opts.initial_props = argv[++i];
     else if (arg("--expect-text")) opts.expect_text = argv[++i];

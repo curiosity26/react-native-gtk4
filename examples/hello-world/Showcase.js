@@ -17,6 +17,7 @@ import {
   I18nManager,
   Image,
   Linking,
+  Modal,
   PixelRatio,
   Platform,
   PlatformColor,
@@ -744,6 +745,88 @@ function PlatformPage() {
   );
 }
 
+// ---- Modal -----------------------------------------------------------------
+
+function ModalPage() {
+  const log = useLog();
+  const [open, setOpen] = useState(null);
+  const [nested, setNested] = useState(false);
+  const [animationType, setAnimationType] = useState('slide');
+  const events = name => ({
+    onShow: () => log(`${name}: onShow`),
+    onDismiss: () => log(`${name}: onDismiss`),
+    onRequestClose: () => {
+      log(`${name}: onRequestClose`);
+      if (name === 'nested') setNested(false);
+      else setOpen(null);
+    },
+  });
+  const style = open === 'sheet' ? 'formSheet' : open === 'page' ? 'pageSheet' : 'fullScreen';
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Modal"
+        hint="Each opens as a window of its own over this one: modal, a dialog to Orca, focus moves in and comes back. Escape or the window's close button sends onRequestClose; closing plays the animation back, then onDismiss.">
+        <Segmented
+          options={['none', 'fade', 'slide'].map(t => [t, t])}
+          value={animationType}
+          onChange={setAnimationType} />
+        <View style={styles.row}>
+          <Btn title="Full screen" onPress={() => setOpen('full')} />
+          <Btn title="Page sheet" onPress={() => setOpen('page')} />
+          <Btn title="Form sheet" onPress={() => setOpen('sheet')} />
+          <Btn title="Transparent" color="#5856D6" onPress={() => setOpen('clear')} />
+        </View>
+      </Section>
+      <Modal
+        visible={open === 'full' || open === 'page' || open === 'sheet'}
+        animationType={animationType}
+        presentationStyle={style}
+        accessibilityLabel={`${style} modal`}
+        {...events(style)}>
+        <View style={[styles.page, {flex: 1, gap: 12, backgroundColor: PlatformColor('window_bg_color')}]}>
+          <Text style={styles.heroTitle}>presentationStyle="{style}"</Text>
+          <Text style={styles.body}>
+            fullScreen fills the window it was opened from; the sheets are dialog-sized and can be
+            resized (the content follows). Press Escape, use the close button, or:
+          </Text>
+          <TextInput style={styles.input} placeholder="Focus starts on the first control" />
+          <View style={styles.row}>
+            <Btn title="Open a modal over this one" onPress={() => setNested(true)} />
+            <Btn title="Close" color="#FF3B30" onPress={() => setOpen(null)} />
+          </View>
+          <Modal
+            visible={nested}
+            animationType="fade"
+            presentationStyle="formSheet"
+            accessibilityLabel="Nested modal"
+            {...events('nested')}>
+            <View style={[styles.page, {flex: 1, gap: 12, backgroundColor: PlatformColor('window_bg_color')}]}>
+              <Text style={styles.heroTitle}>A modal over a modal</Text>
+              <Btn title="Close" onPress={() => setNested(false)} />
+            </View>
+          </Modal>
+        </View>
+      </Modal>
+      <Modal visible={open === 'clear'} transparent animationType={animationType} {...events('transparent')}>
+        <Pressable
+          accessible={false}
+          onPress={() => setOpen(null)}
+          style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center'}}>
+          <Pressable style={[styles.section, {width: 320, gap: 12}]}>
+            <Text style={styles.sectionTitle}>transparent</Text>
+            <Text style={styles.body}>
+              The window paints nothing: the app shows through the backdrop. (X11 without a
+              compositor can't, and dims the window instead.) Click outside to close.
+            </Text>
+            <Btn title="OK" onPress={() => setOpen(null)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1152,6 +1235,7 @@ const PAGES = [
   ['Animation', Animation],
   ['Network', Network],
   ['Platform', PlatformPage],
+  ['Modal', ModalPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.

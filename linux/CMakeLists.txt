@@ -312,6 +312,7 @@ add_library(rngtk_host_objs OBJECT
   src/FeatureFlags.cc
   src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
+  src/GtkModals.cc
   src/GtkPointerHandler.cc
   src/GtkScrollViews.cc
   src/GtkTextInputs.cc
@@ -536,6 +537,9 @@ add_test(NAME gallery-selection-self-test
 add_test(NAME gallery-appearance-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryAppearance --width 940 --height 680 --self-test)
+add_test(NAME gallery-modal-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryModal --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

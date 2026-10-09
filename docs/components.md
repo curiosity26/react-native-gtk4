@@ -339,6 +339,35 @@ JS, and a value JS rewrites keeps the caret where it was.
 | `<Switch>` `trackColor`, `thumbColor` | Partial | backgrounds through widget CSS; the theme's borders and shadows stay |
 | `<ActivityIndicator>` `animating`, `hidesWhenStopped`, `color`, `size` (small, large, number) | Supported | GtkSpinner sized to the frame |
 
+## Modal
+
+`<Modal>` opens its content in a GTK window of its own, transient for and
+modal over the window it was rendered in, as react-native-windows and
+react-native-macos do. A modal rendered inside a modal stacks over that
+one. `GalleryModal` (`--module GalleryModal --self-test`) opens and
+closes each kind and checks the windows, the layout, the events, focus
+and what AT-SPI reports; the Showcase has a Modal page to try them.
+
+| Prop | Status | Notes |
+| --- | --- | --- |
+| `visible` | Supported | `false` plays the closing animation, hides the window, sends `onDismiss`, then unmounts (iOS's order, kept by `Modal.linux.js`) |
+| `animationType` | Supported | `none`; `fade` fades the window; `slide` slides the content up from the bottom. Off when GTK animations are (`gtk-enable-animations`) |
+| `presentationStyle` | Supported | `fullScreen`/`overFullScreen`: an undecorated window the size of the parent's content, which mutter attaches over it. `formSheet` (540x620) and `pageSheet` (720 wide, nearly the parent's height): a decorated, resizable dialog with a close button, clamped to the parent; the content follows its size |
+| `transparent`, `backdropColor` | Supported | the window paints nothing, so the app shows through the content's backdrop (Wayland, and X11 with a compositor). X11 without a compositor paints the window background dimmed instead |
+| `onShow` | Supported | once shown, after the opening animation |
+| `onRequestClose` | Supported | Escape, or the window's close button; the window stays open until the app hides it |
+| `onDismiss` | Supported | after `visible={false}` closed the window |
+| `accessibilityLabel` / `aria-label` | Supported | the dialog's title and accessible name (otherwise the parent window's title) |
+| `onOrientationChange`, `supportedOrientations`, `statusBarTranslucent`, `navigationBarTranslucent`, `hardwareAccelerated`, `allowSwipeDismissal` | Not applicable | |
+
+Screen readers see a dialog (`GTK_ACCESSIBLE_ROLE_DIALOG`, AT-SPI's
+`dialog` role with the `modal` state); Orca reads its name when it opens.
+Focus moves to the modal's first focusable view, and the window it was
+opened from keeps its own focus for when the modal closes. Each modal's
+content is a root for pointer and keyboard input of its own, so presses,
+hover, keys and selectable text work in it as in the main window.
+`useWindowDimensions()` inside a modal still reports the app's window.
+
 ## Performance
 
 The richer styling keeps plain views cheap: the rarely used styles
