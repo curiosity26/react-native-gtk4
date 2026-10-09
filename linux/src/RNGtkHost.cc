@@ -15,6 +15,7 @@
 #include <react/devsupport/SourceCodeModule.h>
 #include <react/http/IHttpClient.h>
 #include <react/io/ImageLoaderModule.h>
+#include <react/renderer/animated/AnimatedModule.h>
 #include <react/renderer/animated/NativeAnimatedNodesManagerProvider.h>
 #include <react/http/IWebSocketClient.h>
 #include <react/renderer/core/LayoutConstraints.h>
@@ -257,38 +258,17 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     g_object_unref(menu);
   }
 
-  // Native Animated (useNativeDriver: TouchableOpacity's fade...) asks for
-  // a callback each frame while animations run; GTK's frame clock gives it
-  // one, and the values reach widgets through
-  // GtkMountingManager::synchronouslyUpdateViewOnUIThread.
-  auto animatedProvider = std::make_shared<NativeAnimatedNodesManagerProvider>(
-      // Called on the JS thread; the frame callback is GTK's, so it's
-      // added and removed on the main thread.
-      [this](std::function<void()> &&onRender, bool /*isAsync*/) {
-        {
-          std::lock_guard<std::mutex> lock(animationMutex_);
-          onAnimationRender_ = std::make_shared<std::function<void()>>(
-              std::move(onRender));
-        }
-        on_main([this] {
-          if (!animationTick_) {
-            animationTick_ = gtk_widget_add_tick_callback(
-                GTK_WIDGET(overlay_), onAnimationFrame, this, nullptr);
-          }
-        });
-      },
-      [this](bool /*isAsync*/) {
-        {
-          std::lock_guard<std::mutex> lock(animationMutex_);
-          onAnimationRender_ = nullptr;
-        }
-        on_main([this] {
-          if (animationTick_) {
-            gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_),
-                                            animationTick_);
-            animationTick_ = 0;
-          }
-        });
+  // Native Animated (useNativeDriver: TouchableOpacity's fade...). Each JS
+  // instance gets its own NativeAnimatedNodesManagerProvider: the provider
+  // caches the manager it makes for the first runtime, so one shared by
+  // ReactHost would keep driving the destroyed instance after a reload.
+  turboModuleProviders.push_back(
+      [this](const std::string &name,
+             const std::shared_ptr<CallInvoker> &jsInvoker)
+          -> std::shared_ptr<TurboModule> {
+        if (name != AnimatedModule::kModuleName) return nullptr;
+        return std::make_shared<AnimatedModule>(jsInvoker,
+                                                makeAnimatedProvider());
       });
 
   reactHost_ = std::make_unique<ReactHost>(
@@ -310,7 +290,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         }
       },
       logToConsole, devUI_, std::move(turboModuleProviders), logBox_,
-      std::move(animatedProvider));
+      /* animatedNodesManagerProvider: per instance, above */ nullptr);
 
   static GSourceFuncs funcs = {beforeWaiting, nullptr, nullptr, nullptr,
                                nullptr, nullptr};
@@ -319,6 +299,52 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   os->host = this;
   g_source_set_name(observerSource_, "react-native-run-loop-observer");
   g_source_attach(observerSource_, nullptr);
+}
+
+// The manager asks for a callback each frame while animations run; GTK's
+// frame clock gives it one, and the values reach widgets through
+// GtkMountingManager::synchronouslyUpdateViewOnUIThread. Start and stop
+// come from the JS thread (or the reload thread, when an old instance's
+// manager goes away). They carry their instance's generation, so a late
+// stop from a previous instance can't cancel the current one's callback.
+std::shared_ptr<NativeAnimatedNodesManagerProvider>
+RNGtkHost::makeAnimatedProvider() {
+  int generation = ++animationGeneration_;
+  return std::make_shared<NativeAnimatedNodesManagerProvider>(
+      [this, generation](std::function<void()> &&onRender, bool /*isAsync*/) {
+        {
+          std::lock_guard<std::mutex> lock(animationMutex_);
+          if (generation < animationOwner_) return;  // an old instance
+          animationOwner_ = generation;
+          onAnimationRender_ =
+              std::make_shared<std::function<void()>>(std::move(onRender));
+        }
+        on_main([this] { updateAnimationTick(); });
+      },
+      [this, generation](bool /*isAsync*/) {
+        {
+          std::lock_guard<std::mutex> lock(animationMutex_);
+          if (generation != animationOwner_) return;
+          onAnimationRender_ = nullptr;
+        }
+        on_main([this] { updateAnimationTick(); });
+      });
+}
+
+// Main thread: a frame callback while there is something to render.
+void RNGtkHost::updateAnimationTick() {
+  bool wanted;
+  {
+    std::lock_guard<std::mutex> lock(animationMutex_);
+    wanted = onAnimationRender_ != nullptr;
+  }
+  if (wanted && !animationTick_) {
+    animationTick_ = gtk_widget_add_tick_callback(GTK_WIDGET(overlay_),
+                                                  onAnimationFrame, this, nullptr);
+  } else if (!wanted && animationTick_) {
+    gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_), animationTick_);
+    animationTick_ = 0;
+  }
 }
 
 gboolean RNGtkHost::onAnimationFrame(GtkWidget *, GdkFrameClock *,

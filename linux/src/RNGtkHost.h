@@ -15,6 +15,7 @@
 #include <thread>
 
 namespace facebook::react {
+class NativeAnimatedNodesManagerProvider;
 class ReactHost;
 class RunLoopObserverManager;
 class SurfaceDelegate;
@@ -89,6 +90,9 @@ class RNGtkHost {
  private:
   class LogBoxDelegate;
   static gboolean onAnimationFrame(GtkWidget *, GdkFrameClock *, gpointer self);
+  std::shared_ptr<facebook::react::NativeAnimatedNodesManagerProvider>
+  makeAnimatedProvider();
+  void updateAnimationTick();
   void startAppSurface();
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
@@ -120,6 +124,10 @@ class RNGtkHost {
   // Native Animated runs a frame callback while animations are active.
   std::mutex animationMutex_;
   std::shared_ptr<std::function<void()>> onAnimationRender_;
+  // The JS instance whose manager owns onAnimationRender_ (1, 2... per
+  // reload), and the latest one created.
+  int animationOwner_{0};
+  std::atomic<int> animationGeneration_{0};
   guint animationTick_{0};
   GSource *observerSource_{nullptr};
   std::atomic<int> jsErrors_{0};
