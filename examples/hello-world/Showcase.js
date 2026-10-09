@@ -909,7 +909,7 @@ function DialogsPage() {
       </Section>
       <Section
         title="Dialogs (@curiosity26/react-native-gtk4)"
-        hint="The desktop's file chooser (its portal), modal over the app. Paths come back; cancelling gives [] (null when saving).">
+        hint="The desktop's file chooser (its portal), modal over the app. Paths come back; cancelling gives [] (null when saving). In 'Open several', Ctrl+click or Shift+click files (or Ctrl+A), then Open: a double-click opens just that one.">
         <View style={styles.row}>
           <Btn
             title="Open a file"

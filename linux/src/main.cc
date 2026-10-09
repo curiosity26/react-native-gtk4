@@ -2798,6 +2798,8 @@ void add_dialogs_steps() {
   app.steps.push_back(chooser_step(
       "  ...multiple: an array of the files picked", "open-files",
       [](GtkFileChooser *chooser) {
+        check(gtk_file_chooser_get_select_multiple(chooser),
+              "  the chooser lets you pick several files");
         GFile *file = g_file_new_for_path((dialogs_dir + "/b.txt").c_str());
         gtk_file_chooser_set_file(chooser, file, nullptr);
         g_object_unref(file);
