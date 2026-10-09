@@ -170,6 +170,16 @@ module rebuilds, unless the package changed.
 by themselves inside a sandbox. App-specific permissions go in
 `linux.flatpak.finishArgs`.
 
+`fallback-x11` gives the app X11 only on an X11 session; on a Wayland
+session it's Wayland, whatever `GDK_BACKEND` says. To try X11 from a
+Wayland session: `flatpak run --nosocket=wayland --socket=x11 <appId>`.
+
+Tested with the Showcase on an aarch64 VM (Ubuntu 24.04, 2 cores): the
+first build took about 11 minutes, compiling Hermes and the host in the
+SDK. The bundle is 3.2 MB. It runs on Wayland and X11, and its
+notifications, file dialogs and `openURL` go through the Notification,
+FileChooser and OpenURI portals.
+
 For Flathub, replace the app's `sources/<App>-<version>.tar.gz` with its
 release archive URL (or a git tag) and sha256. The rest of the manifest
 already uses public URLs. A package installed from GitHub Packages comes
@@ -199,9 +209,25 @@ sudo dnf install ./linux/build/package/myapp-1.0.0-1.<arch>.rpm
 A generated spec (kept next to the `.rpm`) installs the tree under
 `/usr`. rpm's dependency generators find the system libraries, and the
 host libraries stay private (`__provides_exclude_from`,
-`__requires_exclude`). It's checked with `rpmlint`. Build it on the
-distribution it's for, or in a container of it; Fedora's library
-sonames differ from Ubuntu's.
+`__requires_exclude`), with the executable's RUNPATH pointing at them
+(`<name>.rpmlintrc` next to the spec tells rpmlint so). It's checked with
+`rpmlint`. Build it on the distribution it's for. Fedora's library
+sonames differ from Ubuntu's (ICU's, for one), so an RPM built on Ubuntu
+won't install on Fedora.
+
+From another distribution, build it in a container (podman or docker):
+
+```sh
+node_modules/@curiosity26/react-native-gtk4/scripts/package-in-container.sh . --format rpm
+```
+
+The script makes a Fedora 44 builder image once (`--image` picks another
+distribution, a Debian or Ubuntu one for a `.deb`). It copies the app's
+sources in, runs `npm ci` and `package-linux` there, and leaves the
+package in `linux/build/package-fedora-44/`. Its build cache is a
+volume, so later runs only rebuild the app. On the VM above, the first
+run took 7.5 minutes; the RPM installs with dnf on a clean Fedora 44 and
+runs on Wayland and X11 (GTK 4.22).
 
 ## The Showcase
 
