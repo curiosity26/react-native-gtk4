@@ -71,12 +71,22 @@ function Pressables() {
           <Text style={styles.buttonText}>highlight {highlightPresses}</Text>
         </TouchableHighlight>
       </Tile>
-      <Tile label="Button">
-        <View nativeID="button">
+      <Tile label="Button: default, color, disabled">
+        <View style={styles.buttons}>
           <Button
+            nativeID="button"
             title={`button ${buttonPresses}`}
             onPress={() => setButtonPresses(n => n + 1)}
           />
+          <View style={styles.pair6}>
+            <Button nativeID="button-color" title="color" color="#3584E4" />
+            <Button
+              nativeID="button-disabled"
+              title="disabled"
+              disabled
+              onPress={() => setButtonPresses(n => n + 100)}
+            />
+          </View>
         </View>
       </Tile>
       <Tile label="pointerEvents none">
@@ -222,6 +232,8 @@ const styles = StyleSheet.create({
   label: {fontSize: 11, color: '#6E6E73', textAlign: 'center', marginTop: 4},
   box: {width: 110, height: 80, backgroundColor: '#FFFFFF'},
   pair: {flexDirection: 'row', gap: 12},
+  pair6: {flexDirection: 'row', gap: 6},
+  buttons: {alignItems: 'center', gap: 6},
   half: {width: 64, height: 64},
   small: {fontSize: 11, color: '#333', padding: 4},
   small40: {width: 40, height: 40, backgroundColor: '#FF2D55'},

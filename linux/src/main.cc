@@ -342,6 +342,37 @@ void verify_gallery(GdkTexture *tex) {
     check(false, "borders view mounted");
   }
 
+  // Button (overrides/Libraries/Components/Button.linux.js): Adwaita's
+  // neutral button with dark text; `color` with white text; disabled at
+  // half opacity over the background, its text no longer dark.
+  {
+    GtkWidget *plain = by_id("button"), *color = by_id("button-color"),
+              *disabled = by_id("button-disabled");
+    if (check(plain && color && disabled, "Buttons mounted")) {
+      auto fill = [&](GtkWidget *v) {
+        graphene_rect_t b = bounds_in_root(v);
+        return px(tex, b.origin.x + 6, b.origin.y + b.size.height / 2);
+      };
+      auto has = [&](GtkWidget *v, auto pred) {
+        return any_pixel(tex, bounds_in_root(v), pred);
+      };
+      auto dark = [](rngtk::Rgba8 p) { return p.r < 0x70 && p.g < 0x70 && p.b < 0x70; };
+      auto white = [](rngtk::Rgba8 p) { return p.r > 0xF0 && p.g > 0xF0 && p.b > 0xF0; };
+      graphene_rect_t b = bounds_in_root(plain);
+      printf("  Button %.0fx%.0f\n", b.size.width, b.size.height);
+      check(near_color(fill(plain), 0xE6, 0xE6, 0xE6, 4) && has(plain, dark) &&
+                b.size.height >= 34,
+            "Button: neutral background, dark text, 34px tall");
+      check(near_color(fill(color), 0x35, 0x84, 0xE4, 4) && has(color, white),
+            "Button color: that background, white text");
+      check(near_color(fill(disabled), 0xEE, 0xEE, 0xEF, 4) && !has(disabled, dark),
+            "Button disabled: dimmed");
+      // Rounded: the corner pixel is the background, not the button.
+      check(near_color(px(tex, b.origin.x, b.origin.y), bg[0], bg[1], bg[2], 6),
+            "Button corners are rounded");
+    }
+  }
+
   if (GtkWidget *v = by_id("radii")) {
     graphene_rect_t b = bounds_in_root(v);
     float x = b.origin.x, y = b.origin.y, w = b.size.width, h = b.size.height;
@@ -506,6 +537,8 @@ rngtk::Rgba8 pixel_at_center(const char *id) {
   return p;
 }
 
+Step after_frames(std::string name, int frames, std::function<bool()> pred);
+
 void add_gallery_input_steps() {
   using Phase = rngtk::GtkPointerHandler::Phase;
   app.host->pointerHandler()->setRealInputEnabled(false);
@@ -536,6 +569,17 @@ void add_gallery_input_steps() {
       }});
   app.steps.push_back(click_step("highlight", "highlight 1"));
   app.steps.push_back(click_step("button", "button 1"));
+  app.steps.push_back(Step{
+      "a disabled Button doesn't press",
+      [] {
+        if (GtkWidget *v = by_id("button-disabled")) {
+          send(Phase::Down, center_of(v));
+          send(Phase::Up, center_of(v));
+        }
+      },
+      [] { return true; }});
+  app.steps.push_back(after_frames("  ...the press count stays 1", 15,
+                                   [] { return has_text(app.root, "button 1"); }));
   // Right-click on selectable text: a Copy menu that copies its text.
   static std::string clipboard;
   app.steps.push_back(Step{
@@ -582,6 +626,17 @@ void add_gallery_input_steps() {
       "hover out -> #007AFF",
       [] { send(Phase::Move, graphene_point_t{2, 2}); },
       [] { return near_color(pixel_at_center("pressable"), 0x00, 0x7A, 0xFF, 12); }});
+  // Button shades 5% darker on hover, like a GTK button.
+  app.steps.push_back(Step{
+      "Button hover in -> #DBDBDB",
+      [] {
+        if (GtkWidget *v = by_id("button")) send(Phase::Move, center_of(v));
+      },
+      [] { return near_color(pixel_at_center("button"), 0xDB, 0xDB, 0xDB, 3); }});
+  app.steps.push_back(Step{
+      "Button hover out -> #E6E6E6",
+      [] { send(Phase::Move, graphene_point_t{2, 2}); },
+      [] { return near_color(pixel_at_center("button"), 0xE6, 0xE6, 0xE6, 3); }});
 }
 
 

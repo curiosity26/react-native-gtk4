@@ -227,7 +227,7 @@ function Buttons() {
           )}
         </Pressable>
       </Section>
-      <Section title="Touchables and Button">
+      <Section title="Touchables">
         <View style={styles.wrap}>
           <TouchableOpacity style={styles.touchable} onPress={() => log('TouchableOpacity')}>
             <Text style={styles.btnText}>TouchableOpacity</Text>
@@ -243,14 +243,15 @@ function Buttons() {
               <Text style={styles.btnText}>WithoutFeedback</Text>
             </View>
           </TouchableWithoutFeedback>
-          {/* Button's own styles are iOS/Android only: give it a color. */}
-          <Button title="Button" color="#D1D1D6" onPress={() => log('Button onPress')} />
-          <Button
-            title="Disabled"
-            color="#D1D1D6"
-            disabled
-            onPress={() => log('should not fire')}
-          />
+        </View>
+      </Section>
+      <Section
+        title="Button"
+        hint="Styled like a GTK button: hover and press it. color sets the background; disabled dims it.">
+        <View style={styles.wrap}>
+          <Button title="Button" onPress={() => log('Button onPress')} />
+          <Button title="color" color="#3584E4" onPress={() => log('colored Button onPress')} />
+          <Button title="Disabled" disabled onPress={() => log('should not fire')} />
         </View>
       </Section>
       <Section
