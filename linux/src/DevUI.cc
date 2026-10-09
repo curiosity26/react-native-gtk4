@@ -55,7 +55,12 @@ std::shared_ptr<DevUI> DevUI::create(GtkOverlay *overlay, GMenuModel *menu) {
   gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(ui->menuButton_), menu);
   gtk_widget_set_tooltip_text(ui->menuButton_, "Dev menu (Ctrl+D)");
   gtk_widget_add_css_class(ui->menuButton_, "rngtk-dev-menu");
-  gtk_widget_add_css_class(ui->menuButton_, "osd");
+  // OSD styling on the inner button only: on the menu button it would also
+  // reach the popover, whose items then inherit OSD's white text on the
+  // theme's light popover background.
+  if (GtkWidget *button = gtk_widget_get_first_child(ui->menuButton_)) {
+    gtk_widget_add_css_class(button, "osd");
+  }
   gtk_widget_set_halign(ui->menuButton_, GTK_ALIGN_END);
   gtk_widget_set_valign(ui->menuButton_, GTK_ALIGN_END);
   gtk_widget_set_margin_end(ui->menuButton_, 8);
