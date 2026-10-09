@@ -1768,6 +1768,9 @@ void add_keyboard_steps() {
     tab(true);
   }, "sw"));
   app.steps.push_back(focus_step("  ...and back again", [] { tab(true); }, "v1", "v1"));
+  app.steps.push_back(focus_step("Shift+Tab into a TextInput", [] { tab(true); }, "t1", "t1"));
+  app.steps.push_back(focus_step("  ...and out of it", [] { tab(true); }, "p1", "p1"));
+  app.steps.push_back(focus_step("  ...and Tab into it again", [] { tab(); }, "t1", "t1"));
   app.steps.push_back(Step{"a keyboard-focused view draws the focus ring",
                            [] { focus_by_keyboard("v1"); },
                            [] { return focus_widget() == by_id("v1") && has_ring("v1"); }});
@@ -2108,6 +2111,14 @@ void add_accessibility_steps() {
         if (!probe_finished("AT-SPI set value")) return false;
         return !probe.error.empty() || has_text(app.root, "volume 5");
       }});
+  app.steps.push_back(Step{"Tab from one TextInput to the next, past a Text",
+                           [] {
+                             gtk_widget_grab_focus(editor_of("name-field"));
+                             tab();
+                           },
+                           [] { return focus_widget() == editor_of("email-field"); }});
+  app.steps.push_back(Step{"  ...and Shift+Tab back", [] { tab(true); },
+                           [] { return focus_widget() == editor_of("name-field"); }});
   app.steps.push_back(Step{"AccessibilityInfo: no screen reader, reduce motion from GTK", [] {},
                            [] {
                              gboolean animations = TRUE;
@@ -2116,9 +2127,45 @@ void add_accessibility_steps() {
                              return has_text(app.root, std::string("screen reader: off · reduce motion: ") +
                                                            (animations ? "off" : "on"));
                            }});
+  app.steps.push_back(Step{"no screen reader: accessible Views and Texts stay out of the Tab order",
+                           [] {},
+                           [] {
+                             return !gtk_widget_get_focusable(by_id("battery")) &&
+                                    !gtk_widget_get_focusable(by_id("plain-text"));
+                           }});
   app.steps.push_back(Step{"screenReaderChanged when a screen reader starts",
                            [] { app.host->accessibilityStatus().setScreenReaderEnabled(true); },
                            [] { return has_text(app.root, "screen reader: on"); }});
+  app.steps.push_back(Step{
+      "  ...then accessible elements take focus, so Tab reaches them for Orca",
+      [] {},
+      [] {
+        return gtk_widget_get_focusable(by_id("battery")) &&
+               !gtk_widget_get_focusable(by_id("battery-text")) &&  // inside it
+               gtk_widget_get_focusable(by_id("plain-text"));
+      }});
+  app.steps.push_back(Step{"  ...Tab from the Bold toggle goes on to the accessible group",
+                           [] {
+                             // Disabled action (a button), then Battery.
+                             gtk_widget_grab_focus(by_id("disabled-action"));
+                             tab();
+                           },
+                           [] { return focus_widget() == by_id("battery"); }});
+  app.steps.push_back(Step{"  ...which AT-SPI shows as focused",
+                           [] { if (a11y_bus) run_probe(); },
+                           [] {
+                             if (!a11y_bus) return true;
+                             if (!probe_finished("the focused group")) return false;
+                             const folly::dynamic *n = probe_node("Battery 80%");
+                             return n && has((*n)["states"], "focused");
+                           }});
+  app.steps.push_back(Step{"  ...and leave the Tab order when it stops",
+                           [] { app.host->accessibilityStatus().setScreenReaderEnabled(false); },
+                           [] {
+                             return has_text(app.root, "screen reader: off") &&
+                                    !gtk_widget_get_focusable(by_id("plain-text")) &&
+                                    !gtk_widget_get_focusable(by_id("battery"));
+                           }});
   static gboolean animations_before = TRUE;
   app.steps.push_back(Step{
       "reduceMotionChanged follows gtk-enable-animations",
@@ -2138,7 +2185,7 @@ void add_accessibility_steps() {
         g_object_set(gtk_settings_get_default(), "gtk-enable-animations",
                      animations_before, nullptr);
       },
-      [] { return has_text(app.root, "changes 3"); }});
+      [] { return has_text(app.root, "changes 4"); }});
   app.steps.push_back(Step{"announceForAccessibility", [] { click("announce"); },
                            [] {
                              return app.host->mountingManager().lastAnnouncement() ==

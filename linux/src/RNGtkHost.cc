@@ -245,10 +245,15 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   accessibilityStatus_ = std::make_shared<AccessibilityStatus>(
       gtk_widget_get_display(GTK_WIDGET(overlay_)),
       options_.followSystemAccessibility, [this](const char *event, bool value) {
+        if (std::string(event) == "screenReaderChanged") {
+          mountingManager_->setScreenReaderActive(value);
+        }
         if (loaded_ && reactHost_) {
           reactHost_->emitDeviceEvent(folly::dynamic::array(event, value));
         }
       });
+  mountingManager_->setScreenReaderActive(
+      accessibilityStatus_->screenReaderEnabled());
   measure_native_controls();
 
   platform_ = std::make_shared<PlatformState>();

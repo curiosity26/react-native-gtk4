@@ -73,6 +73,10 @@ class GtkMountingManager
   void announce(GtkWidget *from, const std::string &text,
                 GtkAccessibleAnnouncementPriority priority);
   const std::string &lastAnnouncement() const { return lastAnnouncement_; }
+  // While a screen reader runs, accessible elements that aren't focusable
+  // (an `accessible` View, a Text) take focus too, so Tab reaches them
+  // like VoiceOver and TalkBack do: Orca reads what has focus.
+  void setScreenReaderActive(bool active);
   // GNOME's text scaling, for TextInput's font (Text gets it through
   // the layout context's fontSizeMultiplier).
   void setFontScale(float scale);
@@ -201,6 +205,7 @@ class GtkMountingManager
                                const facebook::react::ShadowView &view,
                                const std::string &text);
   void refreshContentLabels(GtkWidget *from);
+  void updateScreenReaderFocus(GtkWidget *widget);
   // View: autoFocus, and the focus/blur commands (ref.focus()).
   void updateFocus(GtkWidget *widget, const facebook::react::ShadowView &view);
   bool focusCommand(GtkWidget *widget, const std::string &name);
@@ -231,6 +236,7 @@ class GtkMountingManager
   int mountCount_{0};
   std::string lastAnnouncement_;
   float fontScale_{1};
+  bool screenReaderActive_{false};
 
   std::thread::id mainThread_;
   std::mutex pendingMutex_;
