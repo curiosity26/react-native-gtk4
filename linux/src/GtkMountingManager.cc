@@ -63,6 +63,7 @@ GtkMountingManager::GtkMountingManager(OnAfterMount onAfterMount)
       mainThread_(std::this_thread::get_id()) {}
 
 GtkMountingManager::~GtkMountingManager() noexcept {
+  closeAllModals();
   for (auto &[tag, widget] : views_) g_object_unref(widget);
 }
 
@@ -79,6 +80,7 @@ void GtkMountingManager::unregisterSurface(SurfaceId surfaceId) {
 }
 
 void GtkMountingManager::forget(Tag tag) {
+  unmountModal(tag);
   forgetScrollView(tag);
   forgetImage(tag);
   textInputs_.erase(tag);
@@ -226,6 +228,11 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
       case ShadowViewMutation::Insert: {
         GtkWidget *parent = containerFor(viewForTag(m.parentTag));
         GtkWidget *child = viewForTag(m.newChildShadowView.tag);
+        if (child && isModalHost(m.newChildShadowView)) {
+          // Not in its parent: in a window of its own.
+          mountModal(m.parentTag, m.newChildShadowView.tag);
+          break;
+        }
         if (!parent || !child || !RN_IS_VIEW(parent)) {
           LOG(ERROR) << "Insert: can't mount " << m.newChildShadowView.tag
                      << " into " << m.parentTag;
@@ -239,6 +246,10 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
       case ShadowViewMutation::Remove: {
         GtkWidget *parent = containerFor(viewForTag(m.parentTag));
         GtkWidget *child = viewForTag(m.oldChildShadowView.tag);
+        if (isModalHost(m.oldChildShadowView)) {
+          unmountModal(m.oldChildShadowView.tag);
+          break;
+        }
         if (parent && child && gtk_widget_get_parent(child) == parent) {
           rn_view_remove_child(RN_VIEW(parent), child);
           refreshContentLabels(parent);
@@ -260,6 +271,7 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
       }
     }
   }
+  presentPendingModals();
   mountCount_++;
   if (onAfterMount_) onAfterMount_(surfaceId);
 }
@@ -308,7 +320,12 @@ void GtkMountingManager::update(const ShadowView &oldView,
       oldView.layoutMetrics != newView.layoutMetrics) {
     applyProps(widget, newView);
   }
-  applyLayout(widget, newView);
+  if (isModalTag(newView.tag)) {
+    layoutModal(newView.tag);
+    updateModal(oldView, newView);
+  } else if (!isModalHost(newView)) {
+    applyLayout(widget, newView);
+  }
   if (RN_IS_TEXT(widget)) applyParagraph(widget, newView);
   if (RN_IS_SCROLL_VIEW(widget)) updateScrollView(widget, oldView, newView);
   if (RN_IS_TEXT_INPUT(widget)) updateTextInput(widget, oldView, newView);

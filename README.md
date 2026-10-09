@@ -5,7 +5,7 @@ in the spirit of [react-native-windows](https://github.com/microsoft/react-nativ
 and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
-**Status: Phase 1 (core) complete.** The GTK host runs React Native
+**Status: Phases 1 (core) and 2 (desktop) complete; Phase 3 in progress.** The GTK host runs React Native
 0.87.1 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
 and Pango: borders, radii, shadows, transforms, filters, gradients, nested
 text. Mouse and touch input drive Pressable, the Touchables, Button and
@@ -21,7 +21,7 @@ DevTools; `fetch`, `XMLHttpRequest` and `WebSocket` run on libsoup
 ([docs/dev-loop.md](docs/dev-loop.md)). The CLI adds Linux to any React
 Native app: `init-linux` and `run-linux`.
 
-**Phase 2 (desktop) in progress:** dark mode (`Appearance`,
+**Phase 2 (desktop):** dark mode (`Appearance`,
 `useColorScheme`, libadwaita `PlatformColor`s that follow the desktop's
 style, [docs/apis.md](docs/apis.md)); text selection by mouse; keyboard
 focus, Tab order, focus rings and key events, `onMouseEnter`/`Leave`,
@@ -30,6 +30,11 @@ props ([docs/components.md](docs/components.md#keyboard)); accessibility
 for Orca through AT-SPI, and `AccessibilityInfo`
 ([docs/components.md](docs/components.md#accessibility)); Linking, AppState,
 Clipboard, font scaling, I18nManager RTL ([docs/apis.md](docs/apis.md)).
+
+**Phase 3 (desktop parity) in progress:** `<Modal>` opens a window of its
+own over the app: full screen or a dialog-sized sheet, fade and slide,
+transparent, nested, a modal dialog to Orca
+([docs/components.md](docs/components.md#modal)).
 
 ## Quick start
 
@@ -120,7 +125,8 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    **Done.**
 1. Core components, dev loop (Metro, fast refresh), CLI (`init-linux`,
    `run-linux`, app template, shared build cache). **Done.**
-2. Platform APIs, desktop props, accessibility.
+2. Platform APIs, desktop props, accessibility. **Done.**
 3. Desktop parity: modals, windows, menus, drag and drop, dialogs,
-   notifications, tray; native module template and autolinking.
+   notifications; native module template and autolinking. (No system
+   tray: stock GNOME has none.)
 4. Packaging (Flatpak first) and community library ports.

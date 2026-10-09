@@ -23,6 +23,7 @@
 #include <optional>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace rngtk {
 
@@ -115,6 +116,15 @@ class GtkMountingManager
   size_t mountedViewCount() const { return views_.size(); }
   int mountCount() const { return mountCount_; }
 
+  // Modals (GtkModals.cc): the windows of the <Modal>s mounted now, by
+  // their ModalHostView's tag, and their input handlers (tests).
+  std::vector<facebook::react::Tag> modalTags() const;
+  GtkWindow *modalWindow(facebook::react::Tag tag) const;
+  class GtkPointerHandler *modalPointerHandler(facebook::react::Tag tag) const;
+  class GtkKeyboardHandler *modalKeyboardHandler(facebook::react::Tag tag) const;
+  // Closes every modal window (shutting down).
+  void closeAllModals();
+
  private:
   void apply(facebook::react::SurfaceId surfaceId,
              const facebook::react::MountingTransaction &transaction);
@@ -190,6 +200,29 @@ class GtkMountingManager
   void forgetImage(facebook::react::Tag tag);
   void forget(facebook::react::Tag tag);
   void applyLayout(GtkWidget *widget, const facebook::react::ShadowView &view);
+  // Modal (GtkModals.cc)
+  struct ModalWindow;
+  static bool isModalHost(const facebook::react::ShadowView &view);
+  bool isModalTag(facebook::react::Tag tag) const;
+  void mountModal(facebook::react::Tag parentTag, facebook::react::Tag tag);
+  void presentPendingModals();
+  void openModal(GtkWindow *parentWindow, facebook::react::Tag tag,
+                 const facebook::react::ShadowView &view);
+  void setModalSize(facebook::react::Tag tag, float width, float height);
+  void followModalSize(facebook::react::Tag tag);
+  void presentModal(facebook::react::Tag tag);
+  void dismissModal(facebook::react::Tag tag);
+  void startModalAnimation(facebook::react::Tag tag);
+  bool stepModalAnimation(facebook::react::Tag tag, gint64 now);
+  void requestModalClose(facebook::react::Tag tag);
+  void updateModal(const facebook::react::ShadowView &oldView,
+                   const facebook::react::ShadowView &newView);
+  void layoutModal(facebook::react::Tag tag);
+  void unmountModal(facebook::react::Tag tag);
+  // shared_ptr: ModalWindow is complete only in GtkModals.cc.
+  std::unordered_map<facebook::react::Tag, std::shared_ptr<ModalWindow>> modals_;
+  // (parent, modal) inserted in the transaction being applied.
+  std::vector<std::pair<facebook::react::Tag, facebook::react::Tag>> pendingModals_;
   // Accessibility (GtkAccessibility.cc)
   // A view screen readers should see a value for (accessibilityValue, or
   // a range role): it mounts as an RNRangeView.
