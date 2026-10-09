@@ -243,6 +243,8 @@ class GtkMountingManager
   std::unordered_map<std::string, std::shared_ptr<const NativeComponent>> nativeComponents_;
   std::shared_ptr<facebook::react::ComponentDescriptorProviderRegistry> providers_;
   const NativeComponent *nativeComponentFor(const facebook::react::ShadowView &view) const;
+  // The library component a mounted tag is, if it's one.
+  const NativeComponent *nativeComponentForTag(facebook::react::Tag tag) const;
   // (parent, modal) inserted in the transaction being applied.
   std::vector<std::pair<facebook::react::Tag, facebook::react::Tag>> pendingModals_;
   // Accessibility (GtkAccessibility.cc)
