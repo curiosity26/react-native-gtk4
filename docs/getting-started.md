@@ -177,5 +177,3 @@ Phase 4.
   template are Phase 3. `react-native-safe-area-context` (in React
   Native's app template) works through its own pure-JS fallback, which the
   package's Metro config selects on Linux (zero insets).
-- **The window doesn't resize.** The root view has a fixed size
-  (`options.width`/`height` in `main.cc`) for now.

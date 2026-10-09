@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 function Field({label, children}) {
@@ -33,6 +34,7 @@ export default function GalleryControls() {
   const [lockedAttempts, setLockedAttempts] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const focusRef = useRef(null);
+  const window = useWindowDimensions();
 
   return (
     <View style={styles.root}>
@@ -168,6 +170,11 @@ export default function GalleryControls() {
               <Text style={styles.buttonText}>toggle</Text>
             </Pressable>
           </View>
+        </Field>
+        <Field label="useWindowDimensions (resize the window)">
+          <Text nativeID="window-size" style={styles.status}>
+            window {Math.round(window.width)} x {Math.round(window.height)}
+          </Text>
         </Field>
       </View>
     </View>

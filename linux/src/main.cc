@@ -92,6 +92,7 @@ struct App {
   rngtk::RNGtkHost *host = nullptr;
   GtkWidget *root = nullptr;
   GtkWidget *overlay = nullptr;
+  GtkWidget *window = nullptr;
   Phase phase = Phase::Initial;
   int frames = 0;
   int mounts_before = 0;
@@ -913,6 +914,8 @@ void add_images_steps() {
 // ---------------------------------------------------------------------------
 // GalleryControls checks
 
+void add_resize_steps();
+
 bool is_controls() { return opts.module == "GalleryControls"; }
 
 GtkWidget *editor_of(const char *id) {
@@ -1096,6 +1099,57 @@ void add_controls_steps() {
       [] {
         GtkWidget *s = by_id("stopped");
         return s && gtk_widget_get_visible(s) && gtk_spinner_get_spinning(GTK_SPINNER(s));
+      }});
+  add_resize_steps();
+}
+
+// Dimensions: the window size reaches JS (GalleryControls shows it with
+// useWindowDimensions), first as given, then after the window resizes:
+// the surface follows the window and JS gets didUpdateDimensions.
+void add_resize_steps() {
+  app.steps.push_back(Step{
+      "useWindowDimensions reports the surface size", [] {},
+      [] {
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", opts.width, opts.height);
+        return has_text(app.root, text);
+      }});
+  app.steps.push_back(Step{
+      "resizing the window resizes the surface and reaches JS",
+      [] {
+        gtk_window_set_resizable(GTK_WINDOW(app.window), TRUE);
+        app.host->setFollowsWindowSize(true);
+        gtk_window_set_default_size(GTK_WINDOW(app.window), opts.width + 120,
+                                    opts.height + 60);
+      },
+      [] {
+        int w = gtk_widget_get_width(app.overlay);
+        int h = gtk_widget_get_height(app.overlay);
+        if (w <= opts.width || h <= opts.height) return false;
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", w, h);
+        graphene_rect_t f = rn_widget_get_frame(app.root);
+        if (!has_text(app.root, text) || f.size.width != w ||
+            f.size.height != h) {
+          return false;
+        }
+        printf("  window %dx%d -> %dx%d\n", opts.width, opts.height, w, h);
+        return true;
+      }});
+  app.steps.push_back(Step{
+      "  ...and shrinking it again",
+      [] {
+        gtk_window_set_default_size(GTK_WINDOW(app.window), opts.width - 100,
+                                    opts.height - 80);
+      },
+      [] {
+        int w = gtk_widget_get_width(app.overlay);
+        int h = gtk_widget_get_height(app.overlay);
+        if (w >= opts.width || h >= opts.height) return false;
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", w, h);
+        return has_text(app.root, text) &&
+               rn_widget_get_frame(app.root).size.width == w;
       }});
 }
 
@@ -1340,12 +1394,14 @@ gboolean on_timeout(gpointer) {
 void activate(GtkApplication *gtk_app, gpointer) {
   GtkWidget *window = gtk_application_window_new(gtk_app);
   gtk_window_set_title(GTK_WINDOW(window), opts.module.c_str());
-  gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
+  // Interactive runs resize with the window. Self-tests keep the size they
+  // were given, even when the window manager makes the window bigger
+  // (mutter maximizes near-screen-size windows); a step can turn resizing
+  // on (see add_resize_steps).
+  gtk_window_set_resizable(GTK_WINDOW(window), !opts.self_test);
+  app.window = window;
   app.overlay = gtk_overlay_new();
   app.root = rn_view_new();
-  // The surface has a fixed size: keep the root at it even when the window
-  // manager makes the window bigger (mutter maximizes near-screen-size
-  // windows).
   gtk_widget_set_halign(app.root, GTK_ALIGN_START);
   gtk_widget_set_valign(app.root, GTK_ALIGN_START);
   gtk_overlay_set_child(GTK_OVERLAY(app.overlay), app.root);
@@ -1357,6 +1413,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .devServerHost = opts.dev_host,
       .devServerPort = opts.dev_port,
       .inspector = opts.inspector,
+      .followsWindowSize = !opts.self_test,
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);

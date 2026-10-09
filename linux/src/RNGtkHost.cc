@@ -12,6 +12,7 @@
 #include <glog/logging.h>
 #include <jsi/jsi.h>
 #include <logger/react_native_log.h>
+#include <react/coremodules/DeviceInfoModule.h>
 #include <react/devsupport/SourceCodeModule.h>
 #include <react/http/IHttpClient.h>
 #include <react/io/ImageLoaderModule.h>
@@ -72,7 +73,37 @@ LayoutConstraints fixedSize(float width, float height) {
   };
 }
 
+folly::dynamic metricsToDynamic(double width, double height, double scale,
+                               double fontScale) {
+  return folly::dynamic::object("width", width)("height", height)(
+      "scale", scale)("fontScale", fontScale);
+}
+
 }  // namespace
+
+// Dimensions for JS (Dimensions, useWindowDimensions, PixelRatio).
+// ReactCxxPlatform's DeviceInfo module returns a placeholder 1280x720;
+// this one reports the surface as the window and the monitor as the
+// screen. Changes reach JS as `didUpdateDimensions` (see setSize()).
+class RNGtkHost::DeviceInfoModule
+    : public NativeDeviceInfoCxxSpec<RNGtkHost::DeviceInfoModule> {
+ public:
+  DeviceInfoModule(std::shared_ptr<CallInvoker> jsInvoker,
+                   const RNGtkHost &host)
+      : NativeDeviceInfoCxxSpec(std::move(jsInvoker)), host_(host) {}
+
+  DeviceInfoConstants getConstants(facebook::jsi::Runtime &) {
+    auto d = host_.dimensions();
+    auto metrics = [](const Metrics &m) {
+      return DisplayMetrics{m.width, m.height, m.scale, m.fontScale};
+    };
+    return DeviceInfoConstants{.Dimensions = {.window = metrics(d.window),
+                                              .screen = metrics(d.screen)}};
+  }
+
+ private:
+  const RNGtkHost &host_;
+};
 
 // Shows LogBox's surface over the app. LogBoxModule calls show() and hide()
 // on the JS thread (surface calls are thread-safe there; the widget is
@@ -154,6 +185,8 @@ gboolean RNGtkHost::beforeWaiting(GSource *source, gint *timeout) {
 
 RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     : options_(std::move(options)), overlay_(overlay) {
+  // Kept alive until the destructor disconnects from it.
+  g_object_ref(overlay_);
   mountingManager_ =
       std::make_shared<GtkMountingManager>([this](SurfaceId surfaceId) {
         if (!reactHost_) return;  // shutting down
@@ -223,6 +256,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
       [this](const std::string &name,
              const std::shared_ptr<CallInvoker> &jsInvoker)
           -> std::shared_ptr<TurboModule> {
+        if (name == DeviceInfoModule::kModuleName) {
+          return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
+        }
         if (name == ImageLoaderModule::kModuleName) {
           return std::make_shared<ImageLoaderModule>(
               jsInvoker, std::weak_ptr<IImageLoader>(imageLoader_));
@@ -363,6 +399,9 @@ gboolean RNGtkHost::onAnimationFrame(GtkWidget *, GdkFrameClock *,
 }
 
 RNGtkHost::~RNGtkHost() {
+  if (layoutHandler_) g_signal_handler_disconnect(layoutClock_, layoutHandler_);
+  g_clear_object(&layoutClock_);
+  g_signal_handlers_disconnect_by_data(overlay_, this);
   if (animationTick_) {
     gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_), animationTick_);
   }
@@ -377,6 +416,7 @@ RNGtkHost::~RNGtkHost() {
   // ReactHost, which joins the JS thread.
   reactHost_->stopAllSurfaces();
   reactHost_.reset();
+  g_object_unref(overlay_);
 }
 
 bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
@@ -385,6 +425,8 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
   initialProps_ = std::move(initialProps);
   width_ = width;
   height_ = height;
+  root_ = root;
+  updateDimensions();
   // Measure text with the same font options the widgets draw with.
   PangoContext *context = gtk_widget_create_pango_context(root);
   set_main_thread_pango_context(context);
@@ -401,6 +443,14 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
     rn_widget_set_frame(mountingManager_->viewForTag(kLogBoxSurfaceId), 0, 0,
                         width, height);
   }
+
+  // The overlay's frame clock exists once it is realized; GTK's layout
+  // phase (window allocation) runs before our handler on it.
+  g_signal_connect(overlay_, "realize", G_CALLBACK(onOverlayRealize), this);
+  if (gtk_widget_get_realized(GTK_WIDGET(overlay_))) {
+    onOverlayRealize(GTK_WIDGET(overlay_), this);
+  }
+  setFollowsWindowSize(options_.followsWindowSize);
 
   script_ = script;
   surfaceId_ = surfaceId;
@@ -424,6 +474,96 @@ void RNGtkHost::startAppSurface() {
   reactHost_->startSurface(surfaceId_, moduleName_, initialProps_,
                            fixedSize(width_, height_),
                            LayoutContext{.pointScaleFactor = 1.0f});
+}
+
+RNGtkHost::Dimensions RNGtkHost::dimensions() const {
+  std::lock_guard<std::mutex> lock(dimensionsMutex_);
+  return dimensions_;
+}
+
+// Main thread: the window from the surface size, the screen from the
+// monitor the window is on (or the first one, before it is shown).
+void RNGtkHost::updateDimensions() {
+  GtkWidget *widget = GTK_WIDGET(overlay_);
+  GdkDisplay *display = gtk_widget_get_display(widget);
+  GdkMonitor *monitor = nullptr;
+  if (GtkNative *native = gtk_widget_get_native(widget)) {
+    if (GdkSurface *surface = gtk_native_get_surface(native)) {
+      monitor = gdk_display_get_monitor_at_surface(display, surface);
+      if (monitor) g_object_ref(monitor);
+    }
+  }
+  if (!monitor) {
+    GListModel *monitors = gdk_display_get_monitors(display);
+    if (g_list_model_get_n_items(monitors) > 0) {
+      monitor = GDK_MONITOR(g_list_model_get_item(monitors, 0));
+    }
+  }
+  double scale = monitor ? gdk_monitor_get_scale(monitor) : 1;
+  Dimensions d;
+  d.window = {width_, height_, scale, 1};
+  d.screen = d.window;
+  if (monitor) {
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(monitor, &geometry);
+    d.screen = {double(geometry.width), double(geometry.height), scale, 1};
+    g_object_unref(monitor);
+  }
+  std::lock_guard<std::mutex> lock(dimensionsMutex_);
+  dimensions_ = d;
+}
+
+void RNGtkHost::setSize(float width, float height) {
+  if (width == width_ && height == height_) return;
+  width_ = width;
+  height_ = height;
+  if (root_) rn_widget_set_frame(root_, 0, 0, width, height);
+  if (logBoxRoot_) rn_widget_set_frame(logBoxRoot_, 0, 0, width, height);
+  updateDimensions();
+  if (!loaded_) return;  // startAppSurface() reads the new size
+  LayoutContext context{.pointScaleFactor = 1.0f};
+  for (SurfaceId id : {surfaceId_, kLogBoxSurfaceId}) {
+    if (reactHost_->isSurfaceRunning(id)) {
+      reactHost_->setSurfaceConstraints(id, fixedSize(width, height), context);
+    }
+  }
+  // What Android and iOS send: Dimensions.set() takes the payload.
+  Dimensions d = dimensions();
+  reactHost_->emitDeviceEvent(folly::dynamic::array(
+      "didUpdateDimensions",
+      folly::dynamic::object(
+          "window", metricsToDynamic(d.window.width, d.window.height,
+                                     d.window.scale, d.window.fontScale))(
+          "screen", metricsToDynamic(d.screen.width, d.screen.height,
+                                     d.screen.scale, d.screen.fontScale))));
+}
+
+void RNGtkHost::setFollowsWindowSize(bool follows) {
+  followsWindowSize_ = follows;
+  if (follows) gtk_widget_queue_resize(GTK_WIDGET(overlay_));
+}
+
+void RNGtkHost::onOverlayRealize(GtkWidget *widget, gpointer self) {
+  auto *host = static_cast<RNGtkHost *>(self);
+  GdkFrameClock *clock = gtk_widget_get_frame_clock(widget);
+  if (clock == host->layoutClock_) return;
+  if (host->layoutHandler_) {
+    g_signal_handler_disconnect(host->layoutClock_, host->layoutHandler_);
+    host->layoutHandler_ = 0;
+  }
+  g_clear_object(&host->layoutClock_);
+  if (!clock) return;
+  host->layoutClock_ = GDK_FRAME_CLOCK(g_object_ref(clock));
+  host->layoutHandler_ =
+      g_signal_connect_after(clock, "layout", G_CALLBACK(onLayout), host);
+}
+
+void RNGtkHost::onLayout(GdkFrameClock *, gpointer self) {
+  auto *host = static_cast<RNGtkHost *>(self);
+  if (!host->followsWindowSize_) return;
+  int width = gtk_widget_get_width(GTK_WIDGET(host->overlay_));
+  int height = gtk_widget_get_height(GTK_WIDGET(host->overlay_));
+  if (width > 0 && height > 0) host->setSize(width, height);
 }
 
 void RNGtkHost::loadFromDevServer() {
