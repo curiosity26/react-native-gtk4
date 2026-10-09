@@ -69,6 +69,11 @@ endif()
 #   share/<target>/      index.bundle.js and assets/, where the app looks
 #   share/...            <build>/packaging/share: the .desktop file,
 #                        MetaInfo, icons and licenses package-linux writes
+# Apps link as position-independent executables (what distributions'
+# hardening expects; rpmlint and lintian check for it).
+include(CheckPIESupported)
+check_pie_supported()
+
 function(rngtk_app target)
   if(DEFINED RNGTK_AUTOLINKING_DIR AND EXISTS "${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
     include("${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
@@ -80,6 +85,7 @@ function(rngtk_app target)
          "#include <rngtk/Autolinking.h>\nnamespace rngtk {\nPackageList autolinkedPackages() { return {}; }\n}\n")
     target_sources(${target} PRIVATE "${none}")
   endif()
+  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set_target_properties(${target} PROPERTIES
       BUILD_RPATH "${ReactNativeGtk_LIBRARY_DIR}")

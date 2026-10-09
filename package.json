@@ -42,6 +42,7 @@
     "scripts/fetch-rn-deps.py",
     "scripts/build-hermes.sh",
     "scripts/codegen-deps/",
+    "scripts/package-in-container.sh",
     "rn-version.properties",
     "prebuilt-hosts.json",
     "CHANGELOG.md"
