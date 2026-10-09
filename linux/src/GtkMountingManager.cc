@@ -358,6 +358,16 @@ void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
   }
 }
 
+void GtkMountingManager::setFontScale(float scale) {
+  if (scale == fontScale_) return;
+  fontScale_ = scale;
+  const ShadowView none{};
+  for (const auto &[tag, view] : shadowViews_) {
+    GtkWidget *widget = viewForTag(tag);
+    if (widget && RN_IS_TEXT_INPUT(widget)) updateTextInput(widget, none, view);
+  }
+}
+
 void GtkMountingManager::refreshColors() {
   // The mounted props are unchanged; only what their dynamic colors
   // resolve to differs, so each view re-applies its own props.

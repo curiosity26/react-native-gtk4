@@ -86,9 +86,11 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Utilities/BackHandler` | iOS | desktops have no hardware back button |
 | `Components/DrawerAndroid/DrawerLayoutAndroid`, `Components/ToastAndroid/ToastAndroid` | iOS | Android-only APIs: the "unsupported" fallbacks |
 | `Components/AccessibilityInfo/legacySendAccessibilityEvent` | iOS | pre-Fabric only; the iOS one tolerates a missing module |
-| `Image/Image`, `Network/RCTNetworking`, `NativeComponent/BaseViewConfig`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
+| `Image/Image`, `Network/RCTNetworking`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
+| `NativeComponent/BaseViewConfig` | Android, plus | Android's view config, plus the host's keyboard, mouse and iOS accessibility props ([components.md](components.md#keyboard)) |
 | `Alert/RCTAlertManager` | Android | no Linux dialog module yet; Android's dialog-manager shape is the plan |
 | `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
+| `Share/Share` (not platform-split) | own | rejects every platform but iOS and Android; a stub that resolves dismissed ([apis.md](apis.md#share-and-vibration)) |
 | `Image/ImageViewNativeComponent` (not platform-split) | Android's view config | Image.android.js sends `defaultSource` as a string and `shouldNotifyLoadEvents`, which iOS's config drops |
 | `Components/TextInput/TextInput`, `Components/TextInput/TextInputState` (not platform-split) | iOS | they only render, focus and blur for 'ios' and 'android'; Linux uses the iOS native components (the host builds React Native's iOS C++ TextInput) |
 
@@ -127,7 +129,8 @@ ReactCxxPlatform's `DeviceInfo` module reports a fixed 1280x720. The host
 registers its own (in `linux/src/RNGtkHost.cc`): `window` is the app's
 surface, `screen` the geometry of the monitor the window is on, both in
 GTK's logical pixels (React Native's points), with the monitor's scale as
-`scale` and a `fontScale` of 1. The surface follows the window
+`scale` and GNOME's text scaling as `fontScale` (see
+[apis.md](apis.md#pixelratio-and-font-scale)). The surface follows the window
 (`RNGtkHostOptions::followsWindowSize`): after each GTK layout the host
 resizes the surface, re-lays it out with `setSurfaceConstraints`, and emits
 `didUpdateDimensions`, so `Dimensions.addEventListener('change')` and

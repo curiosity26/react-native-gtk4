@@ -10,6 +10,7 @@
 #include "JsMessageQueueThread.h"
 #include "PangoText.h"
 #include "PlatformConstantsModule.h"
+#include "PlatformModules.h"
 #include "rn_text_input.h"
 #include "rn_view.h"
 
@@ -68,13 +69,22 @@ void logToConsole(const std::string &message, unsigned int level) {
   fprintf(stderr, "[js %s] %s\n", tag, message.c_str());
 }
 
-LayoutConstraints fixedSize(float width, float height) {
+LayoutConstraints fixedSize(float width, float height, bool rtl) {
   Size size{.width = width, .height = height};
   return LayoutConstraints{
       .minimumSize = size,
       .maximumSize = size,
-      .layoutDirection = LayoutDirection::LeftToRight,
+      .layoutDirection =
+          rtl ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight,
   };
+}
+
+// GNOME's text scaling (Settings > Accessibility > Large Text, or
+// text-scaling-factor) reaches GTK as gtk-xft-dpi: 96 dpi is 1.
+double fontScaleOf(GtkSettings *settings) {
+  int dpi = 0;
+  g_object_get(settings, "gtk-xft-dpi", &dpi, nullptr);
+  return dpi > 0 ? dpi / 1024.0 / 96.0 : 1.0;
 }
 
 folly::dynamic metricsToDynamic(double width, double height, double scale,
@@ -175,8 +185,7 @@ class RNGtkHost::LogBoxDelegate : public SurfaceDelegate {
     if (!reactHost.isSurfaceRunning(kLogBoxSurfaceId)) {
       reactHost.startSurface(kLogBoxSurfaceId, appKey_,
                              folly::dynamic::object(),
-                             fixedSize(host_.width_, host_.height_),
-                             LayoutContext{.pointScaleFactor = 1.0f});
+                             host_.layoutConstraints(), host_.layoutContext());
     }
   }
 
@@ -242,6 +251,22 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
       });
   measure_native_controls();
 
+  platform_ = std::make_shared<PlatformState>();
+  platform_->initialURL = options_.initialURL.empty()
+                              ? std::nullopt
+                              : std::optional<std::string>(options_.initialURL);
+  platform_->i18n = std::make_shared<I18nSettings>(options_.appId);
+  platform_->window = [this]() -> GtkWindow * {
+    GtkRoot *root = gtk_widget_get_root(GTK_WIDGET(overlay_));
+    return root && GTK_IS_WINDOW(root) ? GTK_WINDOW(root) : nullptr;
+  };
+  platform_->openURLOverride = options_.openURLOverride;
+  // Right-to-left (I18nManager) for GTK's own widgets too.
+  if (platform_->i18n->isRTL()) gtk_widget_set_default_direction(GTK_TEXT_DIR_RTL);
+  fontDpiHandler_ = g_signal_connect(
+      gtk_widget_get_settings(GTK_WIDGET(overlay_)), "notify::gtk-xft-dpi",
+      G_CALLBACK(onFontDpi), this);
+
   auto contextContainer = std::make_shared<const ContextContainer>();
   // Called once per JS instance, i.e. again on every reload.
   // Called once per JS instance, i.e. again on every reload: a new JS
@@ -263,8 +288,12 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
                              return queue;
                            }));
   mountingManager_->setOnUIManagerChanged([this] {
-    std::lock_guard<std::mutex> lock(beatMutex_);
-    creatingInstance_ = false;
+    {
+      std::lock_guard<std::mutex> lock(beatMutex_);
+      creatingInstance_ = false;
+    }
+    // A reload applies RTL settings I18nManager changed.
+    on_main([this] { refreshLayout(); });
   });
   contextContainer->insert(HttpClientFactoryKey, getHttpClientFactory());
   contextContainer->insert(WebSocketClientFactoryKey,
@@ -304,6 +333,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
           -> std::shared_ptr<TurboModule> {
         if (name == DeviceInfoModule::kModuleName) {
           return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
+        }
+        if (auto module = makePlatformModule(name, jsInvoker, platform_)) {
+          return module;
         }
         if (name == AccessibilityManagerModule::kModuleName) {
           return std::make_shared<AccessibilityManagerModule>(
@@ -462,6 +494,14 @@ gboolean RNGtkHost::onAnimationFrame(GtkWidget *, GdkFrameClock *,
 }
 
 RNGtkHost::~RNGtkHost() {
+  if (fontDpiHandler_) {
+    g_signal_handler_disconnect(gtk_widget_get_settings(GTK_WIDGET(overlay_)),
+                                fontDpiHandler_);
+  }
+  if (window_) g_signal_handlers_disconnect_by_data(window_, this);
+  if (windowSurface_) g_signal_handlers_disconnect_by_data(windowSurface_, this);
+  g_clear_object(&window_);
+  g_clear_object(&windowSurface_);
   if (layoutHandler_) g_signal_handler_disconnect(layoutClock_, layoutHandler_);
   g_clear_object(&layoutClock_);
   g_signal_handlers_disconnect_by_data(overlay_, this);
@@ -538,8 +578,42 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
 
 void RNGtkHost::startAppSurface() {
   reactHost_->startSurface(surfaceId_, moduleName_, initialProps_,
-                           fixedSize(width_, height_),
-                           LayoutContext{.pointScaleFactor = 1.0f});
+                           layoutConstraints(), layoutContext());
+}
+
+LayoutConstraints RNGtkHost::layoutConstraints() const {
+  return fixedSize(width_, height_, platform_->i18n->isRTL());
+}
+
+LayoutContext RNGtkHost::layoutContext() const {
+  return LayoutContext{
+      .pointScaleFactor = 1.0f,
+      .fontSizeMultiplier = Float(dimensions().window.fontScale)};
+}
+
+// Main thread: the surfaces take the current size, direction and font
+// scale, and JS hears about new dimensions.
+void RNGtkHost::refreshLayout() {
+  updateDimensions();
+  mountingManager_->setFontScale(float(dimensions().window.fontScale));
+  if (!loaded_ || !reactHost_) return;
+  for (SurfaceId id : {surfaceId_, kLogBoxSurfaceId}) {
+    if (reactHost_->isSurfaceRunning(id)) {
+      reactHost_->setSurfaceConstraints(id, layoutConstraints(), layoutContext());
+    }
+  }
+  Dimensions d = dimensions();
+  reactHost_->emitDeviceEvent(folly::dynamic::array(
+      "didUpdateDimensions",
+      folly::dynamic::object(
+          "window", metricsToDynamic(d.window.width, d.window.height,
+                                     d.window.scale, d.window.fontScale))(
+          "screen", metricsToDynamic(d.screen.width, d.screen.height,
+                                     d.screen.scale, d.screen.fontScale))));
+}
+
+void RNGtkHost::onFontDpi(GObject *, GParamSpec *, gpointer self) {
+  static_cast<RNGtkHost *>(self)->refreshLayout();
 }
 
 RNGtkHost::Dimensions RNGtkHost::dimensions() const {
@@ -566,13 +640,15 @@ void RNGtkHost::updateDimensions() {
     }
   }
   double scale = monitor ? gdk_monitor_get_scale(monitor) : 1;
+  double fontScale = fontScaleOf(gtk_widget_get_settings(widget));
   Dimensions d;
-  d.window = {width_, height_, scale, 1};
+  d.window = {width_, height_, scale, fontScale};
   d.screen = d.window;
   if (monitor) {
     GdkRectangle geometry;
     gdk_monitor_get_geometry(monitor, &geometry);
-    d.screen = {double(geometry.width), double(geometry.height), scale, 1};
+    d.screen = {double(geometry.width), double(geometry.height), scale,
+                fontScale};
     g_object_unref(monitor);
   }
   std::lock_guard<std::mutex> lock(dimensionsMutex_);
@@ -585,23 +661,10 @@ void RNGtkHost::setSize(float width, float height) {
   height_ = height;
   if (root_) rn_widget_set_frame(root_, 0, 0, width, height);
   if (logBoxRoot_) rn_widget_set_frame(logBoxRoot_, 0, 0, width, height);
-  updateDimensions();
-  if (!loaded_) return;  // startAppSurface() reads the new size
-  LayoutContext context{.pointScaleFactor = 1.0f};
-  for (SurfaceId id : {surfaceId_, kLogBoxSurfaceId}) {
-    if (reactHost_->isSurfaceRunning(id)) {
-      reactHost_->setSurfaceConstraints(id, fixedSize(width, height), context);
-    }
-  }
-  // What Android and iOS send: Dimensions.set() takes the payload.
-  Dimensions d = dimensions();
-  reactHost_->emitDeviceEvent(folly::dynamic::array(
-      "didUpdateDimensions",
-      folly::dynamic::object(
-          "window", metricsToDynamic(d.window.width, d.window.height,
-                                     d.window.scale, d.window.fontScale))(
-          "screen", metricsToDynamic(d.screen.width, d.screen.height,
-                                     d.screen.scale, d.screen.fontScale))));
+  // startAppSurface() reads the new size before JS runs; after, the
+  // surfaces relayout and JS gets didUpdateDimensions (what Android and
+  // iOS send: Dimensions.set() takes the payload).
+  refreshLayout();
 }
 
 void RNGtkHost::setFollowsWindowSize(bool follows) {
@@ -611,6 +674,7 @@ void RNGtkHost::setFollowsWindowSize(bool follows) {
 
 void RNGtkHost::onOverlayRealize(GtkWidget *widget, gpointer self) {
   auto *host = static_cast<RNGtkHost *>(self);
+  host->connectWindowState();
   GdkFrameClock *clock = gtk_widget_get_frame_clock(widget);
   if (clock == host->layoutClock_) return;
   if (host->layoutHandler_) {
@@ -630,6 +694,60 @@ void RNGtkHost::onLayout(GdkFrameClock *, gpointer self) {
   int width = gtk_widget_get_width(GTK_WIDGET(host->overlay_));
   int height = gtk_widget_get_height(GTK_WIDGET(host->overlay_));
   if (width > 0 && height > 0) host->setSize(width, height);
+}
+
+// AppState follows the window: active while it's the active window,
+// inactive when it isn't, background when minimized (X11) or suspended
+// (Wayland compositors that tell: not visible).
+void RNGtkHost::connectWindowState() {
+  GtkRoot *root = gtk_widget_get_root(GTK_WIDGET(overlay_));
+  if (!root || !GTK_IS_WINDOW(root) || GTK_WINDOW(root) == window_) return;
+  if (window_) g_signal_handlers_disconnect_by_data(window_, this);
+  if (windowSurface_) g_signal_handlers_disconnect_by_data(windowSurface_, this);
+  g_set_object(&window_, GTK_WINDOW(root));
+  g_signal_connect_swapped(window_, "notify::is-active",
+                           G_CALLBACK(+[](RNGtkHost *host) { host->updateAppState(); }),
+                           this);
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(window_));
+  g_set_object(&windowSurface_, surface);
+  if (surface && GDK_IS_TOPLEVEL(surface)) {
+    g_signal_connect_swapped(surface, "notify::state",
+                             G_CALLBACK(+[](RNGtkHost *host) { host->updateAppState(); }),
+                             this);
+  }
+  updateAppState();
+}
+
+void RNGtkHost::updateAppState() {
+  if (!window_) return;
+  int state = gtk_window_is_active(window_) ? 0 : 1;
+  if (windowSurface_ && GDK_IS_TOPLEVEL(windowSurface_)) {
+    GdkToplevelState s = gdk_toplevel_get_state(GDK_TOPLEVEL(windowSurface_));
+    if (s & (GDK_TOPLEVEL_STATE_MINIMIZED | GDK_TOPLEVEL_STATE_SUSPENDED)) state = 2;
+  }
+  setAppState(state);
+}
+
+void RNGtkHost::setAppState(int state) {
+  int before = platform_->appState.exchange(state);
+  if (before == state || !loaded_ || !reactHost_) return;
+  reactHost_->emitDeviceEvent(folly::dynamic::array(
+      "appStateDidChange", folly::dynamic::object("app_state", appStateName(state))));
+  // Android's focus/blur (AppState 'focus' and 'blur' listeners).
+  if ((before == 0) != (state == 0)) {
+    reactHost_->emitDeviceEvent(
+        folly::dynamic::array("appStateFocusChange", state == 0));
+  }
+}
+
+void RNGtkHost::openURL(const std::string &url) {
+  if (!loaded_ || !reactHost_) {
+    std::lock_guard<std::mutex> lock(platform_->mutex);
+    platform_->initialURL = url;
+    return;
+  }
+  reactHost_->emitDeviceEvent(
+      folly::dynamic::array("url", folly::dynamic::object("url", url)));
 }
 
 void RNGtkHost::loadFromDevServer() {

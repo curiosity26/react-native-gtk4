@@ -28,7 +28,8 @@ focus, Tab order, focus rings and key events, `onMouseEnter`/`Leave`,
 `onAuxClick` and `tooltip`, with react-native-windows / react-native-macos
 props ([docs/components.md](docs/components.md#keyboard)); accessibility
 for Orca through AT-SPI, and `AccessibilityInfo`
-([docs/components.md](docs/components.md#accessibility)).
+([docs/components.md](docs/components.md#accessibility)); Linking, AppState,
+Clipboard, font scaling, I18nManager RTL ([docs/apis.md](docs/apis.md)).
 
 ## Quick start
 

@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "DevControls.h"
 #include "DevUI.h"
@@ -32,6 +33,10 @@ struct Run {
   std::string screenshot;
   int timeoutMs = 120000;
   bool verbose = false;
+  // URLs on the command line (a .desktop file's %u): the first is the
+  // initial URL (Linking.getInitialURL).
+  std::vector<std::string> urls;
+  std::string initialURL;
 
   RNGtkHost *host = nullptr;
   GtkApplication *gtkApp = nullptr;
@@ -196,6 +201,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
       .inspector = run->inspector,
       // The surface follows the window: Dimensions' window is its size.
       .followsWindowSize = true,
+      .initialURL = run->initialURL,
   };
   run->host = new RNGtkHost(hostOptions, GTK_OVERLAY(overlay));
   if (run->dev) addDevControls(window, run->host, run->verbose);
@@ -213,11 +219,35 @@ void activate(GtkApplication *gtkApp, gpointer data) {
   gtk_window_present(GTK_WINDOW(window));
 }
 
+// GApplication's command line: URLs given to the app, exactly as given (a
+// GFile would normalize them). Before the window exists, the first is the
+// initial URL; after, each is a Linking 'url' event: a unique app gets
+// those from later launches too (another `myapp myapp://...` or a click
+// on a link the app's .desktop file handles).
+int commandLine(GApplication *gtkApp, GApplicationCommandLine *commandLine,
+                gpointer data) {
+  auto *run = static_cast<Run *>(data);
+  int argc = 0;
+  gchar **args = g_application_command_line_get_arguments(commandLine, &argc);
+  if (!run->host) {
+    if (argc > 1) run->initialURL = args[1];
+    activate(GTK_APPLICATION(gtkApp), run);
+    for (int i = 2; i < argc; i++) run->host->openURL(args[i]);
+  } else {
+    for (int i = 1; i < argc; i++) run->host->openURL(args[i]);
+    if (GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(gtkApp))) {
+      gtk_window_present(window);
+    }
+  }
+  g_strfreev(args);
+  return 0;
+}
+
 int usage(const char *argv0) {
   fprintf(stderr,
           "usage: %s [--dev-server [HOST:PORT] | --bundle FILE]\n"
           "          [--smoke [--screenshot PNG] [--timeout MS]]\n"
-          "          [--no-inspector] [--verbose]\n",
+          "          [--no-inspector] [--verbose] [URL...]\n",
           argv0);
   return 2;
 }
@@ -260,6 +290,8 @@ int runApp(int argc, char **argv, const AppOptions &options) {
           run.options.devServerPort = atoi(server.c_str() + colon + 1);
         }
       }
+    } else if (argv[i][0] != '-' && g_uri_is_valid(argv[i], G_URI_FLAGS_NONE, nullptr)) {
+      run.urls.push_back(argv[i]);
     } else {
       return usage(argv[0]);
     }
@@ -281,7 +313,9 @@ int runApp(int argc, char **argv, const AppOptions &options) {
   setUpFeatureFlags();
 
   // Smoke runs may overlap a running copy of the app.
-  auto flags = run.smoke ? G_APPLICATION_NON_UNIQUE : G_APPLICATION_DEFAULT_FLAGS;
+  auto flags = GApplicationFlags(
+      (run.smoke ? G_APPLICATION_NON_UNIQUE : G_APPLICATION_DEFAULT_FLAGS) |
+      G_APPLICATION_HANDLES_COMMAND_LINE);
   const char *appId = options.appId.empty() ? nullptr : options.appId.c_str();
   if (appId && !g_application_id_is_valid(appId)) {
     fprintf(stderr, "invalid application id \"%s\"\n", appId);
@@ -289,8 +323,14 @@ int runApp(int argc, char **argv, const AppOptions &options) {
   }
   run.gtkApp = gtk_application_new(appId, flags);
   g_signal_connect(run.gtkApp, "activate", G_CALLBACK(activate), &run);
-  // GApplication only sees the program name: the options are ours.
-  int status = g_application_run(G_APPLICATION(run.gtkApp), 1, argv);
+  g_signal_connect(run.gtkApp, "command-line", G_CALLBACK(commandLine), &run);
+  // GApplication sees the program name and the URLs (its command line);
+  // the options are ours.
+  std::vector<char *> gappArgv = {argv[0]};
+  for (auto &url : run.urls) gappArgv.push_back(url.data());
+  gappArgv.push_back(nullptr);
+  int status = g_application_run(G_APPLICATION(run.gtkApp),
+                                 int(gappArgv.size() - 1), gappArgv.data());
   delete run.host;
   g_object_unref(run.gtkApp);
   return status ? status : run.exitCode;
