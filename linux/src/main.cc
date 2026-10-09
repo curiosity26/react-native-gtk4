@@ -1043,10 +1043,19 @@ bool palette_is(bool dark) {
   return ok;
 }
 
+// A light app never runs a "-dark" GTK theme (Yaru-dark -> Yaru).
+bool theme_fits(bool dark) {
+  gchar *theme = nullptr;
+  g_object_get(gtk_settings_get_default(), "gtk-theme-name", &theme, nullptr);
+  std::string name = theme ? theme : "";
+  g_free(theme);
+  return dark || name.find("-dark") == std::string::npos;
+}
+
 // JS, the palette and GTK's theme variant all agree on `dark`.
 bool scheme_is(bool dark) {
   const char *name = dark ? "dark" : "light";
-  return has_text(app.root, std::string("scheme: ") + name) &&
+  return has_text(app.root, std::string("scheme: ") + name) && theme_fits(dark) &&
          has_text(app.root, std::string("getColorScheme: ") + name) &&
          prefer_dark() == dark && app.host->appearance().isDark() == dark &&
          palette_is(dark);
