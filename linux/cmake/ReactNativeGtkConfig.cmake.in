@@ -25,11 +25,54 @@ if(NOT TARGET ReactNativeGtk::host)
     INTERFACE_LINK_OPTIONS "-Wl,-rpath-link,${_rngtk_prefix}/lib")
 endif()
 
-# Sets up an app executable. Debug builds run the host from this install
-# (RPATH). Other builds are self-contained: the host libraries are copied
-# next to the executable (debug info stripped) and found through
-# RPATH $ORIGIN.
+# ReactNativeGtk::sdk: for a library's native modules and components
+# (rngtk/Extensions.h): React Native's headers and the host's flags.
+#
+#   add_library(my_library STATIC src/MyModule.cc src/Package.cc)
+#   target_link_libraries(my_library PRIVATE ReactNativeGtk::sdk)
+#
+# (PRIVATE: its flags, NDEBUG as the host's among them, are for the
+# library's code, not the app's.)
+include("${CMAKE_CURRENT_LIST_DIR}/ReactNativeGtkSdk.cmake" OPTIONAL)
+if(NOT TARGET ReactNativeGtk::sdk AND DEFINED ReactNativeGtk_SDK_INCLUDE_DIRS)
+  # Its -D and language flags (folly's configuration), not its warnings.
+  list(FILTER ReactNativeGtk_SDK_OPTIONS EXCLUDE REGEX "^-W")
+  list(REMOVE_DUPLICATES ReactNativeGtk_SDK_OPTIONS)
+  list(REMOVE_DUPLICATES ReactNativeGtk_SDK_DEFINITIONS)
+  # GTK for the library's own widgets and calls.
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(ReactNativeGtk_GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.14)
+  add_library(ReactNativeGtk::sdk INTERFACE IMPORTED)
+  set_target_properties(ReactNativeGtk::sdk PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_rngtk_prefix}/include;${ReactNativeGtk_SDK_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_DEFINITIONS "${ReactNativeGtk_SDK_DEFINITIONS}"
+    # As the host: React Native's headers need <cstdint> early (libstdc++
+    # 13), folly uses APIs it deprecates; exceptions and RTTI on.
+    # NDEBUG as the host was built (some of React Native's classes differ
+    # with it), whatever the library's build type.
+    INTERFACE_COMPILE_OPTIONS "-include;cstdint;-Wno-deprecated-declarations;-fexceptions;-frtti;${ReactNativeGtk_SDK_OPTIONS};$<IF:$<BOOL:${ReactNativeGtk_SDK_NDEBUG}>,-DNDEBUG,-UNDEBUG>"
+    INTERFACE_COMPILE_FEATURES cxx_std_20
+    INTERFACE_LINK_LIBRARIES
+      "ReactNativeGtk::host;${_rngtk_prefix}/lib/libjsi.so;PkgConfig::ReactNativeGtk_GTK4")
+endif()
+
+# Sets up an app executable. Its autolinked libraries (dependencies with a
+# linux/ folder, which run-linux lists in RNGTK_AUTOLINKING_DIR) are built
+# and linked, and rngtk::autolinkedPackages() returns their packages (none
+# without run-linux). Debug builds run the host from this install (RPATH).
+# Other builds are self-contained: the host libraries are copied next to
+# the executable (debug info stripped) and found through RPATH $ORIGIN.
 function(rngtk_app target)
+  if(DEFINED RNGTK_AUTOLINKING_DIR AND EXISTS "${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
+    include("${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
+    target_sources(${target} PRIVATE "${RNGTK_AUTOLINKING_DIR}/autolinking.cc")
+    target_link_libraries(${target} PRIVATE ${RNGTK_AUTOLINKED_TARGETS})
+  else()
+    set(none "${CMAKE_CURRENT_BINARY_DIR}/rngtk-no-autolinking.cc")
+    file(WRITE "${none}"
+         "#include <rngtk/Autolinking.h>\nnamespace rngtk {\nPackageList autolinkedPackages() { return {}; }\n}\n")
+    target_sources(${target} PRIVATE "${none}")
+  endif()
   if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set_target_properties(${target} PROPERTIES
       BUILD_RPATH "${ReactNativeGtk_LIBRARY_DIR}")

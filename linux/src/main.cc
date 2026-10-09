@@ -68,6 +68,9 @@
 
 using namespace facebook::react;
 
+// template-library/linux/src/ExamplePackage.cc
+std::shared_ptr<const rngtk::Package> example_package();
+
 namespace {
 
 constexpr SurfaceId kSurfaceId = 1;
@@ -3637,6 +3640,80 @@ void add_notifications_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryNativeModule checks: the native library template's module and
+// component, registered as a package.
+
+bool is_native_module() { return opts.module == "GalleryNativeModule"; }
+
+GtkCalendar *calendar() {
+  GtkWidget *w = by_id("calendar");
+  return w && GTK_IS_CALENDAR(w) ? GTK_CALENDAR(w) : nullptr;
+}
+
+std::string calendar_day() {
+  GtkCalendar *c = calendar();
+  if (!c) return "";
+  GDateTime *date = gtk_calendar_get_date(c);
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d", g_date_time_get_year(date),
+           g_date_time_get_month(date), g_date_time_get_day_of_month(date));
+  g_date_time_unref(date);
+  return buffer;
+}
+
+void add_native_module_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "a library's TurboModule: a sync method, a promise (from the main thread), dynamic values",
+      [] {},
+      [] {
+        std::string version = std::to_string(gtk_get_major_version()) + "." +
+                              std::to_string(gtk_get_minor_version()) + "." +
+                              std::to_string(gtk_get_micro_version());
+        return has_text(app.root, "greet: Hello, GTK, from C++! · gtkVersion: " + version) &&
+               has_text(app.root, "\"type\":\"object\"") && has_text(app.root, "\"size\":2");
+      }});
+  app.steps.push_back(Step{
+      "a library's native component: its GTK widget, at its Yoga frame, with its props",
+      [] {},
+      [] {
+        GtkCalendar *c = calendar();
+        if (!c) return false;
+        graphene_rect_t f = rn_widget_get_frame(GTK_WIDGET(c));
+        return f.size.width == 320 && f.size.height == 300 && calendar_day() == "2026-10-09" &&
+               !gtk_calendar_get_show_week_numbers(c);
+      }});
+  app.steps.push_back(Step{"  ...props from JS update it", [] {
+                             click("set-date");
+                             click("weeks");
+                           },
+                           [] {
+                             return calendar_day() == "2027-01-15" &&
+                                    gtk_calendar_get_show_week_numbers(calendar()) &&
+                                    has_text(app.root, "picked -");
+                           }});
+  app.steps.push_back(Step{
+      "  ...its event: picking a day in the calendar reaches onDateChange",
+      [] {
+        GDateTime *d = g_date_time_new_local(2027, 1, 20, 0, 0, 0);
+        gtk_calendar_select_day(calendar(), d);
+        g_date_time_unref(d);
+      },
+      [] { return has_text(app.root, "picked 2027-01-20"); }});
+  app.steps.push_back(Step{
+      "  ...a command from JS (Commands.showToday)",
+      [] { click("today"); },
+      [] {
+        GDateTime *now = g_date_time_new_now_local();
+        char today[16];
+        snprintf(today, sizeof(today), "%04d-%02d-%02d", g_date_time_get_year(now),
+                 g_date_time_get_month(now), g_date_time_get_day_of_month(now));
+        g_date_time_unref(now);
+        return calendar_day() == today && has_text(app.root, std::string("picked ") + today);
+      }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -3735,6 +3812,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_native_module() && app.steps.empty()) {
+    add_native_module_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_notifications() && app.steps.empty()) {
     add_notifications_steps();
     enter(Phase::Steps);
@@ -3795,7 +3875,7 @@ void check_app(bool first) {
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
                is_dialogs() || is_menus() || is_windows() || is_dragdrop() ||
-               is_notifications()) {
+               is_notifications() || is_native_module()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -4013,6 +4093,9 @@ void activate(GtkApplication *gtk_app, gpointer) {
       }},
       .initialURL = opts.url,
   };
+  // The library template's package (template-library/linux), as an app's
+  // autolinked libraries are.
+  host_options.packages = {example_package()};
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
   folly::dynamic props = folly::dynamic::object();

@@ -204,6 +204,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
       .initialURL = run->initialURL,
       .quitOnLastWindowClosed = o.quitOnLastWindowClosed,
   };
+  hostOptions.packages = o.packages;
   run->host = new RNGtkHost(hostOptions, GTK_OVERLAY(overlay));
   if (run->dev) addDevControls(window, run->host, run->verbose);
   if (!run->host->run(run->dev ? o.entry : run->bundle, kSurfaceId,

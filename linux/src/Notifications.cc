@@ -1,6 +1,6 @@
 #include "Notifications.h"
 
-#include "CxxModule.h"
+#include "rngtk/CxxModule.h"
 #include "Dialogs.h"
 #include "PlatformModules.h"
 

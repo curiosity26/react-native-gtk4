@@ -463,9 +463,10 @@ endfunction()
 # JSI is React Native's one SHARED library; installed next to the host.
 set_target_properties(jsi PROPERTIES INSTALL_RPATH "$ORIGIN")
 
-# ReactNativeGtk::host for apps: librngtk_host.so, exporting only the
-# rngtk::runApp API (include/rngtk/App.h). Everything else, React Native
-# included, stays inside it.
+# ReactNativeGtk::host for apps: librngtk_host.so, exporting the
+# rngtk::runApp API (include/rngtk/App.h), and React Native's C++ (with the
+# folly, glog and fmt it is built with) for native libraries'
+# ReactNativeGtk::sdk (src/rngtk_host.map). The rest stays inside it.
 add_library(rngtk_host SHARED src/App.cc)
 rngtk_link_host(rngtk_host)
 target_link_libraries(rngtk_host PRIVATE atomic)
@@ -491,6 +492,27 @@ configure_file(cmake/ReactNativeGtkConfig.cmake.in
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ReactNativeGtkConfig.cmake
         DESTINATION lib/cmake/ReactNativeGtk)
 
+# ReactNativeGtk::sdk, for libraries' native modules and components
+# (include/rngtk/Extensions.h): the include directories and definitions the
+# host is built with, so their objects match it. Directories in this
+# package's linux/ folder are installed with it (include/rngtk-sdk/linux);
+# React Native's and the third-party ones stay in the dependencies' cache.
+set(RNGTK_SDK_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/ReactNativeGtkSdk.generated.cmake)
+file(GENERATE OUTPUT ${RNGTK_SDK_GENERATED} CONTENT
+"set(ReactNativeGtk_SDK_INCLUDE_DIRS [==[$<TARGET_PROPERTY:rngtk_host_objs,INCLUDE_DIRECTORIES>]==])
+set(ReactNativeGtk_SDK_DEFINITIONS [==[$<TARGET_PROPERTY:rngtk_host_objs,COMPILE_DEFINITIONS>]==])
+set(ReactNativeGtk_SDK_OPTIONS [==[$<TARGET_PROPERTY:rngtk_host_objs,COMPILE_OPTIONS>]==])
+set(ReactNativeGtk_SDK_NDEBUG $<IF:$<CONFIG:Debug>,OFF,ON>)
+")
+install(DIRECTORY ./ DESTINATION include/rngtk-sdk/linux
+        FILES_MATCHING PATTERN "*.h"
+        PATTERN "tests" EXCLUDE PATTERN "build" EXCLUDE)
+install(CODE "
+  file(READ \"${RNGTK_SDK_GENERATED}\" sdk)
+  string(REPLACE \"${CMAKE_CURRENT_SOURCE_DIR}\" \"\${CMAKE_INSTALL_PREFIX}/include/rngtk-sdk/linux\" sdk \"\${sdk}\")
+  file(WRITE \"\${CMAKE_INSTALL_PREFIX}/lib/cmake/ReactNativeGtk/ReactNativeGtkSdk.cmake\" \"\${sdk}\")
+")
+
 # The repository's test harness: self-tests, the gallery and the dev-loop
 # checks (not part of the package).
 option(RNGTK_BUILD_HARNESS "Build rn-gtk-host, the self-test harness"
@@ -501,6 +523,14 @@ endif()
 
 add_executable(rn-gtk-host src/main.cc ../spike/src/harness.cc)
 target_include_directories(rn-gtk-host PRIVATE ../spike/src)
+# The native library template's module and component (GalleryNativeModule),
+# registered as a package the way autolinking registers an app's.
+set(RNGTK_TEMPLATE_LIBRARY ${CMAKE_CURRENT_SOURCE_DIR}/../template-library/linux)
+target_sources(rn-gtk-host PRIVATE
+  ${RNGTK_TEMPLATE_LIBRARY}/src/ExampleModule.cc
+  ${RNGTK_TEMPLATE_LIBRARY}/src/ExampleView.cc
+  ${RNGTK_TEMPLATE_LIBRARY}/src/ExamplePackage.cc)
+target_include_directories(rn-gtk-host PRIVATE ${RNGTK_TEMPLATE_LIBRARY}/src)
 # GalleryAccessibility's self-test runs scripts/a11y-probe.py.
 target_compile_definitions(rn-gtk-host PRIVATE
   RNGTK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -564,6 +594,9 @@ add_test(NAME gallery-notifications-self-test
                  --config-file=${CMAKE_CURRENT_SOURCE_DIR}/tests/private-session-bus.conf --
                  $<TARGET_FILE:rn-gtk-host> --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryNotifications --width 940 --height 680 --self-test)
+add_test(NAME gallery-native-module-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryNativeModule --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

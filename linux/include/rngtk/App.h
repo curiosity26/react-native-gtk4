@@ -17,9 +17,15 @@
 //   --verbose                 log at info level
 #pragma once
 
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace rngtk {
+
+// Native modules and components from libraries (rngtk/Extensions.h).
+struct Package;
+using PackageList = std::vector<std::shared_ptr<const Package>>;
 
 struct AppOptions {
   // GApplication id, e.g. "com.myapp".
@@ -45,6 +51,9 @@ struct AppOptions {
   // Windows.setQuitOnLastWindowClosed). Off, closing the main window hides
   // it and the app keeps running.
   bool quitOnLastWindowClosed = true;
+  // Libraries' native modules and components (rngtk/Autolinking.h:
+  // autolinkedPackages()).
+  PackageList packages;
 };
 
 // Runs the app until its window closes. Returns the process exit status.

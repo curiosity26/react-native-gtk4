@@ -285,7 +285,10 @@ void GtkMountingManager::create(const ShadowView &view) {
   bool textInput = std::strcmp(name, "TextInput") == 0;
   bool toggle = std::strcmp(name, "Switch") == 0;
   GtkWidget *widget;
-  if (is_paragraph(view)) {
+  const NativeComponent *native = nativeComponentFor(view);
+  if (native && native->create) {
+    widget = native->create(view);  // a library's (rngtk/Extensions.h)
+  } else if (is_paragraph(view)) {
     widget = rn_text_new("");
   } else if (scroll) {
     widget = rn_scroll_view_new();
@@ -339,6 +342,22 @@ void GtkMountingManager::update(const ShadowView &oldView,
   }
   if (RN_IS_VIEW(widget)) updateFocus(widget, newView);
   updateAccessibility(widget, oldView, newView);
+  if (const NativeComponent *native = nativeComponentFor(newView); native && native->update) {
+    native->update(widget, oldView, newView);
+  }
+}
+
+void GtkMountingManager::addNativeComponents(const std::vector<NativeComponent> &components) {
+  for (const auto &component : components) {
+    if (!component.descriptor.name) continue;
+    nativeComponents_[component.descriptor.name] = std::make_shared<NativeComponent>(component);
+  }
+}
+
+const NativeComponent *GtkMountingManager::nativeComponentFor(const ShadowView &view) const {
+  if (nativeComponents_.empty() || !view.componentName) return nullptr;
+  auto it = nativeComponents_.find(view.componentName);
+  return it == nativeComponents_.end() ? nullptr : it->second.get();
 }
 
 void GtkMountingManager::updateFocus(GtkWidget *widget, const ShadowView &view) {
@@ -526,6 +545,11 @@ void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
     return;
   }
   if (widget && RN_IS_VIEW(widget) && focusCommand(widget, commandName)) return;
+  if (const NativeComponent *native = nativeComponentFor(shadowView);
+      widget && native && native->command) {
+    native->command(widget, commandName, args);
+    return;
+  }
   LOG(WARNING) << "Unsupported command " << commandName << " for "
                << shadowView.componentName;
 }
@@ -534,7 +558,12 @@ ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
   return [weak = weak_from_this()](
              const EventDispatcher::Weak &eventDispatcher,
              const std::shared_ptr<const ContextContainer> &contextContainer) {
-    static auto providers = [] {
+    // Built once (it outlives the registries made from it), with the
+    // libraries' components.
+    auto self = weak.lock();
+    static std::shared_ptr<ComponentDescriptorProviderRegistry> fallback;
+    std::shared_ptr<ComponentDescriptorProviderRegistry> &cached = self ? self->providers_ : fallback;
+    if (!cached) cached = [&] {
       auto registry = std::make_shared<ComponentDescriptorProviderRegistry>();
       registry->add(
           concreteComponentDescriptorProvider<ImageComponentDescriptor>());
@@ -556,11 +585,16 @@ ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
           concreteComponentDescriptorProvider<GtkSwitchComponentDescriptor>());
       registry->add(concreteComponentDescriptorProvider<
                     ActivityIndicatorViewComponentDescriptor>());
+      if (self) {
+        for (const auto &[name, component] : self->nativeComponents_) {
+          registry->add(component->descriptor);
+        }
+      }
       return registry;
     }();
-    auto registry = providers->createComponentDescriptorRegistry(
+    auto registry = cached->createComponentDescriptorRegistry(
         {eventDispatcher, contextContainer, nullptr});
-    if (auto self = weak.lock()) {
+    if (self) {
       self->registry_ = registry;
       self->contextContainer_ = contextContainer;
     }

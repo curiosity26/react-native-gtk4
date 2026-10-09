@@ -14,7 +14,7 @@
 // - 'focus' and 'blur' as each window becomes active or stops being.
 #include "RNGtkHost.h"
 
-#include "CxxModule.h"
+#include "rngtk/CxxModule.h"
 #include "GtkKeyboardHandler.h"
 #include "GtkMenus.h"
 #include "GtkMountingManager.h"

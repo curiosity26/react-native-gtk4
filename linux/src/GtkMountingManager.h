@@ -9,12 +9,14 @@
 #pragma once
 
 #include <gtk/gtk.h>
+#include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/componentregistry/ComponentDescriptorRegistry.h>
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/imagemanager/ImageResponseObserverCoordinator.h>
 #include <react/renderer/imagemanager/primitives.h>
 #include <react/renderer/uimanager/IMountingManager.h>
 #include <react/utils/ContextContainer.h>
+#include <rngtk/Extensions.h>
 
 #include <deque>
 #include <functional>
@@ -39,6 +41,9 @@ class GtkMountingManager
 
   explicit GtkMountingManager(OnAfterMount onAfterMount);
   ~GtkMountingManager() noexcept override;
+
+  // Libraries' components (rngtk/Extensions.h); before JS starts.
+  void addNativeComponents(const std::vector<NativeComponent> &components);
 
   // The widget a surface's root view mounts into. Owned by the caller; it
   // stays registered (and is never deleted) across stops and reloads.
@@ -234,6 +239,10 @@ class GtkMountingManager
   void unmountModal(facebook::react::Tag tag);
   // shared_ptr: ModalWindow is complete only in GtkModals.cc.
   std::unordered_map<facebook::react::Tag, std::shared_ptr<ModalWindow>> modals_;
+  // Libraries' components, by component name.
+  std::unordered_map<std::string, std::shared_ptr<const NativeComponent>> nativeComponents_;
+  std::shared_ptr<facebook::react::ComponentDescriptorProviderRegistry> providers_;
+  const NativeComponent *nativeComponentFor(const facebook::react::ShadowView &view) const;
   // (parent, modal) inserted in the transaction being applied.
   std::vector<std::pair<facebook::react::Tag, facebook::react::Tag>> pendingModals_;
   // Accessibility (GtkAccessibility.cc)

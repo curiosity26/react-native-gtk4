@@ -5,7 +5,7 @@ in the spirit of [react-native-windows](https://github.com/microsoft/react-nativ
 and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
-**Status: Phases 1 (core) and 2 (desktop) complete; Phase 3 in progress.** The GTK host runs React Native
+**Status: Phases 1 (core), 2 (desktop) and 3 (desktop parity) complete.** The GTK host runs React Native
 0.87.1 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
 and Pango: borders, radii, shadows, transforms, filters, gradients, nested
 text. Mouse and touch input drive Pressable, the Touchables, Button and
@@ -31,7 +31,7 @@ for Orca through AT-SPI, and `AccessibilityInfo`
 ([docs/components.md](docs/components.md#accessibility)); Linking, AppState,
 Clipboard, font scaling, I18nManager RTL ([docs/apis.md](docs/apis.md)).
 
-**Phase 3 (desktop parity) in progress:** `<Modal>` opens a window of its
+**Phase 3 (desktop parity):** `<Modal>` opens a window of its
 own over the app: full screen or a dialog-sized sheet, fade and slide,
 transparent, nested, a modal dialog to Orca
 ([docs/components.md](docs/components.md#modal)). `Alert.alert` and
@@ -48,7 +48,10 @@ react-native-macos' props (`draggedTypes`, `onDrop`): files, links, text
 and images in, selected text and `draggable` images out
 ([docs/components.md](docs/components.md#drag-and-drop)). Desktop
 notifications with buttons (`Notifications`,
-[docs/apis.md](docs/apis.md#notifications)).
+[docs/apis.md](docs/apis.md#notifications)). Native modules and
+components in C++ and GTK: `init-linux-library` makes a library's `linux/`
+folder, and `run-linux` autolinks it
+([docs/native-modules.md](docs/native-modules.md)).
 
 ## Quick start
 
@@ -104,10 +107,12 @@ and draw React Native styles with GSK. Text is measured with Pango, off the
 main thread.
 
 `linux/` builds the host as `librngtk_host.so` (CMake target
-`ReactNativeGtk::host`), which holds React Native's core and exports one
-call, `rngtk::runApp` ([linux/include/rngtk/App.h](linux/include/rngtk/App.h)).
-An app's `linux/main.cc` fills in its id, title and component and calls
-it. The repository's test harness, `rn-gtk-host`, links the same sources
+`ReactNativeGtk::host`), which holds React Native's core. Apps call one
+function, `rngtk::runApp` ([linux/include/rngtk/App.h](linux/include/rngtk/App.h)):
+an app's `linux/main.cc` fills in its id, title and component, and its
+autolinked libraries' packages, and calls it. Native libraries build
+against React Native's C++, which the library exports, through
+`ReactNativeGtk::sdk` ([docs/native-modules.md](docs/native-modules.md)). The repository's test harness, `rn-gtk-host`, links the same sources
 directly. Threads: [docs/architecture.md](docs/architecture.md).
 
 ## Phase 0 spike
@@ -142,5 +147,5 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
 2. Platform APIs, desktop props, accessibility. **Done.**
 3. Desktop parity: modals, windows, menus, drag and drop, dialogs,
    notifications; native module template and autolinking. (No system
-   tray: stock GNOME has none.)
+   tray: stock GNOME has none.) **Done.**
 4. Packaging (Flatpak first) and community library ports.

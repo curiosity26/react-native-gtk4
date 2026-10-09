@@ -5,6 +5,7 @@
 // builds load index.bundle.js next to the executable. See
 // rngtk/App.h for the command-line options (--smoke, --bundle, ...).
 #include <rngtk/App.h>
+#include <rngtk/Autolinking.h>
 
 int main(int argc, char **argv) {
   rngtk::AppOptions options;
@@ -13,5 +14,8 @@ int main(int argc, char **argv) {
   options.moduleName = "{{moduleName}}";
   options.width = 800;
   options.height = 600;
+  // Native modules and components of the app's libraries (autolinked by
+  // run-linux).
+  options.packages = rngtk::autolinkedPackages();
   return rngtk::runApp(argc, argv, options);
 }
