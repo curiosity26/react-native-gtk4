@@ -6,6 +6,7 @@ import ContextMenu from './ContextMenu';
 import MenuBar from './MenuBar';
 
 export {default as Dialogs} from './Dialogs';
+export {default as Notifications} from './Notifications';
 export {default as Windows, useWindow} from './Windows';
 export {ContextMenu, MenuBar};
 

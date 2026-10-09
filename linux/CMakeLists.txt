@@ -326,6 +326,7 @@ add_library(rngtk_host_objs OBJECT
   src/GtkImageLoader.cc
   src/GtkKeyboardHandler.cc
   src/KeyNames.cc
+  src/Notifications.cc
   src/GtkImages.cc
   imagemanager/ImageManager.cpp
   src/GtkViewProps.cc
@@ -556,6 +557,13 @@ add_test(NAME gallery-windows-self-test
 add_test(NAME gallery-dragdrop-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryDragDrop --width 940 --height 680 --self-test)
+# On a private session bus (nothing to start on it), with a stand-in
+# notification server.
+add_test(NAME gallery-notifications-self-test
+         COMMAND dbus-run-session
+                 --config-file=${CMAKE_CURRENT_SOURCE_DIR}/tests/private-session-bus.conf --
+                 $<TARGET_FILE:rn-gtk-host> --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryNotifications --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

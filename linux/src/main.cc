@@ -3460,6 +3460,183 @@ void add_dragdrop_steps() {
       }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryNotifications checks: on a private session bus (dbus-run-session),
+// with a stand-in freedesktop notification server.
+
+bool is_notifications() { return opts.module == "GalleryNotifications"; }
+
+struct FakeNotification {
+  guint id;
+  guint replaces;
+  std::string summary, body, icon;
+  std::vector<std::string> actions;  // key, label, key, label...
+  int urgency = -1;
+};
+struct FakeServer {
+  GDBusConnection *connection = nullptr;
+  bool owned = false, lost = false;
+  std::vector<FakeNotification> notes;
+  std::vector<guint> closed;
+  guint next = 1;
+} fake;
+
+const char *kNotificationsXml =
+    "<node><interface name='org.freedesktop.Notifications'>"
+    "<method name='Notify'><arg type='s' direction='in'/><arg type='u' direction='in'/>"
+    "<arg type='s' direction='in'/><arg type='s' direction='in'/><arg type='s' direction='in'/>"
+    "<arg type='as' direction='in'/><arg type='a{sv}' direction='in'/>"
+    "<arg type='i' direction='in'/><arg type='u' direction='out'/></method>"
+    "<method name='CloseNotification'><arg type='u' direction='in'/></method>"
+    "<method name='GetCapabilities'><arg type='as' direction='out'/></method>"
+    "<method name='GetServerInformation'><arg type='s' direction='out'/>"
+    "<arg type='s' direction='out'/><arg type='s' direction='out'/>"
+    "<arg type='s' direction='out'/></method>"
+    "<signal name='NotificationClosed'><arg type='u'/><arg type='u'/></signal>"
+    "<signal name='ActionInvoked'><arg type='u'/><arg type='s'/></signal>"
+    "</interface></node>";
+
+void fake_call(GDBusConnection *, const char *, const char *, const char *, const char *method,
+               GVariant *params, GDBusMethodInvocation *invocation, gpointer) {
+  if (!strcmp(method, "Notify")) {
+    const char *app = nullptr, *icon = nullptr, *summary = nullptr, *body = nullptr;
+    guint replaces = 0;
+    GVariantIter *actions = nullptr;
+    GVariant *hints = nullptr;
+    gint32 timeout = 0;
+    g_variant_get(params, "(&su&s&s&sas@a{sv}i)", &app, &replaces, &icon, &summary, &body,
+                  &actions, &hints, &timeout);
+    FakeNotification n{replaces ? replaces : fake.next++, replaces, summary, body, icon};
+    const char *a = nullptr;
+    while (g_variant_iter_next(actions, "&s", &a)) n.actions.emplace_back(a);
+    g_variant_iter_free(actions);
+    guchar urgency = 0;
+    if (g_variant_lookup(hints, "urgency", "y", &urgency)) n.urgency = urgency;
+    // GLib sends the icon as a hint ("image-path") when it isn't a name.
+    if (n.icon.empty()) {
+      const char *path = nullptr;
+      if (g_variant_lookup(hints, "image-path", "&s", &path)) n.icon = path;
+    }
+    g_variant_unref(hints);
+    guint id = n.id;
+    fake.notes.push_back(std::move(n));
+    g_dbus_method_invocation_return_value(invocation, g_variant_new("(u)", id));
+  } else if (!strcmp(method, "CloseNotification")) {
+    guint id = 0;
+    g_variant_get(params, "(u)", &id);
+    fake.closed.push_back(id);
+    g_dbus_method_invocation_return_value(invocation, nullptr);
+  } else if (!strcmp(method, "GetCapabilities")) {
+    const char *caps[] = {"actions", "body", "icon-static", "persistence", nullptr};
+    g_dbus_method_invocation_return_value(invocation, g_variant_new("(^as)", caps));
+  } else {
+    g_dbus_method_invocation_return_value(
+        invocation, g_variant_new("(ssss)", "rngtk-test", "react-native-gtk4", "1", "1.2"));
+  }
+}
+
+void start_fake_notification_server() {
+  g_bus_own_name(
+      G_BUS_TYPE_SESSION, "org.freedesktop.Notifications", G_BUS_NAME_OWNER_FLAGS_NONE,
+      [](GDBusConnection *connection, const char *, gpointer) {
+        static GDBusNodeInfo *info = g_dbus_node_info_new_for_xml(kNotificationsXml, nullptr);
+        static const GDBusInterfaceVTable vtable = {fake_call, nullptr, nullptr, {}};
+        fake.connection = connection;
+        g_dbus_connection_register_object(connection, "/org/freedesktop/Notifications",
+                                          info->interfaces[0], &vtable, nullptr, nullptr,
+                                          nullptr);
+      },
+      [](GDBusConnection *, const char *, gpointer) { fake.owned = true; },
+      [](GDBusConnection *, const char *, gpointer) { fake.lost = true; }, nullptr, nullptr);
+}
+
+// The notification server's click on notification `id` (its action key).
+void fake_invoke(guint id, const std::string &key) {
+  g_dbus_connection_emit_signal(fake.connection, nullptr, "/org/freedesktop/Notifications",
+                                "org.freedesktop.Notifications", "ActionInvoked",
+                                g_variant_new("(us)", id, key.c_str()), nullptr);
+}
+
+std::string action_key(const FakeNotification &n, const std::string &label) {
+  for (size_t i = 0; i + 1 < n.actions.size(); i += 2) {
+    if (n.actions[i + 1] == label) return n.actions[i];
+  }
+  return "";
+}
+
+void add_notifications_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "a private bus with a stand-in notification server (run under dbus-run-session)", [] {},
+      [] {
+        if (fake.lost) {
+          check(false, "  another notification server owns the name: run under dbus-run-session");
+          return true;
+        }
+        return fake.owned;
+      }});
+  app.steps.push_back(Step{
+      "Notifications.show: the server gets the title, body, icon and buttons",
+      [] { click("notify"); },
+      [] {
+        if (fake.notes.size() != 1) return false;
+        const auto &n = fake.notes[0];
+        std::string actions;
+        for (const auto &a : n.actions) actions += a + ";";
+        printf("  summary \"%s\" body \"%s\" icon \"%s\" actions %s\n", n.summary.c_str(),
+               n.body.c_str(), n.icon.c_str(), actions.c_str());
+        return n.summary == "Download finished" && n.body == "notes.pdf (2 MB)" &&
+               n.icon == "folder-download-symbolic" && action_key(n, "Open") != "" &&
+               action_key(n, "Show in Files") != "" && n.actions[0] == "default";
+      }});
+  app.steps.push_back(Step{"a button: 'press' with the button's id, and onPress",
+                           [] { fake_invoke(fake.notes[0].id, action_key(fake.notes[0], "Open")); },
+                           [] {
+                             return has_text(app.root, "press download open") &&
+                                    has_text(app.root, "onPress open");
+                           }});
+  // (Once one of its actions ran, GLib forgets a notification, as servers
+  // close it then: the next show is a new one.)
+  app.steps.push_back(Step{
+      "clicking the notification raises the app's window; 'press' with 'default'",
+      [] { click("notify"); },
+      [] {
+        if (fake.notes.size() < 2) return false;
+        static bool clicked = false;
+        if (!clicked) {
+          clicked = true;
+          gtk_widget_set_visible(app.window, FALSE);
+          fake_invoke(fake.notes[1].id, "default");
+          return false;
+        }
+        return has_text(app.root, "press download default") &&
+               gtk_widget_get_visible(app.window);
+      }});
+  app.steps.push_back(Step{"showing the same id again replaces it",
+                           [] { click("notify"); },
+                           [] {
+                             // Again once the server has numbered the first.
+                             static bool again = false;
+                             if (fake.notes.size() == 3 && !again) {
+                               again = true;
+                               click("notify");
+                             }
+                             return fake.notes.size() == 4 &&
+                                    fake.notes[3].replaces == fake.notes[2].id;
+                           }});
+  app.steps.push_back(Step{"close: withdrawn from the server",
+                           [] { click("close"); },
+                           [] {
+                             return !fake.closed.empty() && fake.closed.back() == fake.notes[2].id;
+                           }});
+  app.steps.push_back(Step{"priority 'urgent': the urgency hint is critical",
+                           [] { click("urgent"); },
+                           [] {
+                             return fake.notes.size() == 5 && fake.notes[4].urgency == 2 &&
+                                    fake.notes[4].summary == "Battery low";
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -3558,6 +3735,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_notifications() && app.steps.empty()) {
+    add_notifications_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_dragdrop() && app.steps.empty()) {
     add_dragdrop_steps();
     enter(Phase::Steps);
@@ -3614,7 +3794,8 @@ void check_app(bool first) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
-               is_dialogs() || is_menus() || is_windows() || is_dragdrop()) {
+               is_dialogs() || is_menus() || is_windows() || is_dragdrop() ||
+               is_notifications()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -3940,6 +4121,13 @@ int main(int argc, char **argv) {
   // (GDK_DEBUG=portals shows the portal's, to watch with --step-delay.)
   if (opts.self_test && is_dialogs()) g_setenv("GDK_DEBUG", "no-portals", FALSE);
 
+  if (opts.self_test && is_notifications()) {
+    // A private bus has no desktop portal or accessibility bus to talk to
+    // (asking for them waits on timeouts).
+    g_setenv("GDK_DEBUG", "no-portals", FALSE);
+    g_setenv("GTK_A11Y", "none", FALSE);
+    start_fake_notification_server();
+  }
   GtkApplication *gtk_app = gtk_application_new(
       "dev.curiosity26.RNGtk4.Host", G_APPLICATION_NON_UNIQUE);
   g_signal_connect(gtk_app, "activate", G_CALLBACK(activate), nullptr);

@@ -322,6 +322,9 @@ int runApp(int argc, char **argv, const AppOptions &options) {
     fprintf(stderr, "invalid application id \"%s\"\n", appId);
     appId = nullptr;
   }
+  // The name desktops show for the app (notifications, the dock).
+  g_set_application_name(
+      (options.title.empty() ? options.moduleName : options.title).c_str());
   run.gtkApp = gtk_application_new(appId, flags);
   g_signal_connect(run.gtkApp, "activate", G_CALLBACK(activate), &run);
   g_signal_connect(run.gtkApp, "command-line", G_CALLBACK(commandLine), &run);

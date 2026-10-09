@@ -244,3 +244,28 @@ export declare const Windows: {
 
 /** The window the calling component is in. */
 export declare function useWindow(): WindowHandle;
+
+export type NotificationOptions = {
+  /** Showing again with the same id replaces it. */
+  id?: string;
+  title: string;
+  body?: string;
+  /** An icon name ('mail-unread-symbolic'), or a file path or URI. */
+  icon?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  buttons?: Array<{id: string; title: string}>;
+  /** The notification ('default') or a button (its id) was clicked. */
+  onPress?: (action: string) => void;
+};
+
+/** Desktop notifications (GNotification). */
+export declare const Notifications: {
+  /** Returns the notification's id. */
+  show(options: NotificationOptions): string;
+  close(id: string): void;
+  addListener(
+    type: 'press',
+    listener: (event: {id: string; action: string}) => void,
+  ): {remove(): void};
+  requestPermission(): Promise<'granted'>;
+};
