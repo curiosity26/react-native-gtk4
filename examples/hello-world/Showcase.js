@@ -182,10 +182,10 @@ function ViewsText() {
       </Section>
       <Section
         title="Selectable text"
-        hint="Right-click for a Copy menu that copies the whole paragraph. Drag selection isn't supported yet.">
+        hint="Right-click for Copy, then paste into a field on the Inputs page. Drag selection isn't supported yet.">
         <Text selectable style={styles.body}>
-          This paragraph is selectable. Right-click it, choose Copy, and paste
-          into the name field on the Inputs page.
+          This paragraph is selectable: right-click it and choose Copy to put
+          the whole paragraph on the clipboard.
         </Text>
       </Section>
     </ScrollView>
