@@ -418,6 +418,42 @@ Menu and Shift+F10, checks what each menu holds (labels, sections,
 submenus, shortcuts, disabled and checked items), chooses items, and checks
 the TextInput rules; the Showcase's Menus page has both kinds.
 
+## Drag and drop
+
+With react-native-macos' props: a view's `draggedTypes` say what drops it
+takes, and it gets `onDragEnter`, `onDragLeave` and `onDrop`. The nearest
+view under the pointer that takes something the drag offers gets it; a
+TextInput takes text drops itself (GTK's).
+
+```js
+<View
+  draggedTypes={['fileUrl', 'string']}
+  onDragEnter={() => setOver(true)}
+  onDragLeave={() => setOver(false)}
+  onDrop={e => {
+    setOver(false);
+    const {files, urls, text} = e.nativeEvent.dataTransfer;
+    files.forEach(f => openFile(f.uri));   // {name, type, uri, size}
+  }}
+/>
+```
+
+| | Notes |
+| --- | --- |
+| `draggedTypes` | `'fileUrl'`: files and links (a URI list); `'string'`: text; `'image'`: image data |
+| `onDragEnter`, `onDragLeave` | `{clientX, clientY, dataTransfer: {files: [], items, types}}`: the drag's MIME types (its data is read only on drop) |
+| `onDrop` | `dataTransfer.files`: local files, `{name, type, uri, size}`; image data (`'image'`) saved as a PNG in the user's cache, with `width` and `height`. Linux adds `dataTransfer.urls` (links that aren't files, for `'fileUrl'`) and `dataTransfer.text` (for `'string'`) |
+| Dragging out | the selected text of selectable Text (press inside the selection and drag; a click there puts the caret instead), and an Image with `draggable`: its picture, plus its file (a local image) or its URL |
+
+GTK: a GtkDropTargetAsync and a GtkDragSource on each window's (and
+Modal's) root; files come through GTK's file transfer (the document portal
+in a sandbox). `GalleryDragDrop` (`--module GalleryDragDrop --self-test`)
+drags over and drops on its zones through the handler GTK's drop target
+calls (files, links, text, an image), and checks what a drag out of
+selected text and of a draggable Image carries. Drags from other apps
+reach the same handler from GTK's signals, which the self-test can't
+start (no synthetic pointer input).
+
 ## Performance
 
 The richer styling keeps plain views cheap: the rarely used styles

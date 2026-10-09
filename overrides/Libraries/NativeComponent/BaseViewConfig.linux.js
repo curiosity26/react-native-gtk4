@@ -35,6 +35,11 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     // A context menu item was chosen: {id} (View.linux.js runs its
     // onSelect).
     topContextMenuSelect: {registrationName: 'onContextMenuSelect'},
+    // Drag and drop (react-native-macos): a drag of something the view's
+    // draggedTypes take came over it, left it, or was dropped on it.
+    topDragEnter: {registrationName: 'onDragEnter'},
+    topDragLeave: {registrationName: 'onDragLeave'},
+    topDrop: {registrationName: 'onDrop'},
   },
   validAttributes: {
     ...AndroidConfig.validAttributes,
@@ -59,6 +64,10 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     onAuxClickCapture: true,
     // Menu items for right-click, the Menu key and Shift+F10.
     contextMenu: true,
+    // What drops the view takes: 'fileUrl', 'string', 'image'.
+    draggedTypes: true,
+    // An Image that can be dragged out.
+    draggable: true,
   },
 };
 

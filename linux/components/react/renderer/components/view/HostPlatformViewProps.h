@@ -73,6 +73,11 @@ class HostPlatformViewProps : public BaseViewProps {
   bool onAuxClickCapture{false};
   // A menu for right-click, the Menu key and Shift+F10 (GtkPopoverMenu).
   ContextMenuItems contextMenu{};
+  // Drag and drop, as react-native-macos: what drops the view takes
+  // ('fileUrl', 'string', 'image'); and (an Image) whether it can be dragged
+  // out.
+  std::vector<std::string> draggedTypes{};
+  bool draggable{false};
 };
 
 } // namespace facebook::react

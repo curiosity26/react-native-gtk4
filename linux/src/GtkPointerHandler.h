@@ -24,6 +24,7 @@
 #include <react/renderer/components/view/PointerEvent.h>
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/core/ReactPrimitives.h>
+#include <folly/dynamic.h>
 
 #include <cstdint>
 #include <memory>
@@ -72,6 +73,27 @@ class GtkPointerHandler {
   // Copies the selection to the clipboard; false with no selection.
   bool copySelection();
 
+  // Drag and drop (GtkDragDrop.cc), as react-native-macos spells it: views
+  // with draggedTypes ('fileUrl', 'string', 'image') get onDragEnter,
+  // onDragLeave and onDrop for drags of those over them; selected text of
+  // selectable Text, and an Image with `draggable`, can be dragged out.
+  // GTK's drop target and drag source call these; tests too.
+  struct DropData {
+    std::vector<std::string> uris;  // files (file://) and links
+    bool hasText = false;
+    std::string text;
+    GdkTexture *texture = nullptr;  // borrowed
+  };
+  // A drag offering `kinds` ('fileUrl', 'string', 'image') and `types`
+  // (MIME types) at (x, y): true if a view there takes it.
+  bool dragMotion(double x, double y, const std::vector<std::string> &kinds,
+                  const std::vector<std::string> &types);
+  void dragLeave();
+  // The drop at (x, y): onDrop on the view that takes it; false if none.
+  bool drop(double x, double y, const DropData &data);
+  // What a drag starting at (x, y) carries (a new reference), or null.
+  GdkContentProvider *dragContentAt(double x, double y);
+
  private:
   struct Target {
     facebook::react::Tag tag = 0;
@@ -115,9 +137,26 @@ class GtkPointerHandler {
   void clearSelection();
   static gboolean onCopyShortcut(GtkWidget *, GVariant *, gpointer self);
 
+  // Drag and drop (GtkDragDrop.cc).
+  void setUpDragAndDrop();
+  void tearDownDragAndDrop();
+  Target dropTargetAt(double x, double y, const std::vector<std::string> &kinds) const;
+  folly::dynamic dragEvent(double x, double y, folly::dynamic dataTransfer) const;
+
   GtkMountingManager &mountingManager_;
   GtkWidget *root_;
   GtkEventController *controller_;
+  GtkEventController *dropController_ = nullptr;
+  GtkEventController *dragController_ = nullptr;
+  // The view a drag is over now, and what the drag offers.
+  Target dragOver_;
+  std::vector<std::string> dragTypes_;
+  // A press inside the selection: a drag of it may start; a click without
+  // one puts the caret there.
+  bool pressInSelection_ = false;
+  int pressIndex_ = 0;
+  // Tells async drop reads the handler is gone.
+  std::shared_ptr<int> alive_ = std::make_shared<int>(0);
   std::unordered_map<int, ActiveTouch> touches_;
   std::vector<Target> hovered_;  // root first
   Target pressTarget_;           // for click: where the button went down

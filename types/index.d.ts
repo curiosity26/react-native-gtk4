@@ -85,6 +85,33 @@ export type ViewPropsLinux = {
   contextMenu?: MenuItem[];
   /** An item of contextMenu was chosen (after its onSelect). */
   onContextMenuSelect?: (event: {nativeEvent: {id: string}}) => void;
+  /** Drag and drop (react-native-macos): what drops the view takes. */
+  draggedTypes?: DraggedType[];
+  onDragEnter?: (event: {nativeEvent: DragEvent}) => void;
+  onDragLeave?: (event: {nativeEvent: DragEvent}) => void;
+  onDrop?: (event: {nativeEvent: DragEvent}) => void;
+  /** An Image that can be dragged out (its picture, and its file or URL). */
+  draggable?: boolean;
+};
+
+/** 'fileUrl': files and links (a URI list); 'string': text; 'image': image data. */
+export type DraggedType = 'fileUrl' | 'string' | 'image';
+
+/** react-native-macos' DataTransfer, plus Linux's text and urls. */
+export type DragEvent = {
+  clientX: number;
+  clientY: number;
+  dataTransfer: {
+    /** On drop: local files (and dropped image data, saved as PNG). */
+    files: Array<{name: string; type: string; uri: string; size?: number; width?: number; height?: number}>;
+    items: Array<{kind: 'file' | 'string'; type: string}>;
+    /** MIME types. */
+    types: string[];
+    /** On drop, Linux: the text, for 'string'. */
+    text?: string;
+    /** On drop, Linux: links that aren't local files, for 'fileUrl'. */
+    urls?: string[];
+  };
 };
 
 /** A file type filter for Dialogs: matches any of its extensions, MIME types or patterns. */
