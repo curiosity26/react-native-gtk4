@@ -909,7 +909,7 @@ function DialogsPage() {
       </Section>
       <Section
         title="Dialogs (@curiosity26/react-native-gtk4)"
-        hint="The desktop's file chooser (its portal), modal over the app. Paths come back; cancelling gives [] (null when saving). In 'Open several', Ctrl+click or Shift+click files (or Ctrl+A), then Open: a double-click opens just that one.">
+        hint="The desktop's file chooser (its portal), modal over the app. Paths come back; cancelling gives [] (null when saving). In 'Open several files', Ctrl+click or Shift+click files (or Ctrl+A), then Open: a double-click opens just that one.">
         <View style={styles.row}>
           <Btn
             title="Open a file"
@@ -923,7 +923,7 @@ function DialogsPage() {
               }).then(show('openFile'), fail)
             }
           />
-          <Btn title="Open several" onPress={() => Dialogs.openFile({multiple: true}).then(show('openFile multiple'), fail)} />
+          <Btn title="Open several files" onPress={() => Dialogs.openFile({multiple: true}).then(show('openFile multiple'), fail)} />
           <Btn
             title="Save as…"
             onPress={() => Dialogs.saveFile({defaultName: 'untitled.txt', buttonLabel: 'Export'}).then(show('saveFile'), fail)}
