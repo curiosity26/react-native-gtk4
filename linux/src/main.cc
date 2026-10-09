@@ -20,6 +20,9 @@
 //   --logbox-screenshot F  save the window once LogBox shows
 //   --dismiss-logbox       then click LogBox's Dismiss button and wait for
 //                          LogBox to close
+//   --test-animation       before the first reload and after each one,
+//                          hold the card (a TouchableOpacity) and check
+//                          that its native-driver fade runs, then release
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
@@ -74,6 +77,7 @@ struct Options {
   bool expect_logbox = false;
   const char *logbox_screenshot = nullptr;
   bool dismiss_logbox = false;
+  bool test_animation = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
@@ -106,6 +110,10 @@ struct App {
   std::vector<Step> steps;
   size_t step = 0;
   bool step_started = false;
+  // What the current steps follow; next_check() continues from it.
+  Phase steps_after = Phase::Initial;
+  // The JS instance whose native animation --test-animation checked.
+  int animated_instance = 0;
 } app;
 
 int thread_count() {
@@ -1223,6 +1231,7 @@ void quit() {
 }
 
 void enter(Phase phase) {
+  if (phase == Phase::Steps) app.steps_after = app.phase;
   app.phase = phase;
   app.frames = 0;
   restart_timeout();
@@ -1237,10 +1246,44 @@ void enter(Phase phase) {
   }
 }
 
+// --test-animation: TouchableOpacity's fade is a native-driver
+// Animated.timing that C++ Animated runs on GTK's frame clock. Each JS
+// instance needs its own Animated provider; one kept from before a reload
+// would drive the destroyed instance and the card would never fade.
+void add_animation_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  int instance = app.host->instanceCount();
+  app.steps.push_back(Step{
+      "JS instance " + std::to_string(instance) +
+          ": holding the card fades it (native Animated)",
+      [] {
+        if (GtkWidget *v = by_id("card")) send(Phase::Down, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("card");
+        return v && gtk_widget_get_opacity(v) < 0.5;
+      }});
+  app.steps.push_back(Step{
+      "  ...and it fades back after release",
+      [] {
+        if (GtkWidget *v = by_id("card")) send(Phase::Up, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("card");
+        return v && gtk_widget_get_opacity(v) > 0.99;
+      }});
+}
+
 // The dev-loop check after `done`, or quit.
 void next_check(Phase done) {
   if (!opts.self_test) {
     quit();
+  } else if (opts.test_animation && done <= Phase::Reloading &&
+             app.animated_instance != app.host->instanceCount()) {
+    app.animated_instance = app.host->instanceCount();
+    add_animation_steps();
+    enter(Phase::Steps);
   } else if (done <= Phase::Reloading && opts.dev &&
              app.reloads_done <
                  (opts.test_reload ? opts.reloads : 0) + int(opts.expect_reload)) {
@@ -1407,7 +1450,7 @@ void on_after_paint(GdkFrameClock *, gpointer) {
       break;
     case Phase::Steps: {
       if (app.step >= app.steps.size()) {
-        quit();
+        next_check(app.steps_after);
         break;
       }
       Step &step = app.steps[app.step];
@@ -1508,7 +1551,8 @@ int usage() {
           "         [--screenshot PNG] [--timeout MS] [--test-reload]\n"
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
-          "         [--logbox-screenshot PNG] [--dismiss-logbox] [--verbose]\n");
+          "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
+          "         [--test-animation] [--verbose]\n");
   return 2;
 }
 
@@ -1537,6 +1581,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--expect-reload")) opts.expect_reload = true;
     else if (!strcmp(argv[i], "--expect-logbox")) opts.expect_logbox = true;
     else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
+    else if (!strcmp(argv[i], "--test-animation")) opts.test_animation = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {
