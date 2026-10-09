@@ -152,4 +152,6 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    identity in app.json, an installable tree with a `.desktop` file,
    AppStream MetaInfo and icons, Flatpak, .deb and .rpm
    ([docs/packaging.md](docs/packaging.md)); prebuilt hosts and the npm
-   release ([docs/releasing.md](docs/releasing.md)). **In progress.**
+   release ([docs/releasing.md](docs/releasing.md)); ports of
+   async-storage, netinfo, safe-area-context and vector-icons
+   ([docs/libraries.md](docs/libraries.md)). **In progress.**
