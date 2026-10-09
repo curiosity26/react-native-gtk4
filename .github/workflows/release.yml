@@ -3,7 +3,8 @@ name: Release
 # On a version tag (v0.1.0): prebuilt host libraries for x86_64 and aarch64
 # (Debug for run-linux, Release for package-linux), a GitHub release with
 # them attached, and the npm package on GitHub Packages, which lists them
-# with their checksums (prebuilt-hosts.json).
+# with their checksums (prebuilt-hosts.json), and the library ports in
+# packages/.
 #
 # Run by hand (workflow_dispatch) it's a dry run: it builds the prebuilt
 # hosts, packs the package and runs `npm publish --dry-run`, and publishes
@@ -88,7 +89,9 @@ jobs:
           cat notes.md
       - name: Publish (dry run)
         if: github.event_name != 'push'
-        run: npm publish --dry-run
+        run: |
+          npm publish --dry-run
+          for p in packages/*/; do (cd "$p" && npm publish --dry-run); done
       - name: GitHub release with the prebuilt hosts
         if: github.event_name == 'push'
         env:
@@ -98,4 +101,7 @@ jobs:
         if: github.event_name == 'push'
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
-        run: npm publish
+        run: |
+          npm publish
+          # The library ports (packages/), at the same version.
+          for p in packages/*/; do (cd "$p" && npm publish); done
