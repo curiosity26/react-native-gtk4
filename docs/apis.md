@@ -295,6 +295,7 @@ Windows.main.setTitle(`${name} — My App`);
 | | Notes |
 | --- | --- |
 | `Windows.open(options)` | a handle, at once (the window opens on the main loop). `component` is required; `width`/`height` are the content's size under the title bar (default 800 x 600) |
+| `handle.requestClose()` | what the close button does: `close-requested`, then it closes unless closing is intercepted. `close()` closes without asking |
 | `handle.close()`, `setTitle(title)`, `setSize(w, h)`, `setMinimumSize(w, h)`, `focus()` | `focus()` raises the window (and shows the main window again after it was closed). On Wayland the desktop may only flash it, without an activation from the user |
 | `handle.addListener(type, fn)` | `focus`, `blur`, `resize` (`{width, height}`), `close-requested` (the close button), `closed` |
 | `interceptClose: true` / `handle.setInterceptClose(true)` | the close button only sends `close-requested`; call `close()` to close (after asking, say) |

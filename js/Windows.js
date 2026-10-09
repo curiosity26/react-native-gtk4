@@ -70,8 +70,16 @@ class WindowHandle {
   get rootTag(): number {
     return this.id;
   }
+  /** Closes it, without asking ('close-requested' isn't sent). */
   close() {
     NativeWindows?.close(this.id);
+  }
+  /**
+   * As the window's close button: 'close-requested', then it closes,
+   * unless closing is intercepted (the app then decides).
+   */
+  requestClose() {
+    NativeWindows?.requestClose(this.id);
   }
   setTitle(title: string) {
     NativeWindows?.setTitle(this.id, String(title));

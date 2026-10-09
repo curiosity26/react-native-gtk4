@@ -43,6 +43,7 @@ export function GalleryWindowChild({label}) {
       </Text>
       <View style={styles.row}>
         <Action id={`close-${label}`} label="Close this window" onPress={() => window.close()} />
+        <Action id={`ask-${label}`} label="Ask to close" onPress={() => window.requestClose()} />
         <Action id={`title-${label}`} label="Rename" onPress={() => window.setTitle(`${label} (renamed)`)} />
         <Action id={`modal-${label}`} label="Modal here" onPress={() => setModal(true)} />
       </View>

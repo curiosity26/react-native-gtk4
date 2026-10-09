@@ -3244,6 +3244,12 @@ void add_windows_steps() {
         return has_text(app.root, "B close-requested") && app.host->windowFor(b) &&
                window_count() == 2;
       }});
+  app.steps.push_back(Step{"  ...requestClose() from inside asks the same way, and it stays",
+                           [] { click_in_window(b, "ask-B"); },
+                           [] {
+                             return has_text(app.root, "B close-requested | B close-requested") &&
+                                    app.host->windowFor(b);
+                           }});
   app.steps.push_back(Step{"  ...and the app closes it (from inside: useWindow().close())",
                            [] { click_in_window(b, "close-B"); },
                            [] { return !app.host->windowFor(b) && has_text(app.root, "B closed"); }});

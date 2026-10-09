@@ -100,6 +100,7 @@ class RNGtkHost::WindowsModule : public CxxModule<RNGtkHost::WindowsModule> {
       : CxxModule("LinuxWindows", std::move(jsInvoker)), host_(host), alive_(host.alive_) {
     method<&WindowsModule::open>("open");
     method<&WindowsModule::close>("close");
+    method<&WindowsModule::requestClose>("requestClose");
     method<&WindowsModule::setTitle>("setTitle");
     method<&WindowsModule::setSize>("setSize");
     method<&WindowsModule::setMinSize>("setMinSize");
@@ -135,6 +136,13 @@ class RNGtkHost::WindowsModule : public CxxModule<RNGtkHost::WindowsModule> {
   }
   void close(facebook::jsi::Runtime &, int id) {
     run([id](RNGtkHost &host) { host.closeWindow(id); });
+  }
+  // As the close button: 'close-requested', then closed unless the app
+  // intercepts closing.
+  void requestClose(facebook::jsi::Runtime &, int id) {
+    run([id](RNGtkHost &host) {
+      if (GtkWindow *window = host.windowFor(id)) gtk_window_close(window);
+    });
   }
   void setTitle(facebook::jsi::Runtime &, int id, std::string title) {
     run([id, title](RNGtkHost &host) { host.setWindowTitle(id, title); });
