@@ -73,6 +73,9 @@ describe('flatpak manifest', () => {
     assert.equal(app['build-options'].env.npm_config_cache, '/run/build/MyApp/flatpak-node/npm-cache');
     assert.match(app['build-commands'][1], /^cd 'examples\/my app' && npx react-native package-linux --no-checks --host \/app\/rngtk\/lib\/cmake\/ReactNativeGtk --prefix \/app --version 1\.2\.3$/);
     assert.deepEqual(m['sdk-extensions'], ['org.freedesktop.Sdk.Extension.node24', 'org.freedesktop.Sdk.Extension.llvm22']);
+    assert.ok(!host['build-commands'].some(c => c.includes('/app/rngtk/deps')));
+    const withLibs = flatpakManifest(info, {hostDeps: [], hostPackage: {}, app: {}}, {nativeLibraries: true});
+    assert.match(withLibs.modules[0]['build-commands'].at(-1), /ReactNativeGtkSdk\.cmake$/);
     const old = flatpakManifest({...info, flatpak: {runtimeVersion: '50', llvm: 'llvm21'}}, {hostDeps: [], hostPackage: {}, app: {}});
     assert.equal(old['runtime-version'], '50');
     assert.match(old.modules[0]['build-options']['append-path'], /llvm21/);

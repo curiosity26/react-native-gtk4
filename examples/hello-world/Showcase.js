@@ -49,6 +49,8 @@ import {
   useWindow,
 } from '@curiosity26/react-native-gtk4';
 
+import {makeLibraryPages} from './ShowcaseLibraries';
+
 const halves = require('./assets/halves.png');
 const tile = require('./assets/tile.png');
 const LOGO = 'https://reactnative.dev/img/tiny_logo.png';
@@ -1660,6 +1662,8 @@ const PAGES = [
   ['Windows', WindowsPage],
   ['Drag & Drop', DragDropPage],
   ['Notifications', NotificationsPage],
+  // Community libraries' Linux ports (packages/): ShowcaseLibraries.js.
+  ...makeLibraryPages(() => ({Section, Btn, styles, useLog})),
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.
@@ -1685,7 +1689,7 @@ export default function Showcase({initialPage = 0, colorScheme}) {
   return (
     <LogContext.Provider value={log}>
       <View style={styles.root}>
-        <View style={styles.sidebar}>
+        <ScrollView style={styles.sidebar} contentContainerStyle={styles.sidebarContent}>
           <Text style={styles.brand}>RN GTK4</Text>
           {PAGES.map(([name], i) => (
             <HoverPressable
@@ -1699,7 +1703,7 @@ export default function Showcase({initialPage = 0, colorScheme}) {
               <Text style={[styles.navText, i === page && styles.navTextActive]}>{name}</Text>
             </HoverPressable>
           ))}
-        </View>
+        </ScrollView>
         <View style={styles.main}>
           <View style={styles.content}>
             <Page />
@@ -1724,7 +1728,8 @@ export default function Showcase({initialPage = 0, colorScheme}) {
 
 const styles = StyleSheet.create({
   root: {flex: 1, flexDirection: 'row', backgroundColor: PlatformColor('window_bg_color')},
-  sidebar: {width: 180, backgroundColor: '#1C1C1E', paddingTop: 16, paddingHorizontal: 8},
+  sidebar: {width: 180, flexGrow: 0, backgroundColor: '#1C1C1E'},
+  sidebarContent: {paddingTop: 16, paddingHorizontal: 8, paddingBottom: 16},
   brand: {color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 16, marginLeft: 8},
   nav: {paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, marginBottom: 2, cursor: 'pointer'},
   navActive: {backgroundColor: '#007AFF'},
