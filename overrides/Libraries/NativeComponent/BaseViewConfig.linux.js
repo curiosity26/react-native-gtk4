@@ -4,8 +4,8 @@
  * Follows Android: the GTK host runs React Native's shared C++ view props,
  * which accept Android's view config (event names, accessibility props).
  * Android's already has focusable and the focus, blur, keyDown and keyUp
- * events; this adds the host's keyboard props, spelled as in
- * react-native-windows and react-native-macos.
+ * events; this adds the host's keyboard and desktop mouse props, spelled
+ * as in react-native-windows and react-native-macos.
  *
  * @flow strict-local
  * @format
@@ -17,6 +17,22 @@ import AndroidConfig from 'react-native-upstream/Libraries/NativeComponent/BaseV
 
 const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
   ...AndroidConfig,
+  bubblingEventTypes: {
+    ...AndroidConfig.bubblingEventTypes,
+    // A middle or right click (W3C auxclick).
+    topAuxClick: {
+      phasedRegistrationNames: {
+        captured: 'onAuxClickCapture',
+        bubbled: 'onAuxClick',
+      },
+    },
+  },
+  directEventTypes: {
+    ...AndroidConfig.directEventTypes,
+    // The mouse entering and leaving the view (not bubbling).
+    topMouseEnter: {registrationName: 'onMouseEnter'},
+    topMouseLeave: {registrationName: 'onMouseLeave'},
+  },
   validAttributes: {
     ...AndroidConfig.validAttributes,
     // Keys the view handles itself: [{key, code, altKey, ctrlKey,
@@ -27,6 +43,13 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     enableFocusRing: true,
     // Take keyboard focus once mounted.
     autoFocus: true,
+    // A GTK tooltip.
+    tooltip: true,
+    // Listeners, so the host sends only the mouse events views want.
+    onMouseEnter: true,
+    onMouseLeave: true,
+    onAuxClick: true,
+    onAuxClickCapture: true,
   },
 };
 

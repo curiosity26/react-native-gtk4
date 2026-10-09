@@ -1833,6 +1833,89 @@ void add_keyboard_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryMouse checks
+
+bool is_mouse() { return opts.module == "GalleryMouse"; }
+
+void move_to(const char *id, float fx = 0.5f, float fy = 0.5f) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_rect_t b = bounds_in_root(v);
+  send(rngtk::GtkPointerHandler::Phase::Move,
+       graphene_point_t{b.origin.x + b.size.width * fx, b.origin.y + b.size.height * fy});
+}
+
+void click_button(const char *id, int button) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_point_t c = center_of(v);
+  rngtk::GtkPointerHandler::Input input{};
+  input.x = c.x;
+  input.y = c.y;
+  input.button = button;
+  input.phase = rngtk::GtkPointerHandler::Phase::Down;
+  app.host->pointerHandler()->dispatch(input);
+  input.phase = rngtk::GtkPointerHandler::Phase::Up;
+  app.host->pointerHandler()->dispatch(input);
+  // Close the selectable-text menu or anything a right click opened.
+  for (GtkWidget *c = gtk_widget_get_first_child(app.root); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (GTK_IS_POPOVER(c)) gtk_popover_popdown(GTK_POPOVER(c));
+  }
+}
+
+void add_mouse_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{"onMouseEnter, with the point in the view",
+                           [] { move_to("outer", 0.05f, 0.5f); },
+                           [] { return has_text(app.root, "outer in at 15 · inner out"); }});
+  app.steps.push_back(Step{
+      "entering a child: the child's onMouseEnter; the parent stays entered",
+      [] { move_to("inner"); },
+      [] { return has_text(app.root, "outer in at 15 · inner in · enters 1"); }});
+  app.steps.push_back(Step{"leaving both: onMouseLeave on each",
+                           [] { move_to("away"); },
+                           [] { return has_text(app.root, "outer out · inner out · enters 1"); }});
+  app.steps.push_back(Step{
+      "tooltip: a GTK tooltip that GTK's own picking finds under the pointer",
+      [] {},
+      [] {
+        GtkWidget *tip = by_id("tip");
+        GtkWidget *text = by_id("tip-text");
+        if (!tip || !text) return false;
+        // What GTK's tooltip code does: the widget under the pointer, then
+        // up to the first one with a tooltip.
+        graphene_point_t c = center_of(text), in_window;
+        if (!gtk_widget_compute_point(app.root, app.window, &c, &in_window)) return false;
+        GtkWidget *w = gtk_widget_pick(app.window, in_window.x, in_window.y, GTK_PICK_DEFAULT);
+        while (w && !gtk_widget_get_has_tooltip(w)) w = gtk_widget_get_parent(w);
+        const char *t = w ? gtk_widget_get_tooltip_text(w) : nullptr;
+        return w == tip && t && std::string(t) == "Hello from a tooltip";
+      }});
+  app.steps.push_back(Step{"a middle click: onAuxClick (button 1), bubbling to the parent",
+                           [] { click_button("aux", 2); },
+                           [] { return has_text(app.root, "aux button 1 · parent aux 1 · presses 0"); }});
+  app.steps.push_back(Step{"a right click: onAuxClick (button 2)",
+                           [] { click_button("aux", 3); },
+                           [] { return has_text(app.root, "aux button 2 · parent aux 2 · presses 0"); }});
+  app.steps.push_back(Step{"a left click presses, with no auxclick",
+                           [] { click_button("aux", 1); },
+                           [] { return has_text(app.root, "aux button 2 · parent aux 2 · presses 1"); }});
+  app.steps.push_back(Step{"an auxclick reaches a listener Fabric flattened",
+                           [] { click_button("aux-text", 2); },
+                           [] { return has_text(app.root, "parent aux 103"); }});
+  app.steps.push_back(Step{"a View with only onMouseEnter still hears it",
+                           [] { move_to("bare"); },
+                           [] { return has_text(app.root, "bare onMouseEnter: in"); }});
+  app.steps.push_back(Step{"  ...and a View with only a tooltip has it", [] {},
+                           [] {
+                             GtkWidget *w = by_id("bare-tip");
+                             while (w && !gtk_widget_get_has_tooltip(w)) w = gtk_widget_get_parent(w);
+                             return w && std::string(gtk_widget_get_tooltip_text(w)) == "A bare tooltip";
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -1925,6 +2008,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_mouse() && app.steps.empty()) {
+    add_mouse_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_keyboard() && app.steps.empty()) {
     add_keyboard_steps();
     enter(Phase::Steps);
@@ -1961,7 +2047,8 @@ void check_app(bool first) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else if (is_images()) {
       verify_images(tex);
-    } else if (is_controls() || is_appearance() || is_selection() || is_keyboard()) {
+    } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
+               is_mouse()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);

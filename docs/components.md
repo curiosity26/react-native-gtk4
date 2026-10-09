@@ -20,7 +20,10 @@ the pressables, hovers one, holds TouchableOpacity and copies selectable
 text. It passes on Wayland and X11. `--module GallerySelection
 --self-test` checks drag, double- and triple-click and Shift+click
 selection, Ctrl+C, the right-click menu, `selectionColor`, and that presses
-and wheel scrolling still work around selectable text.
+and wheel scrolling still work around selectable text. `--module
+GalleryMouse --self-test` checks `onMouseEnter`/`onMouseLeave` (nested and
+on otherwise plain views), `tooltip` through GTK's own picking, and
+`onAuxClick` for both buttons, bubbling past flattened views.
 
 **Supported** means it matches iOS/Android for the common cases.
 **Partial** means it works with the limits noted. **Not yet** means the
@@ -102,8 +105,11 @@ transforms, rounded overflow clips, `pointerEvents`, and nested Text spans.
 | TouchableOpacity fade | Supported | native-driver Animated through C++ Animated (`synchronouslyUpdateViewOnUIThread`) |
 | W3C pointer events: down/move/up/cancel, click | Supported | only sent to views (and ancestors) that listen |
 | Hover: pointerover/out, pointerenter/leave | Supported | `onHoverIn`/`onHoverOut` on Pressable (W3C hover flag on) |
+| `onMouseEnter`, `onMouseLeave` | Supported | react-native-windows / react-native-macos: the mouse entering and leaving the view (not bubbling, mouse only); `nativeEvent` has the pointer event's fields (`clientX`, `offsetX`, modifiers...) |
+| `onAuxClick` | Supported | a middle (`button` 1) or right (`button` 2) click, pressed and released on the same view; bubbles (W3C auxclick) |
+| `tooltip` | Supported | a GTK tooltip on any view (react-native-windows / react-native-macos) |
 | Modifier keys, buttons, pointerType | Supported | `ctrlKey`... `buttons`, `button`, `mouse`/`touch` |
-| Right/middle button | Partial | pointer events only; right-click opens Copy / Select All on selectable text |
+| Right/middle button | Supported | pointer events and `onAuxClick`; right-click opens Copy / Select All on selectable text |
 | Text selection by mouse | Supported | selectable Text only; a selection that becomes non-empty cancels the press it began (touchCancel), so a Pressable around selectable text presses on a click, not on a drag |
 | Scroll wheel, touchpad | Supported | handled by the ScrollView's GtkScrolledWindow (smooth and kinetic) |
 | Keyboard focus, `onKeyDown` | Supported | see [Keyboard](#keyboard) |

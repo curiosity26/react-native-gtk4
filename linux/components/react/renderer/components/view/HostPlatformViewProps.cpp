@@ -62,7 +62,27 @@ HostPlatformViewProps::HostPlatformViewProps(
           rawProps,
           "keyUpEvents",
           sourceProps.keyUpEvents,
-          {})) {}
+          {})),
+      tooltip(convertRawProp(context, rawProps, "tooltip", sourceProps.tooltip, {})),
+      onMouseEnter(convertRawProp(
+          context,
+          rawProps,
+          "onMouseEnter",
+          sourceProps.onMouseEnter,
+          false)),
+      onMouseLeave(convertRawProp(
+          context,
+          rawProps,
+          "onMouseLeave",
+          sourceProps.onMouseLeave,
+          false)),
+      onAuxClick(convertRawProp(context, rawProps, "onAuxClick", sourceProps.onAuxClick, false)),
+      onAuxClickCapture(convertRawProp(
+          context,
+          rawProps,
+          "onAuxClickCapture",
+          sourceProps.onAuxClickCapture,
+          false)) {}
 
 void HostPlatformViewProps::setProp(
     const PropsParserContext &context,
@@ -78,6 +98,11 @@ void HostPlatformViewProps::setProp(
     RAW_SET_PROP_SWITCH_CASE_BASIC(autoFocus);
     RAW_SET_PROP_SWITCH_CASE_BASIC(keyDownEvents);
     RAW_SET_PROP_SWITCH_CASE_BASIC(keyUpEvents);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(tooltip);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(onMouseEnter);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(onMouseLeave);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(onAuxClick);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(onAuxClickCapture);
   }
 }
 

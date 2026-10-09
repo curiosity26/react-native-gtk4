@@ -248,6 +248,11 @@ void apply_view_props(GtkWidget *widget, const ViewProps &props,
   gtk_widget_set_opacity(widget, props.opacity);
   rn_widget_set_pointer_events(widget, pointer_events(props.pointerEvents));
   gtk_widget_set_cursor_from_name(widget, cursor_name(props.cursor));
+  // react-native-windows / react-native-macos `tooltip`: GTK's tooltip.
+  const char *tooltip = props.tooltip.empty() ? nullptr : props.tooltip.c_str();
+  if (g_strcmp0(gtk_widget_get_tooltip_text(widget), tooltip) != 0) {
+    gtk_widget_set_tooltip_text(widget, tooltip);
+  }
   if (RN_IS_VIEW(widget)) {
     // Keyboard focus (Tab, clicks, ref.focus()); see GtkKeyboardHandler.
     gtk_widget_set_focusable(widget, props.focusable);

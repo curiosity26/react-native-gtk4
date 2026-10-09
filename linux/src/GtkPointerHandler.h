@@ -9,6 +9,11 @@
 // <Text> span under it; moves and the release go to that same target.
 // Pointer events target whatever is under the pointer now.
 //
+// Desktop mouse props, as react-native-windows and react-native-macos spell
+// them: onMouseEnter / onMouseLeave (the mouse only, not bubbling, like
+// pointerenter/leave) and onAuxClick (a middle or right click: press and
+// release on the same view; bubbles).
+//
 // Selectable text selects with the mouse like a GtkLabel: drag, double-
 // click for words, triple-click for the paragraph, Shift+click to extend.
 // Ctrl+C (or Ctrl+Insert) and the right-click Copy copy it. A selection
@@ -16,6 +21,7 @@
 #pragma once
 
 #include <gtk/gtk.h>
+#include <react/renderer/components/view/PointerEvent.h>
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
@@ -93,6 +99,12 @@ class GtkPointerHandler {
   void dispatchPointer(const char *type, const Target &target,
                        const Input &input);
   void updateHover(const Input &input, const Target &target);
+  facebook::react::PointerEvent pointerEvent(const char *type,
+                                             const Target &target,
+                                             const Input &input) const;
+  // The view's own onMouseEnter / onMouseLeave props.
+  bool listensForMouse(const Target &target, const char *event) const;
+  void dispatchMouse(const char *type, const Target &target, const Input &input);
   void showCopyMenu(const Target &target, double x, double y);
   // A press focuses the focusable view it lands in (as on the web).
   void focusOnPress(const Target &target);
@@ -109,6 +121,8 @@ class GtkPointerHandler {
   std::unordered_map<int, ActiveTouch> touches_;
   std::vector<Target> hovered_;  // root first
   Target pressTarget_;           // for click: where the button went down
+  Target auxPressTarget_;        // for auxClick
+  int auxButton_ = 0;
   int buttons_ = 0;              // W3C buttons bitmask
   bool realInput_ = true;
   GtkEventController *shortcuts_;

@@ -223,6 +223,7 @@ function Buttons() {
   const [count, setCount] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState(null);
+  const [mouseInside, setMouseInside] = useState(false);
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Section
@@ -272,6 +273,33 @@ function Buttons() {
           <Button title="Button" onPress={() => log('Button onPress')} />
           <Button title="color" color="#3584E4" onPress={() => log('colored Button onPress')} />
           <Button title="Disabled" disabled onPress={() => log('should not fire')} />
+        </View>
+      </Section>
+      <Section
+        title="Desktop mouse props"
+        hint="react-native-windows / react-native-macos spelling: onMouseEnter and onMouseLeave, tooltip (hover and wait), and onAuxClick (middle or right click).">
+        <View style={styles.wrap}>
+          <View
+            style={[styles.mouseBox, mouseInside && styles.mouseBoxInside]}
+            onMouseEnter={() => {
+              setMouseInside(true);
+              log('onMouseEnter');
+            }}
+            onMouseLeave={() => {
+              setMouseInside(false);
+              log('onMouseLeave');
+            }}>
+            <Text style={styles.body}>{mouseInside ? 'the mouse is inside' : 'move the mouse in'}</Text>
+          </View>
+          <View tooltip="A GTK tooltip, from the tooltip prop" style={styles.mouseBox}>
+            <Text style={styles.body}>hover for a tooltip</Text>
+          </View>
+          <Pressable
+            style={styles.mouseBox}
+            onPress={() => log('onPress (left click)')}
+            onAuxClick={e => log(`onAuxClick button ${e.nativeEvent.button} (${e.nativeEvent.button === 1 ? 'middle' : 'right'})`)}>
+            <Text style={styles.body}>left, middle or right click</Text>
+          </Pressable>
         </View>
       </Section>
       <Section
@@ -1050,6 +1078,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   focusBoxFocused: {borderColor: PlatformColor('accent_bg_color')},
+  mouseBox: {
+    width: 220,
+    height: 70,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PlatformColor('view_bg_color'),
+    borderWidth: 1,
+    borderColor: PlatformColor('borders'),
+  },
+  mouseBoxInside: {backgroundColor: PlatformColor('accent_bg_color')},
   pressBox: {padding: 10, borderRadius: 8, backgroundColor: PlatformColor('shade_color')},
   segmented: {
     flexDirection: 'row',

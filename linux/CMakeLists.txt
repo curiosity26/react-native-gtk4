@@ -207,7 +207,7 @@ target_sources(rrc_view PRIVATE
   ${RNGTK_PROPS_DIR}/react/renderer/components/view/HostPlatformViewProps.cpp)
 # A header that newly shadows another isn't in any object's depfile, so
 # Ninja wouldn't rebuild existing builds against it: bump this whenever
-# the replaced headers change, so every consumer's flags change too.
+# a header joins the replaced set, so every consumer's flags change too.
 target_compile_definitions(react_renderer_graphics PUBLIC RNGTK_HEADER_OVERRIDES=3)
 target_sources(rrc_text PRIVATE
   ${RNGTK_PROPS_DIR}/react/renderer/components/text/HostPlatformParagraphProps.cpp)
@@ -508,6 +508,9 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-mouse-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryMouse --width 940 --height 680 --self-test)
 add_test(NAME gallery-keyboard-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryKeyboard --width 940 --height 680 --self-test)

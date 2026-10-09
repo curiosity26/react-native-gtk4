@@ -1,7 +1,7 @@
 // The GTK host's view props (linux/CMakeLists.txt puts this directory ahead
 // of ReactCommon's platform/cxx, whose HostPlatformViewProps is
-// BaseViewProps alone): keyboard focus and keys, spelled as in
-// react-native-windows and react-native-macos.
+// BaseViewProps alone): keyboard focus and keys, and the desktop mouse
+// props, spelled as in react-native-windows and react-native-macos.
 #pragma once
 
 #include <react/renderer/components/view/BaseViewProps.h>
@@ -51,6 +51,15 @@ class HostPlatformViewProps : public BaseViewProps {
   bool autoFocus{false};
   std::vector<HandledKeyEvent> keyDownEvents{};
   std::vector<HandledKeyEvent> keyUpEvents{};
+
+  // A GTK tooltip.
+  std::string tooltip{};
+  // Whether JS listens for these (the view config sends `true`), so the
+  // host only sends the events views ask for.
+  bool onMouseEnter{false};
+  bool onMouseLeave{false};
+  bool onAuxClick{false};
+  bool onAuxClickCapture{false};
 };
 
 } // namespace facebook::react

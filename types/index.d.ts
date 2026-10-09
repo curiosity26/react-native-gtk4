@@ -67,7 +67,7 @@ export type HandledKeyEvent = {
   shiftKey?: boolean;
 };
 
-/** The View props the Linux host adds (docs/components.md#keyboard). */
+/** The View props the Linux host adds (docs/components.md). */
 export type ViewPropsLinux = {
   keyDownEvents?: ReadonlyArray<HandledKeyEvent>;
   keyUpEvents?: ReadonlyArray<HandledKeyEvent>;
@@ -75,4 +75,10 @@ export type ViewPropsLinux = {
   enableFocusRing?: boolean;
   /** Take keyboard focus once mounted. */
   autoFocus?: boolean;
+  /** A GTK tooltip. */
+  tooltip?: string;
+  onMouseEnter?: (event: {nativeEvent: {clientX: number; clientY: number; offsetX: number; offsetY: number}}) => void;
+  onMouseLeave?: (event: {nativeEvent: {clientX: number; clientY: number; offsetX: number; offsetY: number}}) => void;
+  /** A middle (button 1) or right (button 2) click. */
+  onAuxClick?: (event: {nativeEvent: {button: number}}) => void;
 };
