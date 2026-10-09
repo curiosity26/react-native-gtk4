@@ -1,10 +1,10 @@
 #include "RNGtkHost.h"
 
 #include "DevUI.h"
-#include "GtkMessageQueueThread.h"
 #include "GtkImageLoader.h"
 #include "GtkMountingManager.h"
 #include "GtkPointerHandler.h"
+#include "JsMessageQueueThread.h"
 #include "PangoText.h"
 #include "PlatformConstantsModule.h"
 #include "rn_view.h"
@@ -40,8 +40,20 @@ constexpr SurfaceId kLogBoxSurfaceId = 1001;
 // React Native's event beat expects RunLoopObserverManager::onRender().
 struct ObserverSource {
   GSource source;
-  RunLoopObserverManager *observers;
+  RNGtkHost *host;
 };
+
+// Runs `fn` on the GTK main thread: now, if this is it; later otherwise.
+void on_main(std::function<void()> fn) {
+  g_main_context_invoke_full(
+      nullptr, G_PRIORITY_DEFAULT,
+      [](gpointer data) -> gboolean {
+        (*static_cast<std::function<void()> *>(data))();
+        return G_SOURCE_REMOVE;
+      },
+      new std::function<void()>(std::move(fn)),
+      [](gpointer data) { delete static_cast<std::function<void()> *>(data); });
+}
 
 void logToConsole(const std::string &message, unsigned int level) {
   const char *tag = level >= ReactNativeLogLevelError     ? "error"
@@ -62,8 +74,9 @@ LayoutConstraints fixedSize(float width, float height) {
 }  // namespace
 
 // Shows LogBox's surface over the app. LogBoxModule calls show() and hide()
-// from JS, i.e. on the main thread here; it is created and destroyed with
-// each JS instance, so destroyContentView() can come from the reload thread.
+// on the JS thread (surface calls are thread-safe there; the widget is
+// shown on the main thread); it is created and destroyed with each JS
+// instance, so destroyContentView() can come from the reload thread.
 class RNGtkHost::LogBoxDelegate : public SurfaceDelegate {
  public:
   LogBoxDelegate(RNGtkHost &host, GtkWidget *root) : host_(host), root_(root) {}
@@ -91,7 +104,7 @@ class RNGtkHost::LogBoxDelegate : public SurfaceDelegate {
 
   void show() override {
     showing_ = true;
-    gtk_widget_set_visible(root_, TRUE);
+    setVisible(true);
     auto &reactHost = *host_.reactHost_;
     if (!reactHost.isSurfaceRunning(kLogBoxSurfaceId)) {
       reactHost.startSurface(kLogBoxSurfaceId, appKey_,
@@ -104,12 +117,20 @@ class RNGtkHost::LogBoxDelegate : public SurfaceDelegate {
   void hide() override {
     showing_ = false;
     host_.reactHost_->stopSurface(kLogBoxSurfaceId);
-    gtk_widget_set_visible(root_, FALSE);
+    setVisible(false);
   }
 
   bool isShowing() override { return showing_; }
 
  private:
+  void setVisible(bool visible) {
+    GtkWidget *root = GTK_WIDGET(g_object_ref(root_));
+    on_main([root, visible] {
+      gtk_widget_set_visible(root, visible);
+      g_object_unref(root);
+    });
+  }
+
   RNGtkHost &host_;
   GtkWidget *root_;
   std::string appKey_;
@@ -117,9 +138,16 @@ class RNGtkHost::LogBoxDelegate : public SurfaceDelegate {
   std::atomic<bool> showing_{false};
 };
 
+// The event beat: React Native flushes queued events (input, scroll, image
+// loads) into JS when the UI loop is about to sleep, as with iOS's main
+// run loop observer. induce() only schedules work on the JS thread.
 gboolean RNGtkHost::beforeWaiting(GSource *source, gint *timeout) {
   *timeout = -1;
-  reinterpret_cast<ObserverSource *>(source)->observers->onRender();
+  RNGtkHost *host = reinterpret_cast<ObserverSource *>(source)->host;
+  // Not while a JS instance is being created: ReactHost then replaces the
+  // observer that onRender() reads (on its reload thread).
+  std::lock_guard<std::mutex> lock(host->beatMutex_);
+  if (!host->creatingInstance_) host->runLoopObservers_->onRender();
   return FALSE;
 }
 
@@ -127,6 +155,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     : options_(std::move(options)), overlay_(overlay) {
   mountingManager_ =
       std::make_shared<GtkMountingManager>([this](SurfaceId surfaceId) {
+        if (!reactHost_) return;  // shutting down
         reactHost_->runOnScheduler([surfaceId](Scheduler &scheduler) {
           scheduler.reportMount(surfaceId);
         });
@@ -135,14 +164,28 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
 
   auto contextContainer = std::make_shared<const ContextContainer>();
   // Called once per JS instance, i.e. again on every reload.
+  // Called once per JS instance, i.e. again on every reload: a new JS
+  // thread each time. The instance is ready (and the event beat may run
+  // again) once ReactHost hands the mounting manager its UIManager.
   contextContainer->insert(MessageQueueThreadFactoryKey,
                            MessageQueueThreadFactory([this]() {
+                             {
+                               std::lock_guard<std::mutex> lock(beatMutex_);
+                               creatingInstance_ = true;
+                             }
                              auto queue =
-                                 std::make_shared<GtkMessageQueueThread>();
-                             queue_ = queue;
+                                 std::make_shared<JsMessageQueueThread>();
+                             {
+                               std::lock_guard<std::mutex> lock(queueMutex_);
+                               queue_ = queue;
+                             }
                              instances_++;
                              return queue;
                            }));
+  mountingManager_->setOnUIManagerChanged([this] {
+    std::lock_guard<std::mutex> lock(beatMutex_);
+    creatingInstance_ = false;
+  });
   contextContainer->insert(HttpClientFactoryKey, getHttpClientFactory());
   contextContainer->insert(WebSocketClientFactoryKey,
                            getWebSocketClientFactory());
@@ -218,19 +261,33 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   // one, and the values reach widgets through
   // GtkMountingManager::synchronouslyUpdateViewOnUIThread.
   auto animatedProvider = std::make_shared<NativeAnimatedNodesManagerProvider>(
+      // Called on the JS thread; the frame callback is GTK's, so it's
+      // added and removed on the main thread.
       [this](std::function<void()> &&onRender, bool /*isAsync*/) {
-        onAnimationRender_ = std::move(onRender);
-        if (!animationTick_) {
-          animationTick_ = gtk_widget_add_tick_callback(
-              GTK_WIDGET(overlay_), onAnimationFrame, this, nullptr);
+        {
+          std::lock_guard<std::mutex> lock(animationMutex_);
+          onAnimationRender_ = std::make_shared<std::function<void()>>(
+              std::move(onRender));
         }
+        on_main([this] {
+          if (!animationTick_) {
+            animationTick_ = gtk_widget_add_tick_callback(
+                GTK_WIDGET(overlay_), onAnimationFrame, this, nullptr);
+          }
+        });
       },
       [this](bool /*isAsync*/) {
-        onAnimationRender_ = nullptr;
-        if (animationTick_) {
-          gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_), animationTick_);
-          animationTick_ = 0;
+        {
+          std::lock_guard<std::mutex> lock(animationMutex_);
+          onAnimationRender_ = nullptr;
         }
+        on_main([this] {
+          if (animationTick_) {
+            gtk_widget_remove_tick_callback(GTK_WIDGET(overlay_),
+                                            animationTick_);
+            animationTick_ = 0;
+          }
+        });
       });
 
   reactHost_ = std::make_unique<ReactHost>(
@@ -258,7 +315,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
                                nullptr, nullptr};
   observerSource_ = g_source_new(&funcs, sizeof(ObserverSource));
   auto *os = reinterpret_cast<ObserverSource *>(observerSource_);
-  os->observers = runLoopObservers_.get();
+  os->host = this;
   g_source_set_name(observerSource_, "react-native-run-loop-observer");
   g_source_attach(observerSource_, nullptr);
 }
@@ -266,7 +323,15 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
 gboolean RNGtkHost::onAnimationFrame(GtkWidget *, GdkFrameClock *,
                                      gpointer self) {
   auto *host = static_cast<RNGtkHost *>(self);
-  if (host->onAnimationRender_) host->onAnimationRender_();
+  std::shared_ptr<std::function<void()>> render;
+  {
+    std::lock_guard<std::mutex> lock(host->animationMutex_);
+    render = host->onAnimationRender_;
+  }
+  // C++ Animated steps on the main thread (its node graph is shared with
+  // the JS thread under its own locks) and applies values through
+  // synchronouslyUpdateViewOnUIThread.
+  if (render) (*render)();
   return G_SOURCE_CONTINUE;
 }
 
@@ -281,8 +346,10 @@ RNGtkHost::~RNGtkHost() {
     g_source_destroy(observerSource_);
     g_source_unref(observerSource_);
   }
+  // Stop the surfaces (their last mounts land here), then destroy
+  // ReactHost, which joins the JS thread.
   reactHost_->stopAllSurfaces();
-  if (auto queue = queue_.lock()) queue->drain();
+  reactHost_.reset();
 }
 
 bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
@@ -399,8 +466,12 @@ void RNGtkHost::showDevMenu() {
 }
 
 bool RNGtkHost::isIdle() const {
-  auto queue = queue_.lock();
-  return !queue || !queue->hasPendingWork();
+  std::shared_ptr<JsMessageQueueThread> queue;
+  {
+    std::lock_guard<std::mutex> lock(queueMutex_);
+    queue = queue_.lock();
+  }
+  return (!queue || queue->isIdle()) && mountingManager_->isIdle();
 }
 
 bool RNGtkHost::isLogBoxShowing() const {

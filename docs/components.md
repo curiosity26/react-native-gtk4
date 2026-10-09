@@ -143,16 +143,19 @@ of it. The `GalleryLists` page (`--module GalleryLists --self-test`) tests:
 | `FlatList`, `SectionList`, `VirtualizedList` (windowing, `inverted`, `horizontal`, `onEndReached`, `scrollToIndex`) | Supported | |
 
 FlatList with 10,000 rows (`getItemLayout`, stable callbacks), scrolled
-by a wheel step every frame on the GNOME Wayland session:
+by a wheel step every frame on the GNOME Wayland session (a VM). JS runs
+on its own thread (see [architecture.md](architecture.md)):
 
-| Scroll speed | frame p50 | frame p95 | max mounted views |
-| --- | --- | --- | --- |
-| 15 px/frame | 16.7 ms | 30.6 ms | 915 |
-| 59 px/frame | 16.7 ms | 33.0 ms | 1003 |
+| Scroll speed | frame p50 | frame p95 | main-thread CPU per frame | max mounted views |
+| --- | --- | --- | --- | --- |
+| none (baseline) | 16.7 ms | 16.8 ms | 0.9 ms | |
+| 15 px/frame | 16.7 ms | 33.5 ms | 1.1 ms (10.9 ms with JS on the main thread) | 917 |
+| 59 px/frame | 16.7 ms | 34.1 ms | 1.2 ms (11.7 ms with JS on the main thread) | 1003 |
 
-Mounting costs about 0.1 ms per frame. The slow frames are VirtualizedList
-rendering new batches of rows in JS, which runs on the GTK main thread for
-now. X11 measures the same.
+Moving JS off the GTK thread cut the main thread's work per scrolled frame
+about tenfold. The p95 didn't change: in those frames the main thread is
+idle, and this VM's GPU and compositor set the limit. X11 measures the
+same.
 
 ## Image
 
