@@ -22,8 +22,9 @@ The tag runs the workflow:
   `prebuilt-hosts.json` (the four tarballs' sha256, the package's host
   source id, the release's download URL) into the package, runs the
   tests, creates the GitHub release with the tarballs and the
-  CHANGELOG.md section as notes, and publishes the package to GitHub
-  Packages.
+  CHANGELOG.md section as notes, and publishes the package and the
+  library ports in `packages/` (at the same version: bump theirs too) to
+  GitHub Packages.
 
 Running the workflow by hand (Actions, Release, Run workflow) is a dry
 run: it builds and packs the hosts and runs `npm publish --dry-run`, and

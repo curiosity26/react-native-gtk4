@@ -52,3 +52,7 @@ out-of-tree platform like react-native-windows and react-native-macos.
   and aarch64 (Ubuntu 24.04 and derivatives), and `run-linux` and
   `package-linux` use them instead of building React Native and Hermes
   (`RNGTK_NO_PREBUILT=1` builds from source).
+- Community library ports in `packages/`, autolinked: async-storage (JSON
+  files under `$XDG_DATA_HOME/<app id>`), netinfo (GNetworkMonitor and
+  NetworkManager), safe-area-context (`initialWindowMetrics`) and
+  vector-icons (fonts through fontconfig).
