@@ -168,6 +168,30 @@ describe('createLinuxResolver', () => {
     );
   });
 
+  test("uses a listed package's pure-JS variant for another platform", () => {
+    const sac = path.join(app, 'node_modules', 'react-native-safe-area-context', 'src');
+    write(path.join(sac, 'SafeAreaContext.js'));
+    write(path.join(sac, 'NativeSafeAreaProvider.js'));
+    write(path.join(sac, 'NativeSafeAreaProvider.windows.tsx'));
+    write(path.join(sac, 'InitialWindow.js'));
+    const from = path.join(sac, 'SafeAreaContext.js');
+    assert.equal(
+      resolve(from, './NativeSafeAreaProvider').filePath,
+      path.join(sac, 'NativeSafeAreaProvider.windows.tsx'),
+    );
+    // No variant: unchanged.
+    assert.equal(resolve(from, './InitialWindow').filePath, path.join(sac, 'InitialWindow.js'));
+    // Other platforms and unlisted packages: unchanged.
+    assert.equal(
+      resolve(from, './NativeSafeAreaProvider', 'android').filePath,
+      path.join(sac, 'NativeSafeAreaProvider.js'),
+    );
+    const other = path.join(app, 'node_modules', 'unlisted');
+    write(path.join(other, 'A.js'));
+    write(path.join(other, 'A.windows.js'));
+    assert.equal(resolve(path.join(other, 'B.js'), './A').filePath, path.join(other, 'A.js'));
+  });
+
   test('does nothing for other platforms', () => {
     const from = path.join(rn, 'Libraries', 'Utilities', 'Thing.js');
     assert.equal(

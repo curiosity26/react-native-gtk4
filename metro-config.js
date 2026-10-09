@@ -24,6 +24,14 @@ const OVERRIDES_DIR = path.join(PACKAGE_DIR, 'overrides');
 const RN_SEGMENT = `${path.sep}node_modules${path.sep}react-native${path.sep}`;
 const SOURCE_EXTS = ['.js', '.jsx', '.ts', '.tsx'];
 const UPSTREAM_PREFIXES = ['react-native-upstream/', 'react-native/'];
+// Third-party packages whose native parts Linux doesn't have yet (native
+// modules come with autolinking, Phase 3), but which ship pure-JS
+// variants for another platform that work here. React Native's app
+// template uses react-native-safe-area-context.
+const JS_FALLBACK_PLATFORMS = {
+  'react-native-safe-area-context': 'windows',
+};
+const NM_SEGMENT = `${path.sep}node_modules${path.sep}`;
 
 function isFile(p) {
   try {
@@ -81,9 +89,29 @@ function linuxReplacement(rnDir, modulePath, resolvedNormally) {
 }
 
 /**
+ * For a file in a package listed in JS_FALLBACK_PLATFORMS, its variant for
+ * that platform (Foo.windows.tsx next to Foo.tsx), or null.
+ */
+function jsFallback(filePath) {
+  const i = filePath.lastIndexOf(NM_SEGMENT);
+  if (i === -1) return null;
+  const parts = filePath.slice(i + NM_SEGMENT.length).split(path.sep);
+  const name = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+  const platform = JS_FALLBACK_PLATFORMS[name];
+  if (!platform) return null;
+  const base = stripSourceExt(filePath);
+  if (base === filePath || /\.(linux|native)$/.test(base)) return null;
+  for (const ext of SOURCE_EXTS) {
+    const candidate = `${base}.${platform}${ext}`;
+    if (isFile(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
  * Wraps a Metro resolveRequest so that, for platform 'linux', modules inside
  * react-native resolve to overrides/ or the android variant. Third-party
- * packages resolve normally.
+ * packages resolve normally, except the JS_FALLBACK_PLATFORMS ones.
  */
 function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
   let knownRnDir;
@@ -142,7 +170,10 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     if (resolution) {
       if (resolution.type !== 'sourceFile') return resolution;
       const rnDir = reactNativeDirOf(resolution.filePath, knownRnDir);
-      if (!rnDir) return resolution;
+      if (!rnDir) {
+        const fallback = jsFallback(resolution.filePath);
+        return fallback ? {type: 'sourceFile', filePath: fallback} : resolution;
+      }
       const replacement = linuxReplacement(
         rnDir,
         stripSourceExt(resolution.filePath),
@@ -225,6 +256,7 @@ function getDefaultConfig(projectRoot) {
 }
 
 module.exports = {
+  JS_FALLBACK_PLATFORMS,
   withLinux,
   getDefaultConfig,
   createLinuxResolver,

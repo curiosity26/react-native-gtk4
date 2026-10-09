@@ -71,8 +71,9 @@ reloading from Metro's terminal does nothing.
   default (`--no-inspector` turns that off). The app is listed in Metro's
   `/json/list` as a Fusebox target, and CDP `Runtime.evaluate` through the
   proxy works. `j` in Metro and "Open DevTools" in the dev menu
-  (`POST /open-debugger`) should open DevTools in Chrome; that wasn't
-  tried on the test VM.
+  (`POST /open-debugger`) open React Native DevTools, an Electron app
+  Metro downloads into `~/.cache/dotslash`. On Ubuntu 24.04 it needs an
+  AppArmor profile first: see [Troubleshooting](#troubleshooting).
 - **Networking for apps.** The same libsoup clients back `fetch`,
   `XMLHttpRequest` and `WebSocket`, in release builds too.
 
@@ -142,5 +143,45 @@ App.js is restored when the script exits.
   as strings.
 - **Keyboard shortcuts aren't tested automatically.** AT-SPI couldn't
   synthesize key events on the test VM. The script calls the same reload
-  that Ctrl+R calls, but the key bindings themselves (Ctrl+R, Ctrl+D) need
-  a check by hand.
+  that Ctrl+R calls; Ctrl+R, Ctrl+D, Ctrl+M, the dev menu's Reload, the ☰
+  button and Metro's `r` were checked by hand on GNOME Wayland.
+
+## Troubleshooting
+
+### `j` fails: "The SUID sandbox helper binary was found, but is not configured correctly"
+
+React Native DevTools is an Electron app. Ubuntu 24.04 (and Linux Mint 22,
+which is based on it) restricts unprivileged user namespaces through
+AppArmor (`kernel.apparmor_restrict_unprivileged_userns = 1`), so Electron
+falls back to its setuid `chrome-sandbox` helper, which isn't set up, and
+aborts: `Debugger exited with non-zero code (code: null, signal: SIGTRAP)`.
+This affects every React Native project on those systems; the app side is
+fine (Metro's `/json/list` lists it).
+
+**Recommended:** give DevTools an AppArmor profile that allows user
+namespaces, the way Ubuntu does for Chrome. The wildcard path keeps working
+when React Native updates DevTools.
+
+```sh
+sudo tee /etc/apparmor.d/react-native-devtools >/dev/null <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile react-native-devtools "/home/*/.cache/dotslash/**/React Native DevTools-linux-*/React Native DevTools" flags=(unconfined) {
+  userns,
+  include if exists <local/react-native-devtools>
+}
+PROFILE
+sudo apparmor_parser -r /etc/apparmor.d/react-native-devtools
+```
+
+**Quick alternative:** do what the error says, for the DevTools version it
+names. The directory changes when React Native updates DevTools, so this
+has to be redone then.
+
+```sh
+d="$HOME/.cache/dotslash/<directories from the error>/React Native DevTools-linux-<arch>"
+sudo chown root:root "$d/chrome-sandbox" && sudo chmod 4755 "$d/chrome-sandbox"
+```
+
+Then press `j` again.

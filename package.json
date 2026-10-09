@@ -21,24 +21,36 @@
       "types": "./types/index.d.ts"
     },
     "./metro-config": "./metro-config.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./react-native.config.js": "./react-native.config.js"
   },
   "types": "types/index.d.ts",
   "files": [
     "metro-config.js",
     "overrides/",
-    "types/"
+    "types/",
+    "react-native.config.js",
+    "lib/",
+    "template/",
+    "linux/",
+    "!linux/src/main.cc",
+    "!linux/tests/",
+    "scripts/fetch-rn-deps.py",
+    "scripts/build-hermes.sh",
+    "rn-version.properties"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
     "bundle:hello-world": "npm --prefix examples/hello-world run bundle",
     "start:hello-world": "npm --prefix examples/hello-world start",
     "dev:hello-world": "scripts/dev-hello-world.sh",
+    "dev:showcase": "scripts/dev-hello-world.sh --module Showcase --width 1100 --height 780",
     "test:dev-loop": "scripts/test-dev-loop.sh",
     "spike:build": "cmake -S spike -B spike/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build spike/build",
     "spike:test:x11": "scripts/run-headless.sh x11 -- ctest --test-dir spike/build --output-on-failure",
     "spike:test:wayland": "scripts/run-headless.sh wayland -- ctest --test-dir spike/build --output-on-failure",
-    "spike:bench": "scripts/bench-matrix.sh"
+    "spike:bench": "scripts/bench-matrix.sh",
+    "test:new-app": "scripts/test-new-app.sh"
   },
   "peerDependencies": {
     "react-native": "0.87.1"
