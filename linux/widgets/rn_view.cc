@@ -31,14 +31,78 @@ struct Extras {
 
 }  // namespace
 
-struct _RNView {
-  GtkWidget parent_instance;
+typedef struct {
   RNViewStyle style;
   Extras *extras;  // nullptr until a shadow, filter or gradient is set
   gboolean no_focus_ring;
+  gboolean accessible_hidden;
+} RNViewPrivate;
+
+static void rn_view_accessible_range_init(GtkAccessibleRangeInterface *iface);
+
+static void rn_view_accessible_init(GtkAccessibleInterface *iface);
+
+G_DEFINE_TYPE_WITH_CODE(RNView, rn_view, GTK_TYPE_WIDGET,
+                        G_ADD_PRIVATE(RNView)
+                        G_IMPLEMENT_INTERFACE(GTK_TYPE_ACCESSIBLE,
+                                              rn_view_accessible_init))
+
+// RNRangeView: an RNView that is also a GtkAccessibleRange, for views
+// with a value (GTK gives AT-SPI's Value interface by type).
+struct _RNRangeView {
+  RNView parent_instance;
 };
 
-G_DEFINE_FINAL_TYPE(RNView, rn_view, GTK_TYPE_WIDGET)
+G_DEFINE_FINAL_TYPE_WITH_CODE(RNRangeView, rn_range_view, RN_TYPE_VIEW,
+                              G_IMPLEMENT_INTERFACE(GTK_TYPE_ACCESSIBLE_RANGE,
+                                                    rn_view_accessible_range_init))
+
+static RNViewPrivate *priv(RNView *self) {
+  return static_cast<RNViewPrivate *>(rn_view_get_instance_private(self));
+}
+
+// A view hidden from assistive technologies lists no children (GTK 4.14
+// lifts a hidden element's children into its parent).
+static GtkAccessibleInterface *parent_accessible_iface;
+
+static GtkAccessible *rn_view_get_first_accessible_child(GtkAccessible *self) {
+  if (priv(RN_VIEW(self))->accessible_hidden) return nullptr;
+  return parent_accessible_iface->get_first_accessible_child(self);
+}
+
+static void rn_view_accessible_init(GtkAccessibleInterface *iface) {
+  parent_accessible_iface =
+      static_cast<GtkAccessibleInterface *>(g_type_interface_peek_parent(iface));
+  iface->get_first_accessible_child = rn_view_get_first_accessible_child;
+}
+
+void rn_view_set_accessible_hidden(RNView *self, gboolean hidden) {
+  hidden = !!hidden;
+  if (priv(self)->accessible_hidden == hidden) return;
+  priv(self)->accessible_hidden = hidden;
+  if (hidden) {
+    gtk_accessible_update_state(GTK_ACCESSIBLE(self), GTK_ACCESSIBLE_STATE_HIDDEN,
+                                TRUE, -1);
+  } else {
+    gtk_accessible_reset_state(GTK_ACCESSIBLE(self), GTK_ACCESSIBLE_STATE_HIDDEN);
+  }
+}
+
+enum { SIGNAL_SET_ACCESSIBLE_VALUE, N_SIGNALS };
+static guint rn_view_signals[N_SIGNALS];
+
+// A screen reader setting a range view's value (an adjustable View).
+static gboolean rn_view_set_current_value(GtkAccessibleRange *range,
+                                          double value) {
+  gboolean handled = FALSE;
+  g_signal_emit(range, rn_view_signals[SIGNAL_SET_ACCESSIBLE_VALUE], 0, value,
+                &handled);
+  return handled;
+}
+
+static void rn_view_accessible_range_init(GtkAccessibleRangeInterface *iface) {
+  iface->set_current_value = rn_view_set_current_value;
+}
 
 static GQuark frame_quark() {
   static GQuark q = g_quark_from_static_string("rn-frame");
@@ -478,13 +542,13 @@ static void rn_view_size_allocate(GtkWidget *widget, int /*width*/,
 
 static void rn_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   RNView *self = RN_VIEW(widget);
-  const RNViewStyle &s = self->style;
+  const RNViewStyle &s = priv(self)->style;
   if (s.backface_hidden && !backface_visible(widget)) return;
   float w = gtk_widget_get_width(widget);
   float h = gtk_widget_get_height(widget);
   GskRoundedRect outline = outline_of(s, w, h);
   bool rounded = has_radius(s);
-  Extras *x = self->extras;
+  Extras *x = priv(self)->extras;
 
   // CSS applies filters left to right: the first one is innermost.
   size_t filters = x ? x->filters.size() : 0;
@@ -549,7 +613,7 @@ static void rn_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   append_border(snapshot, s, outline);
   append_outline(snapshot, s, outline);
 
-  if (!self->no_focus_ring && gtk_widget_has_visible_focus(widget)) {
+  if (!priv(self)->no_focus_ring && gtk_widget_has_visible_focus(widget)) {
     GdkRGBA ring = rn_theme_accent(widget);
     ring.alpha *= 0.5f;
     const float widths[4] = {2, 2, 2, 2};
@@ -634,7 +698,7 @@ static void rn_view_dispose(GObject *object) {
 }
 
 static void rn_view_finalize(GObject *object) {
-  delete RN_VIEW(object)->extras;
+  delete priv(RN_VIEW(object))->extras;
   G_OBJECT_CLASS(rn_view_parent_class)->finalize(object);
 }
 
@@ -646,19 +710,24 @@ static void rn_view_class_init(RNViewClass *klass) {
   widget_class->size_allocate = rn_view_size_allocate;
   widget_class->snapshot = rn_view_snapshot;
   widget_class->focus = rn_view_focus;
+  rn_view_signals[SIGNAL_SET_ACCESSIBLE_VALUE] = g_signal_new(
+      "set-accessible-value", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0,
+      g_signal_accumulator_true_handled, nullptr, nullptr, G_TYPE_BOOLEAN, 1,
+      G_TYPE_DOUBLE);
   widget_class->state_flags_changed = rn_view_state_flags_changed;
   gtk_widget_class_set_css_name(widget_class, "rn-view");
 }
 
 static void rn_view_init(RNView *self) {
-  self->style = RNViewStyle{};
-  self->extras = nullptr;
-  self->no_focus_ring = FALSE;
+  priv(self)->style = RNViewStyle{};
+  priv(self)->extras = nullptr;
+  priv(self)->no_focus_ring = FALSE;
+  priv(self)->accessible_hidden = FALSE;
 }
 
 void rn_view_set_focus_ring(RNView *self, gboolean enabled) {
-  if (self->no_focus_ring == !enabled) return;
-  self->no_focus_ring = !enabled;
+  if (priv(self)->no_focus_ring == !enabled) return;
+  priv(self)->no_focus_ring = !enabled;
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
@@ -666,32 +735,39 @@ GtkWidget *rn_view_new(void) {
   return GTK_WIDGET(g_object_new(RN_TYPE_VIEW, nullptr));
 }
 
+static void rn_range_view_class_init(RNRangeViewClass *) {}
+static void rn_range_view_init(RNRangeView *) {}
+
+GtkWidget *rn_range_view_new(void) {
+  return GTK_WIDGET(g_object_new(RN_TYPE_RANGE_VIEW, nullptr));
+}
+
 void rn_view_set_style(RNView *self, const RNViewStyle *style) {
-  self->style = *style;
+  priv(self)->style = *style;
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
 static Extras &extras(RNView *self) {
-  if (!self->extras) self->extras = new Extras();
-  return *self->extras;
+  if (!priv(self)->extras) priv(self)->extras = new Extras();
+  return *priv(self)->extras;
 }
 
 void rn_view_set_box_shadows(RNView *self, const RNBoxShadow *shadows,
                              guint n) {
-  if (!n && !self->extras) return;
+  if (!n && !priv(self)->extras) return;
   extras(self).shadows.assign(shadows, shadows + n);
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
 void rn_view_set_filters(RNView *self, const RNFilter *filters, guint n) {
-  if (!n && !self->extras) return;
+  if (!n && !priv(self)->extras) return;
   extras(self).filters.assign(filters, filters + n);
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
 void rn_view_set_background_gradients(RNView *self, const RNGradient *gradients,
                                       guint n) {
-  if (!n && !self->extras) return;
+  if (!n && !priv(self)->extras) return;
   auto &list = extras(self).gradients;
   list.clear();
   for (guint i = 0; i < n; i++) {
@@ -705,7 +781,7 @@ void rn_view_set_background_gradients(RNView *self, const RNGradient *gradients,
 
 void rn_view_set_image(RNView *self, GdkTexture *texture, float scale,
                        RNImageFit fit, const GdkRGBA *tint, float blur_radius) {
-  if (!texture && !self->extras) return;
+  if (!texture && !priv(self)->extras) return;
   Extras &x = extras(self);
   g_set_object(&x.image, texture);
   x.image_scale = scale > 0 ? scale : 1;
@@ -717,7 +793,7 @@ void rn_view_set_image(RNView *self, GdkTexture *texture, float scale,
 }
 
 GdkTexture *rn_view_get_image(RNView *self) {
-  return self->extras ? self->extras->image : nullptr;
+  return priv(self)->extras ? priv(self)->extras->image : nullptr;
 }
 
 void rn_view_insert_child(RNView *self, GtkWidget *child, int index) {
@@ -743,7 +819,7 @@ static bool contains(GtkWidget *widget, graphene_point_t p) {
   float w = gtk_widget_get_width(widget), h = gtk_widget_get_height(widget);
   if (p.x < 0 || p.y < 0 || p.x >= w || p.y >= h) return false;
   if (RN_IS_VIEW(widget)) {
-    const RNViewStyle &s = RN_VIEW(widget)->style;
+    const RNViewStyle &s = priv(RN_VIEW(widget))->style;
     if (has_radius(s)) {
       GskRoundedRect r = outline_of(s, w, h);
       return gsk_rounded_rect_contains_point(&r, &p);
@@ -767,7 +843,7 @@ static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
   if (!gtk_widget_get_visible(widget)) return nullptr;
   RNPointerEvents mode = rn_widget_get_pointer_events(widget);
   if (mode == RN_POINTER_EVENTS_NONE) return nullptr;
-  if (RN_IS_VIEW(widget) && RN_VIEW(widget)->style.backface_hidden &&
+  if (RN_IS_VIEW(widget) && priv(RN_VIEW(widget))->style.backface_hidden &&
       !backface_visible(widget)) {
     return nullptr;
   }
@@ -775,7 +851,7 @@ static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
   bool inside = contains(widget, p);
   // Scrollers clip their content.
   // Scroll views (and every other mounted non-RNView control) clip.
-  bool clips = (RN_IS_VIEW(widget) && RN_VIEW(widget)->style.clip_children) ||
+  bool clips = (RN_IS_VIEW(widget) && priv(RN_VIEW(widget))->style.clip_children) ||
                GTK_IS_VIEWPORT(widget) || (react && !RN_IS_VIEW(widget) &&
                                            !RN_IS_TEXT(widget));
   if (clips && !inside) return nullptr;

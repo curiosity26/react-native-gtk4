@@ -24,6 +24,7 @@ class SurfaceDelegate;
 
 namespace rngtk {
 
+class AccessibilityStatus;
 class Appearance;
 class DevUI;
 class JsMessageQueueThread;
@@ -49,6 +50,8 @@ struct RNGtkHostOptions {
   // Follow the desktop's light/dark style (XDG portal). Off, the system
   // counts as light; Appearance.setColorScheme() still switches.
   bool followSystemAppearance = true;
+  // Follow the desktop's screen reader state (AT-SPI). Off, there is none.
+  bool followSystemAccessibility = true;
   // More TurboModules, asked before the host's own.
   facebook::react::TurboModuleProviders extraTurboModules;
 };
@@ -97,6 +100,7 @@ class RNGtkHost {
   GtkKeyboardHandler *keyboardHandler() { return keyboardHandler_.get(); }
   DevUI *devUI() { return devUI_.get(); }
   Appearance &appearance() { return *appearance_; }
+  AccessibilityStatus &accessibilityStatus() { return *accessibilityStatus_; }
   // True when no JS work is queued.
   bool isIdle() const;
   int jsErrorCount() const { return jsErrors_; }
@@ -131,6 +135,9 @@ class RNGtkHost {
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
   void onAppearanceChanged();
+  // AccessibilityInfo.setAccessibilityFocus / announceForAccessibility.
+  void focusForAccessibility(facebook::react::Tag tag);
+  void announce(const std::string &text, GtkAccessibleAnnouncementPriority priority);
   static gboolean beforeWaiting(GSource *source, gint *timeout);
 
   RNGtkHostOptions options_;
@@ -157,6 +164,7 @@ class RNGtkHost {
   std::shared_ptr<DevUI> devUI_;
   // Outlives ReactHost (and its Appearance module).
   std::shared_ptr<Appearance> appearance_;
+  std::shared_ptr<AccessibilityStatus> accessibilityStatus_;
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;

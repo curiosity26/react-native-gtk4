@@ -1,4 +1,4 @@
-# APIs: Appearance, PlatformColor
+# APIs: Appearance, PlatformColor, AccessibilityInfo
 
 React Native's JS APIs as the GTK host implements them. Components are in
 [components.md](components.md).
@@ -84,7 +84,28 @@ wherever a color is read: view styles, text attributes, TextInput, Switch,
 ActivityIndicator and Image tints. On a change the host re-applies the
 mounted views' props (`GtkMountingManager::refreshColors`).
 
-## Testing
+## AccessibilityInfo
+
+React Native's AccessibilityInfo calls iOS's `AccessibilityManager` module
+on every platform but Android; the host provides one in that shape
+(`linux/src/AccessibilityInfo.cc`).
+
+| API | Linux |
+| --- | --- |
+| `isScreenReaderEnabled()`, `screenReaderChanged` | the AT-SPI bus's `org.a11y.Status` `ScreenReaderEnabled`, which GNOME sets while Orca runs; followed live |
+| `isReduceMotionEnabled()`, `reduceMotionChanged` | GTK's `gtk-enable-animations` off (GNOME's Reduce Animation) |
+| `announceForAccessibility(text)` | `gtk_accessible_announce`, medium priority |
+| `announceForAccessibilityWithOptions(text, {priority})` | `'high'` / `'low'` set the priority; `queue` has no GTK equivalent |
+| `setAccessibilityFocus(reactTag)` | the view takes keyboard focus, which is what Orca follows (GTK has no separate screen reader focus); a view that isn't focusable is for that once |
+| `sendAccessibilityEvent(ref, 'focus')` | Not yet: ReactCxxPlatform drops Fabric's accessibility events; use `setAccessibilityFocus` |
+| `isBoldTextEnabled`, `isGrayscaleEnabled`, `isInvertColorsEnabled`, `isReduceTransparencyEnabled`, `isDarkerSystemColorsEnabled` | `false` |
+
+`GalleryAccessibility --self-test` checks them (the screen reader as if one
+started, reduce motion by flipping GTK's setting, announcements and focus);
+add `--system-accessibility` to flip the AT-SPI bus's `ScreenReaderEnabled`
+for real (Orca isn't started) and restore it.
+
+## Testing Appearance and PlatformColor
 
 `rn-gtk-host --module GalleryAppearance --self-test` switches the scheme
 with `setColorScheme`, and as if the desktop changed, and checks

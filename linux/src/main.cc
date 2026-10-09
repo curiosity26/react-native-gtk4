@@ -23,6 +23,9 @@
 //   --system-appearance    follow the desktop's light/dark style (self-tests
 //                          are light otherwise); GalleryAppearance then
 //                          flips GNOME's color-scheme and restores it
+//   --system-accessibility follow the AT-SPI bus's screen reader state;
+//                          GalleryAccessibility then flips it (without
+//                          starting Orca) and restores it
 //   --test-animation       before the first reload and after each one,
 //                          hold the card (a TouchableOpacity) and check
 //                          that its native-driver fade runs, then release
@@ -42,6 +45,7 @@
 #include <string>
 #include <vector>
 
+#include "AccessibilityInfo.h"
 #include "Appearance.h"
 #include "DevControls.h"
 #include "DevUI.h"
@@ -87,6 +91,9 @@ struct Options {
   // Follow the desktop's light/dark style in a self-test too; with
   // GalleryAppearance, flip GNOME's color-scheme setting and follow it.
   bool system_appearance = false;
+  // GalleryAccessibility: flip the AT-SPI bus's ScreenReaderEnabled (what
+  // GNOME sets while Orca runs; Orca isn't started) and follow it.
+  bool system_accessibility = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
@@ -1916,6 +1923,232 @@ void add_mouse_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryAccessibility checks
+
+bool is_accessibility() { return opts.module == "GalleryAccessibility"; }
+
+// The app's tree as a screen reader sees it: scripts/a11y-probe.py, run
+// out of process (AT-SPI calls back into this main loop).
+struct Probe {
+  bool running = false, done = false;
+  folly::dynamic result;
+  std::string error;
+} probe;
+
+void run_probe(std::vector<std::string> extra = {}) {
+  probe = Probe{};
+  probe.running = true;
+  std::string script = std::string(RNGTK_SOURCE_DIR) + "/scripts/a11y-probe.py";
+  std::string pid = std::to_string(getpid());
+  std::vector<const char *> argv = {"python3", script.c_str(), "--pid", pid.c_str()};
+  for (const auto &a : extra) argv.push_back(a.c_str());
+  argv.push_back(nullptr);
+  GError *error = nullptr;
+  GSubprocess *proc = g_subprocess_newv(
+      argv.data(), GSubprocessFlags(G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                                    G_SUBPROCESS_FLAGS_STDERR_SILENCE),
+      &error);
+  if (!proc) {
+    probe.error = error->message;
+    probe.done = true;
+    g_clear_error(&error);
+    return;
+  }
+  g_subprocess_communicate_utf8_async(
+      proc, nullptr, nullptr,
+      [](GObject *source, GAsyncResult *res, gpointer) {
+        char *out = nullptr;
+        GError *err = nullptr;
+        if (!g_subprocess_communicate_utf8_finish(G_SUBPROCESS(source), res, &out,
+                                                  nullptr, &err)) {
+          probe.error = err->message;
+          g_clear_error(&err);
+        } else {
+          try {
+            probe.result = folly::parseJson(out ? out : "");
+            if (probe.result.count("error")) {
+              probe.error = probe.result["error"].asString();
+            }
+          } catch (const std::exception &e) {
+            probe.error = std::string("bad probe output: ") + e.what();
+          }
+        }
+        g_free(out);
+        probe.done = true;
+        g_object_unref(source);
+      },
+      nullptr);
+}
+
+const folly::dynamic *probe_node(const std::string &name, const char *role = nullptr) {
+  if (!probe.result.count("nodes")) return nullptr;
+  for (const auto &n : probe.result["nodes"]) {
+    if (n.count("name") && n["name"].asString() == name &&
+        (!role || n["role"].asString() == role)) {
+      return &n;
+    }
+  }
+  return nullptr;
+}
+
+bool has(const folly::dynamic &list, const char *item) {
+  for (const auto &v : list) {
+    if (v.isString() && v.asString() == item) return true;
+  }
+  return false;
+}
+
+bool a11y_bus = true;  // false: no AT-SPI here, skip the tree checks
+
+// Waits for the probe (reporting its error once); on no AT-SPI bus, says
+// so and skips.
+bool probe_finished(const char *what) {
+  if (!probe.done) return false;
+  if (!probe.error.empty() && probe.running) {
+    probe.running = false;
+    if (probe.error.find("AT-SPI") != std::string::npos) {
+      printf("SKIP %s: %s\n", what, probe.error.c_str());
+      a11y_bus = false;
+    } else {
+      check(false, (std::string(what) + ": " + probe.error).c_str());
+    }
+  }
+  return true;
+}
+
+// The AT-SPI bus's ScreenReaderEnabled, which GNOME sets while Orca runs.
+void set_bus_screen_reader(bool enabled) {
+  g_dbus_connection_call(
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr), "org.a11y.Bus",
+      "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
+      g_variant_new("(ssv)", "org.a11y.Status", "ScreenReaderEnabled",
+                    g_variant_new_boolean(enabled)),
+      nullptr, G_DBUS_CALL_FLAGS_NONE, 2000, nullptr, nullptr, nullptr);
+}
+bool restore_screen_reader = false;
+
+void add_accessibility_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  if (opts.system_accessibility) {
+    app.steps.push_back(Step{"the AT-SPI bus's ScreenReaderEnabled reaches isScreenReaderEnabled",
+                             [] {
+                               restore_screen_reader = true;
+                               set_bus_screen_reader(true);
+                             },
+                             [] { return has_text(app.root, "screen reader: on"); }});
+    app.steps.push_back(Step{"  ...and off again (screenReaderChanged)",
+                             [] {
+                               set_bus_screen_reader(false);
+                               restore_screen_reader = false;
+                             },
+                             [] { return has_text(app.root, "screen reader: off · reduce motion"); }});
+    return;
+  }
+  app.steps.push_back(Step{
+      "AT-SPI: roles, names, descriptions, states, values, actions",
+      [] { run_probe(); },
+      [] {
+        if (!probe_finished("the AT-SPI tree")) return false;
+        if (!a11y_bus || !probe.error.empty()) return true;
+        auto expect = [](bool ok, const char *what) {
+          check(ok, (std::string("  ...") + what).c_str());
+        };
+        const folly::dynamic *n;
+        expect(probe_node("Settings", "heading"), "accessibilityRole header: a heading named by its text");
+        n = probe_node("Save", "push button");
+        expect(n && (*n)["description"] == "Saves the file" &&
+                   has((*n)["actions"], "a11y.activate"),
+               "Button: a push button, accessibilityHint as its description, an activate action");
+        n = probe_node("Wi-Fi", "check box");
+        expect(n && has((*n)["states"], "checked"), "role checkbox + aria-checked: a checked check box");
+        n = probe_node("Bold", "toggle button");
+        expect(n && has((*n)["states"], "pressed"), "togglebutton + checked: a pressed toggle button");
+        n = probe_node("Disabled action", "push button");
+        expect(n && !has((*n)["states"], "sensitive"), "aria-disabled: not sensitive");
+        expect(probe_node("Battery 80%"), "an accessible View is named by its text");
+        n = probe_node("Volume", "slider");
+        expect(n && (*n)["value"].isObject() && (*n)["value"]["now"] == 3.0 &&
+                   (*n)["value"]["max"] == 10.0 && has((*n)["actions"], "a11y.increment"),
+               "adjustable: a slider with accessibilityValue and the accessibilityActions");
+        expect(!probe_node("Hidden from screen readers"), "accessibilityElementsHidden hides the subtree");
+        expect(probe_node("A plain paragraph", "label"), "Text: a label");
+        expect(probe_node("Name field", "text"), "TextInput accessibilityLabel: a named text box");
+        expect(probe_node("Email address", "text"), "accessibilityLabelledBy names the text box");
+        expect(probe_node("Dark mode"), "Switch accessibilityLabel");
+        return true;
+      }});
+  app.steps.push_back(Step{
+      "AT-SPI actions: increment sends onAccessibilityAction, activate presses",
+      [] {
+        if (a11y_bus) run_probe({"--do", "Volume=a11y.increment", "--do", "Save=a11y.activate"});
+      },
+      [] {
+        if (!a11y_bus) return true;
+        if (!probe_finished("AT-SPI actions")) return false;
+        if (!probe.error.empty()) return true;
+        const folly::dynamic *n = probe_node("Volume", "slider");
+        return has_text(app.root, "volume 4 · saves 1") && n &&
+               (*n)["value"]["now"] == 4.0;
+      }});
+  app.steps.push_back(Step{
+      "AT-SPI setting the value: an increment",
+      [] {
+        if (a11y_bus) run_probe({"--set", "Volume=9"});
+      },
+      [] {
+        if (!a11y_bus) return true;
+        if (!probe_finished("AT-SPI set value")) return false;
+        return !probe.error.empty() || has_text(app.root, "volume 5");
+      }});
+  app.steps.push_back(Step{"AccessibilityInfo: no screen reader, reduce motion from GTK", [] {},
+                           [] {
+                             gboolean animations = TRUE;
+                             g_object_get(gtk_settings_get_default(), "gtk-enable-animations",
+                                          &animations, nullptr);
+                             return has_text(app.root, std::string("screen reader: off · reduce motion: ") +
+                                                           (animations ? "off" : "on"));
+                           }});
+  app.steps.push_back(Step{"screenReaderChanged when a screen reader starts",
+                           [] { app.host->accessibilityStatus().setScreenReaderEnabled(true); },
+                           [] { return has_text(app.root, "screen reader: on"); }});
+  static gboolean animations_before = TRUE;
+  app.steps.push_back(Step{
+      "reduceMotionChanged follows gtk-enable-animations",
+      [] {
+        g_object_get(gtk_settings_get_default(), "gtk-enable-animations",
+                     &animations_before, nullptr);
+        g_object_set(gtk_settings_get_default(), "gtk-enable-animations",
+                     !animations_before, nullptr);
+      },
+      [] {
+        return has_text(app.root, std::string("reduce motion: ") +
+                                      (animations_before ? "on" : "off"));
+      }});
+  app.steps.push_back(Step{
+      "  ...and back",
+      [] {
+        g_object_set(gtk_settings_get_default(), "gtk-enable-animations",
+                     animations_before, nullptr);
+      },
+      [] { return has_text(app.root, "changes 3"); }});
+  app.steps.push_back(Step{"announceForAccessibility", [] { click("announce"); },
+                           [] {
+                             return app.host->mountingManager().lastAnnouncement() ==
+                                    "Hello from React Native";
+                           }});
+  app.steps.push_back(Step{"a live region announces its new text", [] { click("count"); },
+                           [] {
+                             return app.host->mountingManager().lastAnnouncement() == "count 1";
+                           }});
+  app.steps.push_back(Step{"setAccessibilityFocus focuses the view for the screen reader",
+                           [] { click("focus-note"); },
+                           [] { return focus_widget() == by_id("note"); }});
+  app.steps.push_back(Step{"  ...which stops being focusable once it loses focus",
+                           [] { gtk_widget_grab_focus(by_id("count")); },
+                           [] { return !gtk_widget_get_focusable(by_id("note")); }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -2008,6 +2241,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
+    add_accessibility_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_mouse() && app.steps.empty()) {
     add_mouse_steps();
     enter(Phase::Steps);
@@ -2048,7 +2284,7 @@ void check_app(bool first) {
     } else if (is_images()) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
-               is_mouse()) {
+               is_mouse() || is_accessibility()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -2226,6 +2462,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .inspector = opts.inspector,
       .followsWindowSize = !opts.self_test,
       .followSystemAppearance = !opts.self_test || opts.system_appearance,
+      .followSystemAccessibility = !opts.self_test || opts.system_accessibility,
       .extraTurboModules = {[](const std::string &name,
                                const std::shared_ptr<facebook::react::CallInvoker>
                                    &jsInvoker)
@@ -2273,7 +2510,8 @@ int usage() {
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
           "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
-          "         [--test-animation] [--system-appearance] [--verbose]\n");
+          "         [--test-animation] [--system-appearance]\n"
+          "         [--system-accessibility] [--verbose]\n");
   return 2;
 }
 
@@ -2304,6 +2542,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
     else if (!strcmp(argv[i], "--test-animation")) opts.test_animation = true;
     else if (!strcmp(argv[i], "--system-appearance")) opts.system_appearance = true;
+    else if (!strcmp(argv[i], "--system-accessibility")) opts.system_accessibility = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {
@@ -2333,6 +2572,7 @@ int main(int argc, char **argv) {
   g_signal_connect(gtk_app, "activate", G_CALLBACK(activate), nullptr);
   int status = g_application_run(G_APPLICATION(gtk_app), 1, argv);
   restore_desktop_color_scheme();
+  if (restore_screen_reader) set_bus_screen_reader(false);
   delete app.host;
   g_object_unref(gtk_app);
   return status ? status : app.exit_code;

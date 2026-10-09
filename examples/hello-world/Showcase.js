@@ -5,6 +5,7 @@
 //   npm run dev:hello-world -- --module Showcase --width 1100 --height 780
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   Appearance,
@@ -26,6 +27,7 @@ import {
   TouchableWithoutFeedback,
   TurboModuleRegistry,
   View,
+  findNodeHandle,
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
@@ -523,6 +525,114 @@ function Keyboard() {
   );
 }
 
+// ---- Accessibility ---------------------------------------------------------
+
+function AccessibilityPage() {
+  const log = useLog();
+  const [wifi, setWifi] = useState(true);
+  const [bold, setBold] = useState(false);
+  const [level, setLevel] = useState(5);
+  const [count, setCount] = useState(0);
+  const [screenReader, setScreenReader] = useState(null);
+  const [reduceMotion, setReduceMotion] = useState(null);
+  const note = useRef(null);
+  useEffect(() => {
+    AccessibilityInfo.isScreenReaderEnabled().then(setScreenReader);
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subs = [
+      AccessibilityInfo.addEventListener('screenReaderChanged', v => {
+        setScreenReader(v);
+        log(`screenReaderChanged: ${v}`);
+      }),
+      AccessibilityInfo.addEventListener('reduceMotionChanged', v => {
+        setReduceMotion(v);
+        log(`reduceMotionChanged: ${v}`);
+      }),
+    ];
+    return () => subs.forEach(s => s.remove());
+  }, [log]);
+  const adjust = name => {
+    if (name === 'increment') setLevel(v => Math.min(10, v + 1));
+    if (name === 'decrement') setLevel(v => Math.max(0, v - 1));
+    log(`onAccessibilityAction ${name}`);
+  };
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="What a screen reader sees"
+        hint="Turn on Orca (Super+Alt+S, or Settings > Accessibility > Screen Reader) and Tab through, or inspect this window in Accerciser: roles, names, hints, states, values and actions come from the accessibility props.">
+        <View accessibilityRole="header">
+          <Text style={styles.sectionTitle}>A heading (accessibilityRole="header")</Text>
+        </View>
+        <View style={styles.wrap}>
+          <Button title="Save" accessibilityHint="Saves the document" onPress={() => log('Save pressed')} />
+          <Pressable
+            role="checkbox"
+            aria-checked={wifi}
+            accessibilityLabel="Wi-Fi"
+            onPress={() => setWifi(v => !v)}
+            style={[styles.btn, {backgroundColor: '#5856D6'}]}>
+            <Text style={styles.btnText}>Wi-Fi: {wifi ? 'on' : 'off'} (checkbox)</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="togglebutton"
+            accessibilityState={{checked: bold}}
+            accessibilityLabel="Bold"
+            onPress={() => setBold(v => !v)}
+            style={[styles.btn, {backgroundColor: bold ? '#007AFF' : '#8E8E93'}]}>
+            <Text style={styles.btnText}>B (toggle button)</Text>
+          </Pressable>
+        </View>
+        <View
+          accessibilityRole="adjustable"
+          accessibilityLabel="Level"
+          accessibilityValue={{min: 0, max: 10, now: level}}
+          accessibilityActions={[{name: 'increment'}, {name: 'decrement'}]}
+          onAccessibilityAction={e => adjust(e.nativeEvent.actionName)}
+          style={styles.row}>
+          <Btn title="−" onPress={() => adjust('decrement')} />
+          <Text style={styles.body}>Level {level} / 10 (an adjustable: a slider with a value and increment/decrement actions)</Text>
+          <Btn title="+" onPress={() => adjust('increment')} />
+        </View>
+        <View accessible style={styles.pressBox}>
+          <Text style={styles.body}>An accessible View</Text>
+          <Text style={styles.hint}>is one element, named by its text</Text>
+        </View>
+        <View aria-hidden style={styles.pressBox}>
+          <Text style={styles.body}>aria-hidden: screen readers skip this box</Text>
+        </View>
+        <View style={styles.row}>
+          <Text nativeID="a11y-email" style={styles.body}>Email</Text>
+          <TextInput accessibilityLabelledBy="a11y-email" style={[styles.input, {width: 240}]} placeholder="labelled by the text before it" />
+        </View>
+        <View style={styles.row} accessibilityLiveRegion="polite">
+          <Text style={styles.body}>Live region: {count} clicks (announced when it changes)</Text>
+        </View>
+        <View style={styles.row}>
+          <Btn title="click" onPress={() => setCount(n => n + 1)} />
+        </View>
+      </Section>
+      <Section title="AccessibilityInfo">
+        <Text style={styles.mono}>isScreenReaderEnabled() = {String(screenReader)}</Text>
+        <Text style={styles.mono}>isReduceMotionEnabled() = {String(reduceMotion)} (GTK's gtk-enable-animations)</Text>
+        <View style={styles.row}>
+          <Btn
+            title="announceForAccessibility"
+            onPress={() => AccessibilityInfo.announceForAccessibility('Hello from React Native on GTK')}
+          />
+          <Btn
+            title="setAccessibilityFocus"
+            onPress={() => AccessibilityInfo.setAccessibilityFocus(findNodeHandle(note.current))}
+          />
+        </View>
+        <View ref={note} accessible style={styles.pressBox}>
+          <Text style={styles.body}>setAccessibilityFocus moves the screen reader here.</Text>
+        </View>
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -925,6 +1035,7 @@ const PAGES = [
   ['Buttons', Buttons],
   ['Inputs', Inputs],
   ['Keyboard', Keyboard],
+  ['Accessibility', AccessibilityPage],
   ['Lists', Lists],
   ['Images', Images],
   ['Animation', Animation],

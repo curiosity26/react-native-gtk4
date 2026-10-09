@@ -1,6 +1,7 @@
 import {AppRegistry} from 'react-native';
 import App from './App';
 import Gallery from './Gallery';
+import GalleryAccessibility from './GalleryAccessibility';
 import GalleryAppearance from './GalleryAppearance';
 import GalleryControls from './GalleryControls';
 import GalleryImages from './GalleryImages';
@@ -19,4 +20,5 @@ AppRegistry.registerComponent('GalleryAppearance', () => GalleryAppearance);
 AppRegistry.registerComponent('GallerySelection', () => GallerySelection);
 AppRegistry.registerComponent('GalleryKeyboard', () => GalleryKeyboard);
 AppRegistry.registerComponent('GalleryMouse', () => GalleryMouse);
+AppRegistry.registerComponent('GalleryAccessibility', () => GalleryAccessibility);
 AppRegistry.registerComponent('Showcase', () => Showcase);

@@ -45,6 +45,10 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     autoFocus: true,
     // A GTK tooltip.
     tooltip: true,
+    // iOS's, which the GTK host maps to AT-SPI too (Android's config
+    // lacks them).
+    accessibilityElementsHidden: true,
+    accessibilityViewIsModal: true,
     // Listeners, so the host sends only the mouse events views want.
     onMouseEnter: true,
     onMouseLeave: true,

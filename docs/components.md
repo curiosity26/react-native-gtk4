@@ -61,7 +61,7 @@ prop is accepted but has no effect.
 | `zIndex` | Supported | Fabric orders the children; GTK paints and hit-tests in that order |
 | `cursor` | Supported | every RN cursor maps to a GTK/CSS cursor name |
 | `nativeID` | Supported | |
-| Accessibility props | Not yet | Phase 2 (AT-SPI through GtkAccessible) |
+| Accessibility props | Supported | see [Accessibility](#accessibility) |
 
 ## Text
 
@@ -164,6 +164,37 @@ on the test VM. TypeScript: `ViewPropsLinux` and `HandledKeyEvent` in
 | Arrow keys | Partial | move focus between views geometrically, as in other GTK apps, unless a view handles them with `keyDownEvents` |
 | Keys with nothing focused | Not yet | key events need a focused view, as on react-native-macos |
 | `nextFocus*`, `hasTVPreferredFocus` | Not yet | Android/TV only |
+
+## Accessibility
+
+React Native's accessibility props reach screen readers (Orca) and
+inspectors (Accerciser) through GTK's GtkAccessible and AT-SPI
+(`linux/src/GtkAccessibility.cc`). `AccessibilityInfo` is in
+[apis.md](apis.md#accessibilityinfo). The `GalleryAccessibility` page
+(`--module GalleryAccessibility --self-test`) reads the app's tree out of
+process the way a screen reader does (`scripts/a11y-probe.py`, AT-SPI),
+checks roles, names, states, values and actions, and performs actions and
+sets a value through AT-SPI; on Wayland and X11.
+
+| Prop | Status | Notes |
+| --- | --- | --- |
+| `role`, `accessibilityRole` | Supported | mapped to GTK's roles (button, checkbox, togglebutton, link, header → heading, image, adjustable → slider, switch, tab, list...). Set when the view mounts: GTK can't change a role later. A Text is a label; an `accessible` View with no role a named group |
+| `accessibilityLabel`, `aria-label` | Supported | the name. A Text is named by its text; an `accessible` View by its descendants' text, as on iOS; buttons and links by their content (GTK) |
+| `accessibilityLabelledBy`, `aria-labelledby` | Supported | a labelled-by relation to the views with those `nativeID`s, whose text also becomes the name (GTK 4.14 doesn't derive it) |
+| `accessibilityHint` | Supported | the description |
+| `accessibilityState`, `aria-disabled/selected/checked/busy/expanded` | Supported | disabled, selected, checked (mixed too; pressed for a togglebutton), busy, expanded |
+| `accessibilityValue`, `aria-valuemin/max/now/text` | Supported | AT-SPI's Value interface: such views (and range roles) mount as an `RNRangeView`. A screen reader setting the value sends `onAccessibilityAction` `increment` or `decrement` |
+| `accessibilityActions`, `onAccessibilityAction` | Supported | AT-SPI actions named `a11y.<name>`. A view that presses (Pressable, Button) also has `a11y.activate`, which presses it |
+| `accessibilityElementsHidden`, `aria-hidden`, `importantForAccessibility="no-hide-descendants"` | Supported | the view and its subtree are left out |
+| `importantForAccessibility="no"` | Supported | presentation role: the view isn't an element, its children are |
+| `accessible` | Supported | one element (see the name above) |
+| `accessibilityLiveRegion`, `aria-live` | Supported | a Text's new content inside the region is announced (polite, or assertive at high priority) |
+| `accessibilityViewIsModal`, `aria-modal` | Partial | GTK's modal property; GTK doesn't confine screen readers with it |
+| TextInput, Switch | Supported | GTK's own text box and switch, with the label, hint, labelled-by and hidden props |
+| `accessibilityLanguage`, `accessibilityIgnoresInvertColors`, large content viewer | Not yet | no GTK equivalent |
+
+Views with a role, label, hint, live region or actions are never flattened
+by Fabric, so their element exists.
 
 ## ScrollView and lists
 

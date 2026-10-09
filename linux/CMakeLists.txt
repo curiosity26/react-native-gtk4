@@ -305,6 +305,7 @@ target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 
 # The host: our sources, shared by the app library and the test harness.
 add_library(rngtk_host_objs OBJECT
+  src/AccessibilityInfo.cc
   src/Appearance.cc
   src/DevControls.cc
   src/DevUI.cc
@@ -315,6 +316,7 @@ add_library(rngtk_host_objs OBJECT
   src/GtkScrollViews.cc
   src/GtkTextInputs.cc
   src/GtkControls.cc
+  src/GtkAccessibility.cc
   components/GtkSwitchShadowNode.cpp
   src/GtkImageLoader.cc
   src/GtkKeyboardHandler.cc
@@ -492,6 +494,9 @@ endif()
 
 add_executable(rn-gtk-host src/main.cc ../spike/src/harness.cc)
 target_include_directories(rn-gtk-host PRIVATE ../spike/src)
+# GalleryAccessibility's self-test runs scripts/a11y-probe.py.
+target_compile_definitions(rn-gtk-host PRIVATE
+  RNGTK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
 rngtk_link_host(rn-gtk-host)
 
 enable_testing()
@@ -508,6 +513,9 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-accessibility-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryAccessibility --width 940 --height 680 --self-test)
 add_test(NAME gallery-mouse-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryMouse --width 940 --height 680 --self-test)
