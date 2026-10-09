@@ -7,18 +7,31 @@
     "summary": "A tour of React Native's components and APIs on GTK4",
     "description": "A hands-on tour of React Native for Linux: its components, the platform APIs and the desktop features (windows, menus, dialogs, drag and drop, notifications). Each page says what to try, and a log shows the events that reach JavaScript.",
     "icon": "linux/icon.svg",
-    "categories": ["Development", "GTK"],
-    "keywords": ["React Native", "GTK"],
+    "categories": [
+      "Development",
+      "GTK"
+    ],
+    "keywords": [
+      "React Native",
+      "GTK"
+    ],
     "version": "0.1.0",
     "license": "MIT",
     "licenseFile": "../../LICENSE",
     "homepage": "https://github.com/curiosity26/react-native-gtk4",
-    "developer": {"id": "dev.curiosity26", "name": "Alex Boyce"},
+    "developer": {
+      "id": "dev.curiosity26",
+      "name": "Alex Boyce"
+    },
     "screenshots": [
       {
         "url": "https://raw.githubusercontent.com/curiosity26/react-native-gtk4/main/docs/images/gallery-wayland.png",
         "caption": "The component gallery"
       }
-    ]
+    ],
+    "maintainer": "Alex Boyce <4050934+curiosity26@users.noreply.github.com>",
+    "deb": {
+      "package": "rngtk4-showcase"
+    }
   }
 }

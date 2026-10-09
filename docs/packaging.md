@@ -11,10 +11,12 @@ npx react-native package-linux --format dir --version 1.2.0 --smoke
 
 | Option | |
 | --- | --- |
-| `--format <format>` | `dir`: an installed tree you can run or copy into a prefix |
+| `--format <format>` | `dir` (an installed tree with `install.sh`) or `deb` |
 | `--output <dir>` | Where the package goes (default `linux/build/package`) |
 | `--version <version>` | The app's version (default: app.json's `linux.version`, or package.json's `version`) |
 | `--smoke` | Launch the packaged app with `--smoke` afterwards and exit with its status |
+| `--prefix <dir>` | `dir`: install straight into a prefix |
+| `--host <dir>` | Build against this host's CMake config instead of the cache's |
 | `--logging` | Show all build output |
 | `--no-checks` | Skip the prerequisite checks |
 
@@ -62,6 +64,14 @@ it:
 | `developer` | none | `{id, name}`: Flathub requires it |
 | `screenshots` | none | URLs (strings, or `{url, caption}`): software centres show them; Flathub requires one |
 | `releases` | the current version, dated today | Older releases for the MetaInfo's history. The date is `SOURCE_DATE_EPOCH`'s when it's set, for reproducible builds |
+| `maintainer` | package.json's `author`, `$DEBEMAIL`, git's user | `"Name <email>"` for the `.deb` |
+| `deb` | | `{package, section, revision}`: the Debian package name (default: the app's, lowercase) |
+
+Packages are built against a Release build of the host library: optimized,
+with React Native's debugger code kept so it matches the Hermes build
+(`REACT_NATIVE_DEBUG_OPTIMIZED`). It has a cache entry of its own
+(`host/<id>-release`, about 4 minutes to build once on a 2-core VM, or
+prebuilt) and makes the Showcase's package 17 MB instead of 41 MB.
 
 ## What gets installed
 
@@ -112,6 +122,20 @@ file's `Exec`. GNOME Shell's `PATH` has no `~/.local/bin`, and the Shell
 ignores an app whose `Exec` it can't find. It then refuses the app's
 notifications (`org.gtk.Notifications.Error.InvalidApp`) and shows its
 windows with a generic icon.
+
+### deb
+
+```sh
+npx react-native package-linux --format deb
+sudo apt install ./linux/build/package/myapp_1.0.0-1_amd64.deb
+```
+
+The tree under `/usr`, with `Depends` from `dpkg-shlibdeps` (the system
+libraries the app and its host link), a machine-readable
+`/usr/share/doc/<package>/copyright` with the license texts, and a
+`changelog.Debian.gz`. It's checked with `lintian` when it's installed
+(`sudo apt install lintian`). Build it on the release you ship for:
+`Depends` names that release's library packages (`libicu74`, ...).
 
 ## The Showcase
 
