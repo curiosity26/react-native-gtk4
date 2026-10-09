@@ -7,6 +7,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Alert,
   Animated,
   AppState,
   Appearance,
@@ -39,6 +40,7 @@ import {
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
+import {Dialogs} from '@curiosity26/react-native-gtk4';
 
 const halves = require('./assets/halves.png');
 const tile = require('./assets/tile.png');
@@ -827,6 +829,106 @@ function ModalPage() {
   );
 }
 
+// ---- Dialogs ---------------------------------------------------------------
+
+function DialogsPage() {
+  const log = useLog();
+  const [paths, setPaths] = useState('');
+  const show = what => result => {
+    log(`${what}: ${JSON.stringify(result)}`);
+    setPaths(JSON.stringify(result, null, 1));
+  };
+  const fail = e => log(`failed: ${e.message}`);
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Alert"
+        hint="A GTK message dialog over the window that's active (a Modal's too). Escape presses the cancel button; with none, cancelable lets it dismiss (onDismiss). Enter presses the default.">
+        <View style={styles.row}>
+          <Btn title="One button" onPress={() => Alert.alert('Saved', 'Your changes are saved.')} />
+          <Btn
+            title="Three buttons"
+            onPress={() =>
+              Alert.alert('Delete “notes.txt”?', 'It will be gone for good.', [
+                {text: 'Keep', onPress: () => log('Alert: Keep')},
+                {text: 'Delete', style: 'destructive', onPress: () => log('Alert: Delete')},
+                {text: 'Cancel', style: 'cancel', onPress: () => log('Alert: Cancel')},
+              ])
+            }
+          />
+          <Btn
+            title="Cancelable"
+            onPress={() =>
+              Alert.alert('Heads up', 'Press Escape to dismiss.', [{text: 'OK', onPress: () => log('Alert: OK')}], {
+                cancelable: true,
+                onDismiss: () => log('Alert: onDismiss'),
+              })
+            }
+          />
+        </View>
+      </Section>
+      <Section title="Alert.prompt" hint="plain-text, secure-text and login-password, with defaultValue and keyboardType.">
+        <View style={styles.row}>
+          <Btn
+            title="Text"
+            onPress={() => Alert.prompt('Your name', 'What should we call you?', t => log(`prompt: ${t}`), 'plain-text', 'Ada')}
+          />
+          <Btn
+            title="Email"
+            onPress={() =>
+              Alert.prompt('Email', null, t => log(`email: ${t}`), 'plain-text', '', 'email-address')
+            }
+          />
+          <Btn
+            title="Password"
+            onPress={() => Alert.prompt('Password', 'Unlock the vault', t => log(`password: ${'•'.repeat(t.length)}`), 'secure-text')}
+          />
+          <Btn
+            title="Login"
+            onPress={() =>
+              Alert.prompt(
+                'Sign in',
+                'to example.com',
+                [
+                  {text: 'Cancel', style: 'cancel', onPress: () => log('login: cancelled')},
+                  {text: 'Sign in', onPress: v => log(`login: ${v.login}`)},
+                ],
+                'login-password',
+                'ada',
+              )
+            }
+          />
+        </View>
+      </Section>
+      <Section
+        title="Dialogs (@curiosity26/react-native-gtk4)"
+        hint="The desktop's file chooser (its portal), modal over the app. Paths come back; cancelling gives [] (null when saving).">
+        <View style={styles.row}>
+          <Btn
+            title="Open a file"
+            onPress={() =>
+              Dialogs.openFile({
+                title: 'Open an image or text file',
+                filters: [
+                  {name: 'Images', mimeTypes: ['image/*']},
+                  {name: 'Text', extensions: ['txt', 'md']},
+                ],
+              }).then(show('openFile'), fail)
+            }
+          />
+          <Btn title="Open several" onPress={() => Dialogs.openFile({multiple: true}).then(show('openFile multiple'), fail)} />
+          <Btn
+            title="Save as…"
+            onPress={() => Dialogs.saveFile({defaultName: 'untitled.txt', buttonLabel: 'Export'}).then(show('saveFile'), fail)}
+          />
+          <Btn title="Pick a folder" onPress={() => Dialogs.openFolder().then(show('openFolder'), fail)} />
+        </View>
+        {paths ? <Text style={styles.mono}>{paths}</Text> : null}
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1236,6 +1338,7 @@ const PAGES = [
   ['Network', Network],
   ['Platform', PlatformPage],
   ['Modal', ModalPage],
+  ['Dialogs', DialogsPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.

@@ -34,7 +34,10 @@ Clipboard, font scaling, I18nManager RTL ([docs/apis.md](docs/apis.md)).
 **Phase 3 (desktop parity) in progress:** `<Modal>` opens a window of its
 own over the app: full screen or a dialog-sized sheet, fade and slide,
 transparent, nested, a modal dialog to Orca
-([docs/components.md](docs/components.md#modal)).
+([docs/components.md](docs/components.md#modal)). `Alert.alert` and
+`Alert.prompt` on a GTK alert dialog, and file dialogs (`Dialogs` from
+`@curiosity26/react-native-gtk4`) on the desktop's file chooser
+([docs/apis.md](docs/apis.md#alert)).
 
 ## Quick start
 

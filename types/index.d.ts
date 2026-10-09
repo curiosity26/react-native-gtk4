@@ -82,3 +82,38 @@ export type ViewPropsLinux = {
   /** A middle (button 1) or right (button 2) click. */
   onAuxClick?: (event: {nativeEvent: {button: number}}) => void;
 };
+
+/** A file type filter for Dialogs: matches any of its extensions, MIME types or patterns. */
+export type FileFilter = {
+  name: string;
+  /** Without the dot: ['png', 'jpg']. */
+  extensions?: string[];
+  /** ['image/*', 'text/plain'] */
+  mimeTypes?: string[];
+  /** Glob patterns: ['*.tar.gz']. */
+  patterns?: string[];
+};
+
+export type FileDialogOptions = {
+  title?: string;
+  /** The accept button's label ("Open", "Save" by default). */
+  buttonLabel?: string;
+  /** A folder to start in, or a file to select (saveFile: to save as). */
+  defaultPath?: string;
+  /** The first is selected. */
+  filters?: FileFilter[];
+};
+
+/**
+ * File dialogs on GtkFileDialog: the desktop's file chooser (its portal),
+ * modal over the app's active window. Paths are local paths (a URI for a
+ * file without one).
+ */
+export declare const Dialogs: {
+  /** The files picked; [] if cancelled. */
+  openFile(options?: FileDialogOptions & {multiple?: boolean}): Promise<string[]>;
+  /** The path to save to; null if cancelled. */
+  saveFile(options?: FileDialogOptions & {defaultName?: string}): Promise<string | null>;
+  /** The folders picked; [] if cancelled. */
+  openFolder(options?: FileDialogOptions & {multiple?: boolean}): Promise<string[]>;
+};

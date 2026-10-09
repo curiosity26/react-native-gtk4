@@ -88,7 +88,7 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Components/AccessibilityInfo/legacySendAccessibilityEvent` | iOS | pre-Fabric only; the iOS one tolerates a missing module |
 | `Image/Image`, `Network/RCTNetworking`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |
 | `NativeComponent/BaseViewConfig` | Android, plus | Android's view config, plus the host's keyboard, mouse and iOS accessibility props ([components.md](components.md#keyboard)) |
-| `Alert/RCTAlertManager` | Android | no Linux dialog module yet; Android's dialog-manager shape is the plan |
+| `Alert/Alert` (not platform-split), `Alert/RCTAlertManager` | own | the host's AlertManager (a GTK message dialog) for both alert and prompt, with iOS's and Android's options together ([apis.md](apis.md#alert)); `alertWithArgs` keeps iOS's shape |
 | `devsupport/rndevtools/ReactDevToolsSettingsManager` | Android | optional native module; iOS needs its Settings module |
 | `Share/Share` (not platform-split) | own | rejects every platform but iOS and Android; a stub that resolves dismissed ([apis.md](apis.md#share-and-vibration)) |
 | `Image/ImageViewNativeComponent` (not platform-split) | Android's view config | Image.android.js sends `defaultSource` as a string and `shouldNotifyLoadEvents`, which iOS's config drops |
@@ -99,7 +99,7 @@ An override can also replace a file React Native doesn't split by
 platform; the resolver checks `overrides/` for every react-native module.
 `ImageViewNativeComponent.linux.js`, `Modal.linux.js`, `TextInput.linux.js`
 and `TextInputState.linux.js` are such copies, each with a few lines
-changed.
+changed; `Alert.linux.js` is a rewrite.
 `ProgressBarAndroid`, `Settings` and `PlatformColorValueTypesIOS` need no
 override: their platform-less files are already the non-Android/non-iOS
 versions.
@@ -139,6 +139,15 @@ resizes the surface, re-lays it out with `setSurfaceConstraints`, and emits
 `useWindowDimensions()` update as the window is resized. `rn-gtk-host
 --self-test` keeps the size it was given; the GalleryControls self-test
 turns resizing on and checks that a resize reaches JS.
+
+### The package's own APIs
+
+What React Native has no API for (`Dialogs`, ...) is in this package's
+`js/` folder, which `import {...} from '@curiosity26/react-native-gtk4'`
+gets (`exports` in package.json). `withLinux` treats it like `overrides/`:
+Metro watches it, and its imports (`react-native`) resolve from the app.
+The example app maps the package name to `js/` in its own
+`metro.config.js`, since the package isn't in its `node_modules`.
 
 ### TypeScript
 
