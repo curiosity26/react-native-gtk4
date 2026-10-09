@@ -112,12 +112,11 @@ function ViewsText() {
     'GTK draws this paragraph with Pango. Tap "toggle numberOfLines" to ' +
     'switch between two lines with an ellipsis and the full text. React ' +
     'Native lays it out with Yoga, then measures it with the same font map ' +
-    'GTK paints with, so the two always agree. ' +
-    'This paragraph is deliberately long so it wraps well past two lines ' +
-    'even in a wide window: with numberOfLines set, everything after the ' +
-    'second line is cut and an ellipsis ends it. Without it, you can read ' +
-    'all of it, down to this last sentence, which only shows when the full ' +
-    'text is visible.';
+    'GTK paints with, so the two always agree. This paragraph is long on ' +
+    'purpose: it needs four or five lines at this width, so clamping it to ' +
+    'two cuts it off with an ellipsis, and the full text pushes the button ' +
+    'below it further down. Line breaks, wrapping and the ellipsis all come ' +
+    "from Pango's layout of the same attributed string React Native measured.";
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Section title="Borders, radii and shadows">
@@ -164,15 +163,21 @@ function ViewsText() {
         <Text>Unicode: Привет · こんにちは · مرحبا · 👋🎉</Text>
       </Section>
       <Section title="numberOfLines" hint="Toggle between two lines and the full paragraph.">
-        <Text style={styles.hint}>numberOfLines = {lines || 'unset'}</Text>
         <Text numberOfLines={lines} style={styles.body}>
           {long}
         </Text>
         <View style={styles.row}>
           <Btn
             title="toggle numberOfLines"
-            onPress={() => setLines(n => (n ? 0 : 2))}
+            onPress={() => {
+              const next = lines ? 0 : 2;
+              setLines(next);
+              log(`numberOfLines = ${next || '0 (all lines)'}`);
+            }}
           />
+          <Text style={styles.body}>
+            numberOfLines = {lines || '0 (all lines)'}
+          </Text>
         </View>
       </Section>
       <Section
