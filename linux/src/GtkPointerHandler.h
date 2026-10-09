@@ -94,6 +94,8 @@ class GtkPointerHandler {
                        const Input &input);
   void updateHover(const Input &input, const Target &target);
   void showCopyMenu(const Target &target, double x, double y);
+  // A press focuses the focusable view it lands in (as on the web).
+  void focusOnPress(const Target &target);
   // Selection by mouse on selectable text.
   int clickCount(const Input &input);
   bool beginSelection(const Input &input, const Target &target, int clicks);

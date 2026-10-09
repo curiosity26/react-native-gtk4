@@ -124,6 +124,13 @@ void rn_view_set_image(RNView *self, GdkTexture *texture, float scale,
                        RNImageFit fit, const GdkRGBA *tint, float blur_radius);
 GdkTexture *rn_view_get_image(RNView *self);
 
+// Keyboard focus. Tab and Shift+Tab visit focusable views in tree order
+// (a view, then its children, as on the web), not GTK's geometric order;
+// a view focused by keyboard draws a focus ring (2px, the theme's accent
+// at half opacity, inside its rounded box, like Adwaita's buttons) unless
+// turned off (react-native-macos' enableFocusRing).
+void rn_view_set_focus_ring(RNView *self, gboolean enabled);
+
 // Inserts child at index (RN mount instruction "Insert"); -1 appends.
 void rn_view_insert_child(RNView *self, GtkWidget *child, int index);
 void rn_view_remove_child(RNView *self, GtkWidget *child);

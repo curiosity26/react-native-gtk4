@@ -9,4 +9,9 @@ G_BEGIN_DECLS
 
 void rn_widget_set_css(GtkWidget *widget, const char *css);
 
+// The GTK theme's accent (selection) color for `widget`: its
+// accent_bg_color, or GTK 3's theme_selected_bg_color (Yaru's orange),
+// else Adwaita's blue.
+GdkRGBA rn_theme_accent(GtkWidget *widget);
+
 G_END_DECLS

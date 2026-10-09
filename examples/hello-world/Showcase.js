@@ -395,6 +395,106 @@ function Inputs() {
   );
 }
 
+// ---- Keyboard ------------------------------------------------------------------
+
+const ARROWS = {ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20]};
+
+function keyLabel(e) {
+  const {key, code, altKey, ctrlKey, metaKey, shiftKey, repeat} = e.nativeEvent;
+  const mods = [ctrlKey && 'Ctrl', altKey && 'Alt', shiftKey && 'Shift', metaKey && 'Meta'].filter(Boolean);
+  return `key "${key}" code ${code || '-'}${mods.length ? ' + ' + mods.join('+') : ''}${repeat ? ' (repeat)' : ''}`;
+}
+
+function FocusBox({label, style, ...props}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View
+      focusable
+      {...props}
+      onFocus={e => {
+        setFocused(true);
+        props.onFocus?.(e);
+      }}
+      onBlur={e => {
+        setFocused(false);
+        props.onBlur?.(e);
+      }}
+      style={[styles.focusBox, focused && styles.focusBoxFocused, style]}>
+      <Text style={styles.body}>{label}</Text>
+      {props.children}
+    </View>
+  );
+}
+
+function Keyboard() {
+  const log = useLog();
+  const [last, setLast] = useState('nothing yet');
+  const [dot, setDot] = useState({x: 90, y: 50});
+  const box = useRef(null);
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Tab order"
+        hint="Press Tab and Shift+Tab: focus moves through focusable views and GTK controls in tree order, with a focus ring. Enter or Space presses the focused Pressable or Button.">
+        <View style={styles.row}>
+          {['One', 'Two', 'Three'].map(name => (
+            <HoverPressable
+              key={name}
+              onPress={() => log(`Pressable ${name} pressed`)}
+              onFocus={() => log(`${name} focused`)}
+              onBlur={() => log(`${name} blurred`)}
+              style={({pressed, hovered}) => [
+                styles.btn,
+                {backgroundColor: '#007AFF', opacity: pressed ? 0.6 : hovered ? 0.85 : 1},
+              ]}>
+              <Text style={styles.btnText}>{name}</Text>
+            </HoverPressable>
+          ))}
+          <TextInput style={[styles.input, {width: 160}]} placeholder="a TextInput" />
+          <Switch value={true} />
+          <Button title="Button" onPress={() => log('Button pressed')} />
+          <Pressable focusable={false} onPress={() => log('not focusable pressed')} style={[styles.btn, {backgroundColor: '#8E8E93'}]}>
+            <Text style={styles.btnText}>focusable={'{false}'}</Text>
+          </Pressable>
+        </View>
+      </Section>
+      <Section
+        title="onKeyDown / onKeyUp"
+        hint="This box has autoFocus. Click it (or Tab to it) and type: W3C key and code, with modifiers.">
+        <FocusBox
+          ref={box}
+          autoFocus
+          label={`Last: ${last}`}
+          onKeyDown={e => setLast(`down ${keyLabel(e)}`)}
+          onKeyUp={e => {
+            setLast(`up ${keyLabel(e)}`);
+            log(`keyUp ${keyLabel(e)}`);
+          }}
+        />
+        <View style={styles.row}>
+          <Btn title="ref.focus()" onPress={() => box.current?.focus()} />
+          <Btn title="ref.blur()" color="#8E8E93" onPress={() => box.current?.blur()} />
+        </View>
+      </Section>
+      <Section
+        title="keyDownEvents"
+        hint="This box lists the arrow keys in keyDownEvents, so it handles them itself (GTK would otherwise move focus with them): focus it and move the dot.">
+        <FocusBox
+          label="Arrow keys move the dot"
+          style={{height: 120}}
+          keyDownEvents={Object.keys(ARROWS).map(key => ({key}))}
+          onKeyDown={e => {
+            const d = ARROWS[e.nativeEvent.key];
+            if (d) setDot(p => ({x: Math.max(0, Math.min(300, p.x + d[0])), y: Math.max(0, Math.min(90, p.y + d[1]))}));
+          }}>
+          <View pointerEvents="none" style={[styles.dot, {left: dot.x, top: dot.y}]} />
+        </FocusBox>
+        <FocusBox label="enableFocusRing={false}: no ring when focused" enableFocusRing={false} />
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -796,6 +896,7 @@ const PAGES = [
   ['Views & Text', ViewsText],
   ['Buttons', Buttons],
   ['Inputs', Inputs],
+  ['Keyboard', Keyboard],
   ['Lists', Lists],
   ['Images', Images],
   ['Animation', Animation],
@@ -940,6 +1041,15 @@ const styles = StyleSheet.create({
   imageBig: {width: 260, height: 160, backgroundColor: '#E5E5EA'},
   spinner: {width: 80, height: 80, borderRadius: 12, backgroundColor: '#FF9500'},
   slider: {width: 60, height: 60, borderRadius: 30, backgroundColor: '#34C759'},
+  focusBox: {
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PlatformColor('borders'),
+    backgroundColor: PlatformColor('view_bg_color'),
+    overflow: 'hidden',
+  },
+  focusBoxFocused: {borderColor: PlatformColor('accent_bg_color')},
   pressBox: {padding: 10, borderRadius: 8, backgroundColor: PlatformColor('shade_color')},
   segmented: {
     flexDirection: 'row',

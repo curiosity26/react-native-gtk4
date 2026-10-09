@@ -1,5 +1,6 @@
 #include "rn_view.h"
 
+#include "rn_css.h"
 #include "rn_text.h"
 
 #include <algorithm>
@@ -34,6 +35,7 @@ struct _RNView {
   GtkWidget parent_instance;
   RNViewStyle style;
   Extras *extras;  // nullptr until a shadow, filter or gradient is set
+  gboolean no_focus_ring;
 };
 
 G_DEFINE_FINAL_TYPE(RNView, rn_view, GTK_TYPE_WIDGET)
@@ -547,7 +549,80 @@ static void rn_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   append_border(snapshot, s, outline);
   append_outline(snapshot, s, outline);
 
+  if (!self->no_focus_ring && gtk_widget_has_visible_focus(widget)) {
+    GdkRGBA ring = rn_theme_accent(widget);
+    ring.alpha *= 0.5f;
+    const float widths[4] = {2, 2, 2, 2};
+    const GdkRGBA colors[4] = {ring, ring, ring, ring};
+    gtk_snapshot_append_border(snapshot, &outline, widths, colors);
+  }
+
   for (size_t i = 0; i < filters; i++) gtk_snapshot_pop(snapshot);
+}
+
+// Tab order is tree order: a focusable view first, then its children in
+// mount order (Shift+Tab: the reverse). Other directions (arrows) keep
+// GTK's geometric search.
+static gboolean rn_view_focus(GtkWidget *widget, GtkDirectionType direction) {
+  if (direction != GTK_DIR_TAB_FORWARD && direction != GTK_DIR_TAB_BACKWARD) {
+    return GTK_WIDGET_CLASS(rn_view_parent_class)->focus(widget, direction);
+  }
+  bool forward = direction == GTK_DIR_TAB_FORWARD;
+  bool self_focusable = gtk_widget_get_focusable(widget) &&
+                        gtk_widget_is_sensitive(widget);
+  bool is_focus = gtk_widget_is_focus(widget);
+  GtkWidget *focus_child = gtk_widget_get_focus_child(widget);
+  // A focus child that isn't one of ours (a popover) doesn't count.
+  if (focus_child && gtk_widget_get_parent(focus_child) != widget) focus_child = nullptr;
+
+  auto children_from = [&](GtkWidget *start, bool skip_start) {
+    for (GtkWidget *c = start; c;
+         c = forward ? gtk_widget_get_next_sibling(c) : gtk_widget_get_prev_sibling(c)) {
+      if (skip_start && c == start) continue;
+      if (GTK_IS_NATIVE(c) || !gtk_widget_get_visible(c)) continue;
+      if (gtk_widget_child_focus(c, direction)) return true;
+    }
+    return false;
+  };
+  GtkWidget *first = forward ? gtk_widget_get_first_child(widget)
+                             : gtk_widget_get_last_child(widget);
+
+  if (forward) {
+    if (focus_child) {
+      // Within a child: on to its next focusable, then the next children.
+      return gtk_widget_child_focus(focus_child, direction) ||
+             children_from(focus_child, true);
+    }
+    if (!is_focus && self_focusable) {
+      gtk_widget_grab_focus(widget);
+      return TRUE;
+    }
+    return children_from(first, false);
+  }
+  if (is_focus) return FALSE;  // backwards out of the view
+  if (focus_child) {
+    if (gtk_widget_child_focus(focus_child, direction) ||
+        children_from(focus_child, true)) {
+      return TRUE;
+    }
+  } else if (children_from(first, false)) {
+    return TRUE;
+  }
+  if (self_focusable) {
+    gtk_widget_grab_focus(widget);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+static void rn_view_state_flags_changed(GtkWidget *widget,
+                                        GtkStateFlags previous) {
+  // The focus ring follows :focus-visible.
+  int changed = gtk_widget_get_state_flags(widget) ^ previous;
+  if (changed & (GTK_STATE_FLAG_FOCUSED | GTK_STATE_FLAG_FOCUS_VISIBLE)) {
+    gtk_widget_queue_draw(widget);
+  }
+  GTK_WIDGET_CLASS(rn_view_parent_class)->state_flags_changed(widget, previous);
 }
 
 static void rn_view_dispose(GObject *object) {
@@ -570,12 +645,21 @@ static void rn_view_class_init(RNViewClass *klass) {
   widget_class->measure = rn_view_measure;
   widget_class->size_allocate = rn_view_size_allocate;
   widget_class->snapshot = rn_view_snapshot;
+  widget_class->focus = rn_view_focus;
+  widget_class->state_flags_changed = rn_view_state_flags_changed;
   gtk_widget_class_set_css_name(widget_class, "rn-view");
 }
 
 static void rn_view_init(RNView *self) {
   self->style = RNViewStyle{};
   self->extras = nullptr;
+  self->no_focus_ring = FALSE;
+}
+
+void rn_view_set_focus_ring(RNView *self, gboolean enabled) {
+  if (self->no_focus_ring == !enabled) return;
+  self->no_focus_ring = !enabled;
+  gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
 GtkWidget *rn_view_new(void) {

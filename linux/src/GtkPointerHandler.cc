@@ -3,6 +3,7 @@
 #include "GtkMountingManager.h"
 #include "rn_scroll_view.h"
 #include "rn_text.h"
+#include "rn_text_input.h"
 #include "rn_view.h"
 
 #include <react/renderer/components/view/PointerEvent.h>
@@ -221,6 +222,7 @@ void GtkPointerHandler::dispatch(const Input &input) {
     case Phase::Down: {
       buttons_ |= input.device == Device::Mouse ? buttonBit(input.button) : 1;
       pressTarget_ = target;
+      if (primary) focusOnPress(target);
       dispatchPointer("pointerDown", target, input);
       if (primary) {
         touches_[id] = ActiveTouch{target, input.x, input.y, input.timeMs};
@@ -478,6 +480,18 @@ void GtkPointerHandler::updateHover(const Input &input, const Target &target) {
     }
   }
   hovered_ = std::move(path);
+}
+
+void GtkPointerHandler::focusOnPress(const Target &target) {
+  for (GtkWidget *w = target.widget.get(); w && w != root_;
+       w = gtk_widget_get_parent(w)) {
+    // Native controls focus themselves on their own clicks.
+    if (RN_IS_TEXT_INPUT(w) || GTK_IS_SWITCH(w) || GTK_IS_EDITABLE(w)) return;
+    if (RN_IS_VIEW(w) && gtk_widget_get_focusable(w)) {
+      if (!gtk_widget_has_focus(w)) gtk_widget_grab_focus(w);
+      return;
+    }
+  }
 }
 
 int GtkPointerHandler::clickCount(const Input &input) {

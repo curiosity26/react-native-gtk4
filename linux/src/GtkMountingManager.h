@@ -84,6 +84,8 @@ class GtkMountingManager
   // (ViewEvents::Offset).
   bool hasEventListener(facebook::react::Tag tag, size_t offset) const;
   bool isSelectableText(facebook::react::Tag tag) const;
+  // The mounted view's props, or null.
+  facebook::react::Props::Shared propsForTag(facebook::react::Tag tag) const;
   // The mounted view with this nativeID, for tests.
   GtkWidget *viewForNativeId(const std::string &nativeId) const;
 
@@ -176,6 +178,9 @@ class GtkMountingManager
   void forgetImage(facebook::react::Tag tag);
   void forget(facebook::react::Tag tag);
   void applyLayout(GtkWidget *widget, const facebook::react::ShadowView &view);
+  // View: autoFocus, and the focus/blur commands (ref.focus()).
+  void updateFocus(GtkWidget *widget, const facebook::react::ShadowView &view);
+  bool focusCommand(GtkWidget *widget, const std::string &name);
   void applyParagraph(GtkWidget *widget,
                       const facebook::react::ShadowView &view);
 

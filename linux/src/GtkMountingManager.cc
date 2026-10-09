@@ -121,6 +121,11 @@ bool GtkMountingManager::isSelectableText(Tag tag) const {
   return props && props->isSelectable;
 }
 
+Props::Shared GtkMountingManager::propsForTag(Tag tag) const {
+  auto it = shadowViews_.find(tag);
+  return it == shadowViews_.end() ? nullptr : it->second.props;
+}
+
 GtkWidget *GtkMountingManager::viewForNativeId(
     const std::string &nativeId) const {
   for (const auto &[tag, view] : shadowViews_) {
@@ -295,6 +300,38 @@ void GtkMountingManager::update(const ShadowView &oldView,
   if (std::strcmp(newView.componentName, ImageComponentName) == 0) {
     updateImage(widget, oldView, newView);
   }
+  if (RN_IS_VIEW(widget)) updateFocus(widget, newView);
+}
+
+void GtkMountingManager::updateFocus(GtkWidget *widget, const ShadowView &view) {
+  auto props = std::dynamic_pointer_cast<const ViewProps>(view.props);
+  static GQuark done = g_quark_from_static_string("rngtk-auto-focused");
+  if (!props || !props->autoFocus || g_object_get_qdata(G_OBJECT(widget), done)) {
+    return;
+  }
+  g_object_set_qdata(G_OBJECT(widget), done, GINT_TO_POINTER(1));
+  // Once it's in the window (and laid out).
+  g_idle_add_full(
+      G_PRIORITY_DEFAULT_IDLE,
+      [](gpointer w) -> gboolean {
+        if (gtk_widget_get_root(GTK_WIDGET(w))) gtk_widget_grab_focus(GTK_WIDGET(w));
+        return G_SOURCE_REMOVE;
+      },
+      g_object_ref(widget), g_object_unref);
+}
+
+// ViewCommands.focus / blur (ref.focus(), ref.blur() on a View).
+bool GtkMountingManager::focusCommand(GtkWidget *widget, const std::string &name) {
+  if (name == "focus") {
+    gtk_widget_grab_focus(widget);
+    return true;
+  }
+  if (name == "blur") {
+    GtkRoot *root = gtk_widget_get_root(widget);
+    if (root && gtk_root_get_focus(root) == widget) gtk_root_set_focus(root, nullptr);
+    return true;
+  }
+  return false;
 }
 
 void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
@@ -439,6 +476,7 @@ void GtkMountingManager::dispatchCommand(const ShadowView &shadowView,
   if (widget && GTK_IS_SWITCH(widget) && switchCommand(widget, commandName, args)) {
     return;
   }
+  if (widget && RN_IS_VIEW(widget) && focusCommand(widget, commandName)) return;
   LOG(WARNING) << "Unsupported command " << commandName << " for "
                << shadowView.componentName;
 }

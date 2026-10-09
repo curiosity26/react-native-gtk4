@@ -248,6 +248,11 @@ void apply_view_props(GtkWidget *widget, const ViewProps &props,
   gtk_widget_set_opacity(widget, props.opacity);
   rn_widget_set_pointer_events(widget, pointer_events(props.pointerEvents));
   gtk_widget_set_cursor_from_name(widget, cursor_name(props.cursor));
+  if (RN_IS_VIEW(widget)) {
+    // Keyboard focus (Tab, clicks, ref.focus()); see GtkKeyboardHandler.
+    gtk_widget_set_focusable(widget, props.focusable);
+    rn_view_set_focus_ring(RN_VIEW(widget), props.enableFocusRing);
+  }
 
   // RN's matrix uses graphene's convention (row vectors, translation in
   // the last row). Like iOS's layer anchor point, it applies around the

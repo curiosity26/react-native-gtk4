@@ -20,6 +20,9 @@ class HostFeatureFlags : public ReactNativeFeatureFlagsDefaults {
   // Pressable's onHoverIn/onHoverOut from W3C pointerenter/pointerleave,
   // which GtkPointerHandler sends for the mouse.
   bool shouldPressibilityUseW3CPointerEventsForHover() override { return true; }
+  // ref.focus() / ref.blur() on any view, not just TextInput (ViewCommands
+  // focus and blur; GtkMountingManager::focusCommand).
+  bool enableImperativeFocus() override { return true; }
 };
 
 }  // namespace
