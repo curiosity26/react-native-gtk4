@@ -20,6 +20,9 @@
 //   --logbox-screenshot F  save the window once LogBox shows
 //   --dismiss-logbox       then click LogBox's Dismiss button and wait for
 //                          LogBox to close
+//   --system-appearance    follow the desktop's light/dark style (self-tests
+//                          are light otherwise); GalleryAppearance then
+//                          flips GNOME's color-scheme and restores it
 //   --test-animation       before the first reload and after each one,
 //                          hold the card (a TouchableOpacity) and check
 //                          that its native-driver fade runs, then release
@@ -38,6 +41,7 @@
 #include <string>
 #include <vector>
 
+#include "Appearance.h"
 #include "DevControls.h"
 #include "DevUI.h"
 #include "FeatureFlags.h"
@@ -78,6 +82,9 @@ struct Options {
   const char *logbox_screenshot = nullptr;
   bool dismiss_logbox = false;
   bool test_animation = false;
+  // Follow the desktop's light/dark style in a self-test too; with
+  // GalleryAppearance, flip GNOME's color-scheme setting and follow it.
+  bool system_appearance = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
@@ -975,6 +982,185 @@ void add_images_steps() {
 
 
 // ---------------------------------------------------------------------------
+// GalleryAppearance checks
+
+bool is_appearance() { return opts.module == "GalleryAppearance"; }
+
+bool prefer_dark() {
+  gboolean dark = FALSE;
+  g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
+               &dark, nullptr);
+  return dark;
+}
+
+// The swatches, Button and window_fg_color text show `dark`'s palette.
+bool palette_is(bool dark) {
+  struct Expect {
+    const char *id;
+    uint32_t light, dark;
+  };
+  static const Expect expected[] = {
+      {"sw-window", 0xFAFAFA, 0x242424}, {"sw-accent", 0x3584E4, 0x3584E4},
+      {"sw-fallback", 0x2EC27E, 0x26A269}, {"sw-unknown", 0x000000, 0x000000},
+      {"sw-css", 0xFFFFFF, 0x1E1E1E},    {"sw-at", 0xC01C28, 0xFF7B63},
+  };
+  GdkTexture *tex = rngtk::render_widget(app.root);
+  if (!tex) return false;
+  bool ok = true;
+  for (const Expect &e : expected) {
+    GtkWidget *v = by_id(e.id);
+    if (!v) {
+      ok = false;
+      continue;
+    }
+    graphene_point_t c = center_of(v);
+    uint32_t want = dark ? e.dark : e.light;
+    ok &= near_color(px(tex, c.x, c.y), want >> 16, (want >> 8) & 0xFF,
+                     want & 0xFF, 6);
+  }
+  // Button.linux.js: Adwaita's light or dark neutral button.
+  if (GtkWidget *b = by_id("button")) {
+    graphene_rect_t r = bounds_in_root(b);
+    auto p = px(tex, r.origin.x + 6, r.origin.y + r.size.height / 2);
+    ok &= dark ? near_color(p, 0x3A, 0x3A, 0x3A, 6)
+               : near_color(p, 0xE6, 0xE6, 0xE6, 6);
+  } else {
+    ok = false;
+  }
+  // The glyphs on the gray box: near white when dark, near black when
+  // light (window_fg_color is white, or 80% black).
+  if (GtkWidget *t = by_id("fg-text")) {
+    ok &= any_pixel(tex, bounds_in_root(t), [dark](rngtk::Rgba8 p) {
+      return dark ? p.r > 230 && p.g > 230 && p.b > 230
+                  : p.r < 60 && p.g < 60 && p.b < 60;
+    });
+  } else {
+    ok = false;
+  }
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return ok;
+}
+
+// JS, the palette and GTK's theme variant all agree on `dark`.
+bool scheme_is(bool dark) {
+  const char *name = dark ? "dark" : "light";
+  return has_text(app.root, std::string("scheme: ") + name) &&
+         has_text(app.root, std::string("getColorScheme: ") + name) &&
+         prefer_dark() == dark && app.host->appearance().isDark() == dark &&
+         palette_is(dark);
+}
+
+Step scheme_step(std::string name, std::function<void()> start, bool dark) {
+  return Step{std::move(name), std::move(start),
+              [dark] { return scheme_is(dark); }};
+}
+
+// GNOME's color-scheme setting (what Settings > Appearance writes), to
+// restore after --system-appearance flips it.
+GSettings *interface_settings() {
+  GSettingsSchemaSource *source = g_settings_schema_source_get_default();
+  GSettingsSchema *schema =
+      source ? g_settings_schema_source_lookup(
+                   source, "org.gnome.desktop.interface", TRUE)
+             : nullptr;
+  if (!schema) return nullptr;
+  bool has_key = g_settings_schema_has_key(schema, "color-scheme");
+  g_settings_schema_unref(schema);
+  return has_key ? g_settings_new("org.gnome.desktop.interface") : nullptr;
+}
+std::string saved_color_scheme;
+
+void set_desktop_color_scheme(const char *value) {
+  GSettings *settings = interface_settings();
+  if (!settings) return;
+  if (saved_color_scheme.empty()) {
+    gchar *old = g_settings_get_string(settings, "color-scheme");
+    saved_color_scheme = old;
+    g_free(old);
+  }
+  g_settings_set_string(settings, "color-scheme", value);
+  g_settings_sync();
+  g_object_unref(settings);
+}
+
+void restore_desktop_color_scheme() {
+  if (saved_color_scheme.empty()) return;
+  if (GSettings *settings = interface_settings()) {
+    g_settings_set_string(settings, "color-scheme", saved_color_scheme.c_str());
+    g_settings_sync();
+    g_object_unref(settings);
+  }
+}
+
+void click(const char *id);
+
+void add_appearance_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  if (opts.system_appearance) {
+    // End to end: GNOME's setting -> the XDG portal -> the host -> JS.
+    app.steps.push_back(Step{
+        "the system's style comes from the XDG Settings portal", [] {},
+        [] {
+          printf("  source: %s\n", app.host->appearance().systemSource());
+          if (!check(std::string(app.host->appearance().systemSource()) == "portal",
+                     "  ...portal found")) {
+            app.steps.resize(app.step + 1);  // nothing more to check
+          }
+          return true;
+        }});
+    if (!interface_settings()) {
+      check(false, "org.gnome.desktop.interface color-scheme exists");
+      return;
+    }
+    app.steps.push_back(scheme_step(
+        "gsettings color-scheme prefer-dark: the app turns dark",
+        [] { set_desktop_color_scheme("prefer-dark"); }, true));
+    app.steps.push_back(scheme_step(
+        "gsettings color-scheme prefer-light: the app turns light",
+        [] { set_desktop_color_scheme("prefer-light"); }, false));
+    app.steps.push_back(scheme_step(
+        "an app override (dark) wins over the system",
+        [] { click("set-dark"); }, true));
+    app.steps.push_back(scheme_step(
+        "  ...and 'unspecified' follows the system again",
+        [] { click("set-system"); }, false));
+    app.steps.push_back(Step{"restore the desktop's color-scheme",
+                             [] { restore_desktop_color_scheme(); },
+                             [] { return true; }});
+    return;
+  }
+  app.steps.push_back(scheme_step(
+      "starts light: PlatformColors resolve to Adwaita's light palette", [] {},
+      false));
+  app.steps.push_back(scheme_step(
+      "setColorScheme('dark'): useColorScheme, PlatformColors, Button and "
+      "GTK's dark variant follow",
+      [] { click("set-dark"); }, true));
+  app.steps.push_back(scheme_step("setColorScheme('light')",
+                                  [] { click("set-light"); }, false));
+  app.steps.push_back(Step{"setColorScheme('unspecified') clears the override",
+                           [] { click("set-system"); },
+                           [] {
+                             return app.host->appearance().override() ==
+                                        rngtk::Appearance::Scheme::Unspecified &&
+                                    scheme_is(false);
+                           }});
+  app.steps.push_back(scheme_step(
+      "the system turns dark (as from the portal): the app follows",
+      [] { app.host->appearance().setSystemDark(true); }, true));
+  app.steps.push_back(scheme_step("a light override wins over a dark system",
+                                  [] { click("set-light"); }, false));
+  app.steps.push_back(scheme_step("  ...and 'unspecified' is dark again",
+                                  [] { click("set-system"); }, true));
+  app.steps.push_back(scheme_step(
+      "the system turns light again",
+      [] { app.host->appearance().setSystemDark(false); }, false));
+  app.steps.push_back(Step{"Appearance's change listener heard every change",
+                           [] {}, [] { return has_text(app.root, "changes 6"); }});
+}
+
+// ---------------------------------------------------------------------------
 // GalleryControls checks
 
 void add_resize_steps();
@@ -1308,6 +1494,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_appearance() && app.steps.empty()) {
+    add_appearance_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_images() && app.steps.empty()) {
     add_images_steps();
     enter(Phase::Steps);
@@ -1335,7 +1524,7 @@ void check_app(bool first) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else if (is_images()) {
       verify_images(tex);
-    } else if (is_controls()) {
+    } else if (is_controls() || is_appearance()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -1512,6 +1701,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .devServerPort = opts.dev_port,
       .inspector = opts.inspector,
       .followsWindowSize = !opts.self_test,
+      .followSystemAppearance = !opts.self_test || opts.system_appearance,
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
@@ -1552,7 +1742,7 @@ int usage() {
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
           "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
-          "         [--test-animation] [--verbose]\n");
+          "         [--test-animation] [--system-appearance] [--verbose]\n");
   return 2;
 }
 
@@ -1582,6 +1772,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--expect-logbox")) opts.expect_logbox = true;
     else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
     else if (!strcmp(argv[i], "--test-animation")) opts.test_animation = true;
+    else if (!strcmp(argv[i], "--system-appearance")) opts.system_appearance = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {
@@ -1610,6 +1801,7 @@ int main(int argc, char **argv) {
       "dev.curiosity26.RNGtk4.Host", G_APPLICATION_NON_UNIQUE);
   g_signal_connect(gtk_app, "activate", G_CALLBACK(activate), nullptr);
   int status = g_application_run(G_APPLICATION(gtk_app), 1, argv);
+  restore_desktop_color_scheme();
   delete app.host;
   g_object_unref(gtk_app);
   return status ? status : app.exit_code;

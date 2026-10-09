@@ -5,8 +5,9 @@
  * bare title. This one looks like a GTK (Adwaita) button: rounded, a light
  * neutral background with dark text, and hover and pressed states. `color`
  * is the background (like Android), with white text, as Adwaita's
- * suggested-action buttons; `disabled` dims it and stops presses. The
- * props are Button's; the title is not uppercased.
+ * suggested-action buttons; `disabled` dims it and stops presses. With
+ * a dark color scheme (useColorScheme) it takes Adwaita's dark colors.
+ * The props are Button's; the title is not uppercased.
  *
  * @flow
  * @format
@@ -18,6 +19,7 @@ import Pressable from 'react-native-upstream/Libraries/Components/Pressable/Pres
 import View from 'react-native-upstream/Libraries/Components/View/View';
 import StyleSheet from 'react-native-upstream/Libraries/StyleSheet/StyleSheet';
 import Text from 'react-native-upstream/Libraries/Text/Text';
+import useColorScheme from 'react-native-upstream/Libraries/Utilities/useColorScheme';
 import invariant from 'invariant';
 import * as React from 'react';
 import {useState} from 'react';
@@ -53,6 +55,7 @@ const Button = ({
     onAccessibilityAction,
   } = props;
   const [hovered, setHovered] = useState(false);
+  const dark = useColorScheme() === 'dark';
 
   let _accessibilityState = {
     busy: ariaBusy ?? accessibilityState?.busy,
@@ -100,6 +103,7 @@ const Button = ({
       ref={ref}
       style={[
         styles.button,
+        dark && styles.darkButton,
         color != null && {backgroundColor: color},
         disabled && styles.disabled,
       ]}>
@@ -112,15 +116,23 @@ const Button = ({
               style={[
                 styles.shade,
                 pressed
-                  ? styles.pressedShade
+                  ? color == null && dark
+                    ? styles.darkPressedShade
+                    : styles.pressedShade
                   : color != null
                     ? styles.hoveredColorShade
-                    : styles.hoveredShade,
+                    : dark
+                      ? styles.darkHoveredShade
+                      : styles.hoveredShade,
               ]}
             />
           ) : null}
           <Text
-            style={[styles.text, color != null && styles.colorText]}
+            style={[
+              styles.text,
+              dark && styles.darkText,
+              color != null && styles.colorText,
+            ]}
             disabled={disabled}>
             {title}
           </Text>
@@ -132,9 +144,11 @@ const Button = ({
 
 Button.displayName = 'Button';
 
-// Adwaita's light theme: buttons are 34px tall with 6px corners and a bold
-// label; the neutral background is 10% black over the window, the accent
-// is #3584E4 (pass it as `color` for a suggested-action look).
+// Adwaita: buttons are 34px tall with 6px corners and a bold label. The
+// neutral background is 10% of the text color over the window (black on
+// #FAFAFA light, white on #242424 dark); hover adds 5% of it and a press
+// 20%. The accent is #3584E4 (pass it as `color` for a suggested-action
+// look), in both schemes.
 const styles = StyleSheet.create({
   button: {
     minHeight: 34,
@@ -149,6 +163,10 @@ const styles = StyleSheet.create({
   hoveredShade: {backgroundColor: 'rgba(0, 0, 0, 0.05)'},
   hoveredColorShade: {backgroundColor: 'rgba(255, 255, 255, 0.1)'},
   pressedShade: {backgroundColor: 'rgba(0, 0, 0, 0.2)'},
+  darkButton: {backgroundColor: '#3A3A3A'},
+  darkHoveredShade: {backgroundColor: 'rgba(255, 255, 255, 0.05)'},
+  darkPressedShade: {backgroundColor: 'rgba(255, 255, 255, 0.2)'},
+  darkText: {color: '#FFFFFF'},
   text: {
     textAlign: 'center',
     color: 'rgba(0, 0, 0, 0.8)',

@@ -4,6 +4,7 @@
 
 #include <folly/dynamic.h>
 #include <gtk/gtk.h>
+#include <react/nativemodule/TurboModuleProvider.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <atomic>
@@ -23,6 +24,7 @@ class SurfaceDelegate;
 
 namespace rngtk {
 
+class Appearance;
 class DevUI;
 class JsMessageQueueThread;
 class GtkImageLoader;
@@ -43,6 +45,11 @@ struct RNGtkHostOptions {
   // Resize the app's surface to the overlay's size whenever the window
   // resizes (see setFollowsWindowSize).
   bool followsWindowSize = false;
+  // Follow the desktop's light/dark style (XDG portal). Off, the system
+  // counts as light; Appearance.setColorScheme() still switches.
+  bool followSystemAppearance = true;
+  // More TurboModules, asked before the host's own.
+  facebook::react::TurboModuleProviders extraTurboModules;
 };
 
 class RNGtkHost {
@@ -86,6 +93,7 @@ class RNGtkHost {
   }
   GtkWidget *logBoxRoot() const { return logBoxRoot_; }
   DevUI *devUI() { return devUI_.get(); }
+  Appearance &appearance() { return *appearance_; }
   // True when no JS work is queued.
   bool isIdle() const;
   int jsErrorCount() const { return jsErrors_; }
@@ -99,6 +107,7 @@ class RNGtkHost {
  private:
   class LogBoxDelegate;
   class DeviceInfoModule;
+  class AppearanceModule;
   // Dimensions' window (the surface) and screen (the window's monitor),
   // in GTK's logical pixels (React Native's points).
   struct Metrics {
@@ -118,6 +127,7 @@ class RNGtkHost {
   void startAppSurface();
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
+  void onAppearanceChanged();
   static gboolean beforeWaiting(GSource *source, gint *timeout);
 
   RNGtkHostOptions options_;
@@ -142,6 +152,8 @@ class RNGtkHost {
   std::mutex beatMutex_;
   bool creatingInstance_{false};
   std::shared_ptr<DevUI> devUI_;
+  // Outlives ReactHost (and its Appearance module).
+  std::shared_ptr<Appearance> appearance_;
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;

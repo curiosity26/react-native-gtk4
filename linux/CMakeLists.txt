@@ -180,6 +180,17 @@ endforeach()
 # Libraries that depend on the JNI yoga target link "yoga".
 add_library(yoga ALIAS yogacore)
 
+# PlatformColor: graphics/ holds our HostPlatformColor.h and
+# PlatformColorParser.h, which replace the cxx platform's (a parser that
+# makes every PlatformColor transparent) for every target that includes
+# them: light and dark libadwaita colors (graphics/rngtk/PlatformColors.h).
+set(RNGTK_GRAPHICS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/graphics)
+foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(rngtk_dirs react_renderer_graphics ${prop})
+  set_property(TARGET react_renderer_graphics PROPERTY ${prop}
+               ${RNGTK_GRAPHICS_DIR} ${rngtk_dirs})
+endforeach()
+
 # Our Pango text measurement replaces react/renderer/textlayoutmanager.
 add_subdirectory(textlayoutmanager)
 
@@ -273,6 +284,7 @@ target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 
 # The host: our sources, shared by the app library and the test harness.
 add_library(rngtk_host_objs OBJECT
+  src/Appearance.cc
   src/DevControls.cc
   src/DevUI.cc
   src/FeatureFlags.cc
@@ -473,6 +485,9 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-appearance-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryAppearance --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

@@ -1,5 +1,6 @@
 #include "RNGtkHost.h"
 
+#include "Appearance.h"
 #include "DevUI.h"
 #include "GtkImageLoader.h"
 #include "GtkMountingManager.h"
@@ -105,6 +106,36 @@ class RNGtkHost::DeviceInfoModule
   const RNGtkHost &host_;
 };
 
+// Appearance (Appearance.getColorScheme(), useColorScheme()): the scheme
+// Appearance resolves, read on the JS thread; setColorScheme() applies on
+// the main thread, and the change comes back as appearanceChanged.
+class RNGtkHost::AppearanceModule
+    : public NativeAppearanceCxxSpec<RNGtkHost::AppearanceModule> {
+ public:
+  AppearanceModule(std::shared_ptr<CallInvoker> jsInvoker,
+                   std::weak_ptr<Appearance> appearance)
+      : NativeAppearanceCxxSpec(std::move(jsInvoker)),
+        appearance_(std::move(appearance)) {}
+
+  std::string getColorScheme(facebook::jsi::Runtime &) {
+    auto appearance = appearance_.lock();
+    return appearance && appearance->isDark() ? "dark" : "light";
+  }
+
+  void setColorScheme(facebook::jsi::Runtime &, std::string scheme) {
+    on_main([weak = appearance_, scheme = Appearance::parseScheme(scheme)] {
+      if (auto appearance = weak.lock()) appearance->setOverride(scheme);
+    });
+  }
+
+  // Events go through RCTDeviceEventEmitter.
+  void addListener(facebook::jsi::Runtime &, std::string) {}
+  void removeListeners(facebook::jsi::Runtime &, double) {}
+
+ private:
+  std::weak_ptr<Appearance> appearance_;
+};
+
 // Shows LogBox's surface over the app. LogBoxModule calls show() and hide()
 // on the JS thread (surface calls are thread-safe there; the widget is
 // shown on the main thread); it is created and destroyed with each JS
@@ -195,6 +226,10 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         });
       });
   runLoopObservers_ = std::make_shared<RunLoopObserverManager>();
+  // Before the controls are measured: the theme variant can change them.
+  appearance_ = std::make_shared<Appearance>(
+      gtk_widget_get_display(GTK_WIDGET(overlay_)),
+      options_.followSystemAppearance, [this] { onAppearanceChanged(); });
   measure_native_controls();
 
   auto contextContainer = std::make_shared<const ContextContainer>();
@@ -241,7 +276,8 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
 
   // Providers are asked before ReactCxxPlatform's built-in modules, so
   // these replace its Android-shaped PlatformConstants.
-  TurboModuleProviders turboModuleProviders{
+  TurboModuleProviders turboModuleProviders = options_.extraTurboModules;
+  turboModuleProviders.insert(turboModuleProviders.end(), {
       [constants = collectPlatformConstants(gdk_display_get_default(),
                                             options_.isTesting)](
           const std::string &name,
@@ -259,6 +295,10 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         if (name == DeviceInfoModule::kModuleName) {
           return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
         }
+        if (name == AppearanceModule::kModuleName) {
+          return std::make_shared<AppearanceModule>(
+              jsInvoker, std::weak_ptr<Appearance>(appearance_));
+        }
         if (name == ImageLoaderModule::kModuleName) {
           return std::make_shared<ImageLoaderModule>(
               jsInvoker, std::weak_ptr<IImageLoader>(imageLoader_));
@@ -271,7 +311,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         }
         return nullptr;
       },
-  };
+  });
 
   if (options_.devMode) {
     GtkWidget *logBoxRoot = rn_view_new();
@@ -624,6 +664,18 @@ void RNGtkHost::reload() {
       LOG(ERROR) << "Reload failed: " << e.what();
     }
   });
+}
+
+// Main thread: the scheme or accent changed. Mounted views re-resolve
+// their PlatformColors, and JS hears about it (Appearance's listeners,
+// useColorScheme()).
+void RNGtkHost::onAppearanceChanged() {
+  mountingManager_->refreshColors();
+  if (!loaded_ || !reactHost_) return;
+  reactHost_->emitDeviceEvent(folly::dynamic::array(
+      "appearanceChanged",
+      folly::dynamic::object("colorScheme",
+                             appearance_->isDark() ? "dark" : "light")));
 }
 
 void RNGtkHost::openDebugger() { reactHost_->openDebugger(); }
