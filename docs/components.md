@@ -139,8 +139,10 @@ react-native-macos. The `GalleryKeyboard` page (`--module GalleryKeyboard
 --self-test`) checks the Tab order both ways, focus events, the focus
 ring, key events with modifiers, `keyDownEvents`, Enter/Space presses,
 TextInput keys, `autoFocus` and `ref.focus()`/`blur()`, on Wayland and
-X11. (The self-test feeds key events to the handler and moves focus the
-way GtkWindow's Tab binding does; real typing was checked by hand.)
+X11. The self-test feeds key events to the handler and moves focus the
+way GtkWindow's Tab binding does: real key presses can't be synthesized
+on the test VM. TypeScript: `ViewPropsLinux` and `HandledKeyEvent` in
+`types/index.d.ts`.
 
 | Feature | Status | Notes |
 | --- | --- | --- |
