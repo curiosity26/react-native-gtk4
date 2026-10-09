@@ -242,6 +242,18 @@ GtkWidget *popup_menu(GtkWidget *parent, double x, double y, const graphene_rect
   // (Tests read the actions' states here; GTK has no getter.)
   g_object_set_data_full(G_OBJECT(popover), "rngtk-menu-actions", group, g_object_unref);
   gtk_widget_add_css_class(popover, "context-menu");
+  // GTK's menu scrolls in a scrolled window that, with automatic
+  // scrollbars, is never shorter than its vertical scrollbar: a one-item
+  // menu got empty space under its item. External: still scrollable, with
+  // no scrollbar to make room for.
+  for (GtkWidget *w = gtk_widget_get_first_child(popover); w;) {
+    if (GTK_IS_SCROLLED_WINDOW(w)) {
+      gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_NEVER,
+                                     GTK_POLICY_EXTERNAL);
+      break;
+    }
+    w = gtk_widget_get_first_child(w);
+  }
   // RNView presents popovers parented to it (see rn_view_size_allocate).
   gtk_widget_set_parent(popover, parent);
   GdkRectangle at = x >= 0 ? GdkRectangle{int(x), int(y), 1, 1}

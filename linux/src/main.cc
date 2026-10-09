@@ -2798,6 +2798,8 @@ void add_dialogs_steps() {
   app.steps.push_back(chooser_step(
       "  ...multiple: an array of the files picked", "open-files",
       [](GtkFileChooser *chooser) {
+        check(gtk_file_chooser_get_select_multiple(chooser),
+              "  the chooser lets you pick several files");
         GFile *file = g_file_new_for_path((dialogs_dir + "/b.txt").c_str());
         gtk_file_chooser_set_file(chooser, file, nullptr);
         g_object_unref(file);
@@ -3026,8 +3028,16 @@ void add_menus_steps() {
                            [] { right_click("menu-input"); },
                            [] {
                              GtkWidget *p = context_menu();
-                             return p && menu_labels(popover_model(p)) == "Insert date" &&
-                                    choose("Insert date");
+                             if (!p || menu_labels(popover_model(p)) != "Insert date") return false;
+                             // One item, no empty space under it (GTK's
+                             // scrolled window would keep a scrollbar's
+                             // length).
+                             GtkWidget *item = first_of_type(p, GTK_TYPE_SCROLLED_WINDOW);
+                             int h = item ? gtk_widget_get_height(item) : 0;
+                             if (h <= 0) return false;
+                             printf("  one-item menu: %d px tall\n", h);
+                             check(h < 40, "  ...without empty space under its item");
+                             return choose("Insert date");
                            }});
   app.steps.push_back(Step{"  ...whose onSelect runs", [] {},
                            [] { return has_text(app.root, "Insert date ·"); }});
