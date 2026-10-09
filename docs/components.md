@@ -17,7 +17,10 @@ borders, corner radii, a rounded overflow clip, box shadows, a transformed
 view's position, filters, gradients, nested Text colors and ellipsis. It
 also checks that every Text draws at the size Yoga measured, and it clicks
 the pressables, hovers one, holds TouchableOpacity and copies selectable
-text. It passes on Wayland and X11.
+text. It passes on Wayland and X11. `--module GallerySelection
+--self-test` checks drag, double- and triple-click and Shift+click
+selection, Ctrl+C, the right-click menu, `selectionColor`, and that presses
+and wheel scrolling still work around selectable text.
 
 **Supported** means it matches iOS/Android for the common cases.
 **Partial** means it works with the limits noted. **Not yet** means the
@@ -78,7 +81,8 @@ every mounted Text draws at the size Yoga measured.
 | `numberOfLines` + `ellipsizeMode` head/middle/tail | Supported | |
 | `ellipsizeMode: 'clip'` | Supported | measures N lines and clips the rest |
 | Padding/border on Text | Supported | text draws inside the content box |
-| `selectable` | Partial | right-click shows a Copy menu that copies the whole text; no drag selection yet |
+| `selectable` | Supported | mouse drag, double-click (word), triple-click (paragraph), Shift+click; Ctrl+C / Ctrl+Insert and the right-click Copy (the selection, or all with none) and Select All; the primary selection for middle-click paste; an I-beam cursor. One paragraph at a time, as on iOS and Android; no keyboard selection |
+| `selectionColor` | Supported | the highlight; without it the theme's selected color at 30% (gray in an inactive window), like GtkLabel |
 | `textShadow*` | Not yet | |
 | Inline views (`<View>` inside `<Text>`) | Not yet | take no space |
 | `adjustsFontSizeToFit`, `allowFontScaling` | Not yet | |
@@ -98,7 +102,8 @@ transforms, rounded overflow clips, `pointerEvents`, and nested Text spans.
 | W3C pointer events: down/move/up/cancel, click | Supported | only sent to views (and ancestors) that listen |
 | Hover: pointerover/out, pointerenter/leave | Supported | `onHoverIn`/`onHoverOut` on Pressable (W3C hover flag on) |
 | Modifier keys, buttons, pointerType | Supported | `ctrlKey`... `buttons`, `button`, `mouse`/`touch` |
-| Right/middle button | Partial | pointer events only; right-click opens Copy on selectable text |
+| Right/middle button | Partial | pointer events only; right-click opens Copy / Select All on selectable text |
+| Text selection by mouse | Supported | selectable Text only; a selection that becomes non-empty cancels the press it began (touchCancel), so a Pressable around selectable text presses on a click, not on a drag |
 | Scroll wheel, touchpad | Supported | handled by the ScrollView's GtkScrolledWindow (smooth and kinetic) |
 | Keyboard focus, `onKeyDown` | Not yet | Phase 2 |
 | Pen pressure/tilt | Not yet | |

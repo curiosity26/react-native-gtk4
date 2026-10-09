@@ -191,6 +191,18 @@ foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
                ${RNGTK_GRAPHICS_DIR} ${rngtk_dirs})
 endforeach()
 
+# Paragraph props: components/react/.../HostPlatformParagraphProps.h
+# replaces the cxx platform's (BaseParagraphProps alone) to add
+# selectionColor.
+set(RNGTK_TEXT_PROPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/components)
+foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(rngtk_dirs rrc_text ${prop})
+  set_property(TARGET rrc_text PROPERTY ${prop}
+               ${RNGTK_TEXT_PROPS_DIR} ${rngtk_dirs})
+endforeach()
+target_sources(rrc_text PRIVATE
+  ${RNGTK_TEXT_PROPS_DIR}/react/renderer/components/text/HostPlatformParagraphProps.cpp)
+
 # Our Pango text measurement replaces react/renderer/textlayoutmanager.
 add_subdirectory(textlayoutmanager)
 
@@ -485,6 +497,9 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-selection-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GallerySelection --width 940 --height 680 --self-test)
 add_test(NAME gallery-appearance-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryAppearance --width 940 --height 680 --self-test)

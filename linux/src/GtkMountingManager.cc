@@ -387,6 +387,22 @@ void GtkMountingManager::applyParagraph(GtkWidget *widget,
   rn_text_set_layout(RN_TEXT(widget), layout);
   g_object_unref(layout);
 
+  if (auto props = std::dynamic_pointer_cast<const ParagraphProps>(view.props)) {
+    // Selectable text: an I-beam (unless `cursor` says otherwise) and
+    // selectionColor's highlight, else the theme's.
+    if (props->isSelectable && props->cursor == Cursor::Auto) {
+      gtk_widget_set_cursor_from_name(widget, "text");
+    }
+    if (!props->isSelectable) rn_text_set_selection(RN_TEXT(widget), 0, 0);
+    GdkRGBA highlight{};
+    if (props->selectionColor && *props->selectionColor) {
+      highlight = to_rgba(*props->selectionColor);
+    }
+    rn_text_set_selection_color(
+        RN_TEXT(widget),
+        props->selectionColor && *props->selectionColor ? &highlight : nullptr);
+  }
+
   auto *spans = new TextSpans();
   int offset = 0;
   for (const auto &fragment : data.attributedString.getFragments()) {

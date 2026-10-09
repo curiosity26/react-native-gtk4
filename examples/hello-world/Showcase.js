@@ -198,11 +198,19 @@ function ViewsText() {
       </Section>
       <Section
         title="Selectable text"
-        hint="Right-click for Copy, then paste into a field on the Inputs page. Drag selection isn't supported yet.">
+        hint="Drag to select, double-click a word, triple-click a paragraph, Shift+click to extend. Ctrl+C or right-click Copy copies it (all of it with nothing selected); paste into a field on the Inputs page, or middle-click paste the primary selection.">
         <Text selectable style={styles.body}>
-          This paragraph is selectable: right-click it and choose Copy to put
-          the whole paragraph on the clipboard.
+          This paragraph is selectable. Select a few words with the mouse,
+          then press Ctrl+C.{'\n'}A second paragraph, for triple-clicking.
         </Text>
+        <Text selectable selectionColor="rgba(255, 45, 85, 0.35)" style={styles.body}>
+          This one sets selectionColor to a translucent pink.
+        </Text>
+        <Pressable onPress={() => log('Pressable around selectable text pressed')} style={styles.pressBox}>
+          <Text selectable style={styles.body}>
+            Inside a Pressable: click to press it, drag to select (no press).
+          </Text>
+        </Pressable>
       </Section>
     </ScrollView>
   );
@@ -932,6 +940,7 @@ const styles = StyleSheet.create({
   imageBig: {width: 260, height: 160, backgroundColor: '#E5E5EA'},
   spinner: {width: 80, height: 80, borderRadius: 12, backgroundColor: '#FF9500'},
   slider: {width: 60, height: 60, borderRadius: 30, backgroundColor: '#34C759'},
+  pressBox: {padding: 10, borderRadius: 8, backgroundColor: PlatformColor('shade_color')},
   segmented: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
