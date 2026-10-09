@@ -21,6 +21,7 @@
 #pragma once
 
 #include <ReactCommon/TurboModule.h>
+#include <folly/dynamic.h>
 #include <gtk/gtk.h>
 
 #include <atomic>
@@ -65,6 +66,10 @@ struct PlatformState {
   // launching them; true if it took the URL.
   std::function<GtkWindow *()> window;
   std::function<bool(const std::string &)> openURLOverride;
+  // The app's id (GApplication's), and (main thread) a device event to JS:
+  // [name, payload].
+  std::string appId;
+  std::function<void(folly::dynamic)> emitDeviceEvent;
 };
 
 const char *appStateName(int state);

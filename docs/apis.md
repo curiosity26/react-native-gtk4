@@ -5,7 +5,8 @@ PlatformColor, AccessibilityInfo, Linking, AppState, Clipboard,
 PixelRatio, I18nManager, Share, Vibration, Alert. Then the Linux APIs
 React Native has none for, which `@curiosity26/react-native-gtk4` exports:
 [Dialogs](#dialogs), [MenuBar](#menubar) (and `ContextMenu`, in
-[components.md](components.md#context-menus)), [Windows](#windows).
+[components.md](components.md#context-menus)), [Windows](#windows),
+[Notifications](#notifications).
 
 Components are in [components.md](components.md).
 
@@ -316,6 +317,50 @@ them, `setSize` (and the `resize` event), `setTitle` from inside one and on
 the main window, a Modal opened in one, the close button (with and without
 `interceptClose`), the main window hiding while another is open, and the
 app quitting when the last one closes.
+
+## Notifications
+
+Desktop notifications, from `@curiosity26/react-native-gtk4`, on
+GNotification: GNOME's banners and notification list (or the desktop's
+notification server; the notification portal in a sandbox).
+
+```js
+import {Notifications} from '@curiosity26/react-native-gtk4';
+
+const id = Notifications.show({
+  title: 'Download finished',
+  body: 'notes.pdf (2 MB)',
+  icon: 'folder-download-symbolic',     // an icon name, or a file path / URI
+  priority: 'normal',                   // 'low' | 'normal' | 'high' | 'urgent'
+  buttons: [{id: 'open', title: 'Open'}, {id: 'show', title: 'Show in Files'}],
+  onPress: action => (action === 'open' ? openFile() : showFolder()),
+});
+Notifications.addListener('press', ({id, action}) => ...);
+Notifications.close(id);
+```
+
+| | Notes |
+| --- | --- |
+| `show(options)` | returns the id (given, or made up). The same id replaces a notification still showing |
+| clicking it, or a button | raises the app's window, then `onPress(action)` and the `press` listeners get `{id, action}`: `'default'` for the notification, else the button's id |
+| `close(id)` | withdraws it |
+| `requestPermission()` | resolves `'granted'`: desktops don't ask |
+
+GNOME shows GNotifications (its own `org.gtk.Notifications`) only for apps
+it knows, with an installed `.desktop` file named after the app id; an app
+without one (a development build, the template before packaging) goes
+through the freedesktop notification server, which GNOME and every other
+desktop run, so notifications work either way. The app's name in them is
+its title (`AppOptions::title`). There is no system tray API: stock GNOME
+has no tray.
+
+`GalleryNotifications` runs its self-test on a private D-Bus
+(`dbus-run-session`, with `linux/tests/private-session-bus.conf`) where
+`rn-gtk-host` is the notification server: it checks what the app sends
+(title, body, icon, buttons, replacing, withdrawing, urgency) and clicks
+the notification and a button. On the real GNOME session, the banner
+was checked to show (title, body and icon, through the freedesktop
+server); clicking a real one is a hand check.
 
 ## Testing
 

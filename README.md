@@ -46,7 +46,9 @@ with their own size for `useWindowDimensions`
 ([docs/apis.md](docs/apis.md#windows)). Drag and drop with
 react-native-macos' props (`draggedTypes`, `onDrop`): files, links, text
 and images in, selected text and `draggable` images out
-([docs/components.md](docs/components.md#drag-and-drop)).
+([docs/components.md](docs/components.md#drag-and-drop)). Desktop
+notifications with buttons (`Notifications`,
+[docs/apis.md](docs/apis.md#notifications)).
 
 ## Quick start
 

@@ -5,6 +5,7 @@
 #include "DevUI.h"
 #include "Dialogs.h"
 #include "GtkMenus.h"
+#include "Notifications.h"
 #include "GtkImageLoader.h"
 #include "GtkKeyboardHandler.h"
 #include "GtkMountingManager.h"
@@ -266,6 +267,10 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     return root && GTK_IS_WINDOW(root) ? GTK_WINDOW(root) : nullptr;
   };
   platform_->openURLOverride = options_.openURLOverride;
+  platform_->appId = options_.appId;
+  platform_->emitDeviceEvent = [this, alive = std::weak_ptr<int>(alive_)](folly::dynamic args) {
+    if (alive.lock() && loaded_ && reactHost_) reactHost_->emitDeviceEvent(std::move(args));
+  };
   // Right-to-left (I18nManager) for GTK's own widgets too.
   if (platform_->i18n->isRTL()) gtk_widget_set_default_direction(GTK_TEXT_DIR_RTL);
   fontDpiHandler_ = g_signal_connect(
@@ -347,6 +352,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
           return module;
         }
         if (auto module = makeMenuModule(name, jsInvoker, platform_)) {
+          return module;
+        }
+        if (auto module = makeNotificationsModule(name, jsInvoker, platform_)) {
           return module;
         }
         if (name == AccessibilityManagerModule::kModuleName) {

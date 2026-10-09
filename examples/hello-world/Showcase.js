@@ -40,7 +40,14 @@ import {
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
-import {ContextMenu, Dialogs, MenuBar, Windows, useWindow} from '@curiosity26/react-native-gtk4';
+import {
+  ContextMenu,
+  Dialogs,
+  MenuBar,
+  Notifications,
+  Windows,
+  useWindow,
+} from '@curiosity26/react-native-gtk4';
 
 const halves = require('./assets/halves.png');
 const tile = require('./assets/tile.png');
@@ -1185,6 +1192,60 @@ function DragDropPage() {
   );
 }
 
+// ---- Notifications ------------------------------------------------------------
+
+function NotificationsPage() {
+  const log = useLog();
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const sub = Notifications.addListener('press', e => log(`notification ${e.id}: ${e.action}`));
+    return () => sub.remove();
+  }, [log]);
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Notifications (@curiosity26/react-native-gtk4)"
+        hint="GNOME's banners and notification list. Clicking one brings this window back and sends 'press'; buttons send their id. The same id replaces a notification. No system tray: stock GNOME has none.">
+        <View style={styles.row}>
+          <Btn
+            title="Simple"
+            onPress={() => Notifications.show({title: 'Hello from React Native', body: 'Sent with GNotification.'})}
+          />
+          <Btn
+            title="With buttons"
+            onPress={() =>
+              Notifications.show({
+                id: 'message',
+                title: 'New message from Ada',
+                body: 'Are we still on for Friday?',
+                icon: 'mail-unread-symbolic',
+                buttons: [
+                  {id: 'reply', title: 'Reply'},
+                  {id: 'later', title: 'Later'},
+                ],
+                onPress: action => log(`onPress: ${action}`),
+              })
+            }
+          />
+          <Btn
+            title={`Count (${count})`}
+            onPress={() => {
+              setCount(c => c + 1);
+              Notifications.show({id: 'counter', title: `Counted to ${count + 1}`, body: 'Same id: it replaces the last one.'});
+            }}
+          />
+          <Btn
+            title="Urgent"
+            color="#FF3B30"
+            onPress={() => Notifications.show({title: 'Battery low', body: '5% left', priority: 'urgent', icon: 'battery-caution-symbolic'})}
+          />
+          <Btn title="Withdraw 'With buttons'" onPress={() => Notifications.close('message')} />
+        </View>
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1598,6 +1659,7 @@ const PAGES = [
   ['Menus', MenusPage],
   ['Windows', WindowsPage],
   ['Drag & Drop', DragDropPage],
+  ['Notifications', NotificationsPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.
