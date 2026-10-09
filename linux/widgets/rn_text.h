@@ -34,6 +34,26 @@ void rn_text_set_insets(RNText *self, float top, float right, float bottom,
                         float left);
 void rn_text_get_insets(RNText *self, float insets[4]);
 
+// Selection (selectable text), as byte indices into the text; start may
+// be past end (a backwards drag). Setting an empty range clears it.
+void rn_text_set_selection(RNText *self, int start, int end);
+// FALSE if nothing is selected; start <= end.
+gboolean rn_text_get_selection(RNText *self, int *start, int *end);
+// The selected text (newly allocated), or NULL.
+char *rn_text_get_selected_text(RNText *self);
+// The highlight: `color` (selectionColor), or NULL for the theme's (its
+// selected background at 30%, gray in an inactive window, like GtkLabel).
+void rn_text_set_selection_color(RNText *self, const GdkRGBA *color);
+// The byte index under (x, y) in widget coordinates, clamped to the text
+// (for drags that leave the paragraph): the character's start, or with
+// `round`, its end when the point is on its trailing half (a caret).
+int rn_text_index_at(RNText *self, double x, double y, gboolean round);
+// Grows [*start, *end) to whole words (double-click; *end == *start is
+// the character at *start), or to the newline-delimited paragraph around
+// them (triple-click).
+void rn_text_extend_to_words(RNText *self, int *start, int *end);
+void rn_text_extend_to_paragraph(RNText *self, int *start, int *end);
+
 // Measures text the way Yoga's measure function will: max_width < 0 means
 // unconstrained. Safe to call from any thread.
 graphene_size_t rn_text_measure(const char *text, const char *family,

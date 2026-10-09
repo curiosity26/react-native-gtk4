@@ -8,6 +8,11 @@
 // it (rn_widget_pick: transforms, overflow, pointerEvents), or the nested
 // <Text> span under it; moves and the release go to that same target.
 // Pointer events target whatever is under the pointer now.
+//
+// Selectable text selects with the mouse like a GtkLabel: drag, double-
+// click for words, triple-click for the paragraph, Shift+click to extend.
+// Ctrl+C (or Ctrl+Insert) and the right-click Copy copy it. A selection
+// that becomes non-empty cancels the press it started with.
 #pragma once
 
 #include <gtk/gtk.h>
@@ -16,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -55,6 +61,10 @@ class GtkPointerHandler {
   // Ends every touch in progress with touchCancel (a scroll view took over
   // the gesture), so presses under it don't fire.
   void cancelTouches();
+  // The selected text (of selectable Text), or "" with no selection.
+  std::string selectedText() const;
+  // Copies the selection to the clipboard; false with no selection.
+  bool copySelection();
 
  private:
   struct Target {
@@ -84,6 +94,12 @@ class GtkPointerHandler {
                        const Input &input);
   void updateHover(const Input &input, const Target &target);
   void showCopyMenu(const Target &target, double x, double y);
+  // Selection by mouse on selectable text.
+  int clickCount(const Input &input);
+  bool beginSelection(const Input &input, const Target &target, int clicks);
+  void extendSelection(const Input &input);
+  void clearSelection();
+  static gboolean onCopyShortcut(GtkWidget *, GVariant *, gpointer self);
 
   GtkMountingManager &mountingManager_;
   GtkWidget *root_;
@@ -93,6 +109,19 @@ class GtkPointerHandler {
   Target pressTarget_;           // for click: where the button went down
   int buttons_ = 0;              // W3C buttons bitmask
   bool realInput_ = true;
+  GtkEventController *shortcuts_;
+
+  // The paragraph with a selection (or being dragged over), what the
+  // press selected first (a caret, word or paragraph: drags extend from
+  // it), and how: 1 characters, 2 words, 3 paragraphs.
+  std::shared_ptr<GtkWidget> selectionWidget_;
+  int anchorStart_ = 0, anchorEnd_ = 0;
+  int selectionUnit_ = 1;
+  bool selecting_ = false;
+  // Double and triple clicks.
+  uint32_t lastClickMs_ = 0;
+  double lastClickX_ = 0, lastClickY_ = 0;
+  int clicks_ = 0;
 };
 
 }  // namespace rngtk

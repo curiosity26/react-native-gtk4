@@ -11,6 +11,8 @@
 #include <react/renderer/components/view/primitives.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 using namespace facebook::react;
 
@@ -61,11 +63,25 @@ GtkPointerHandler::GtkPointerHandler(GtkMountingManager &mountingManager,
   gtk_event_controller_set_propagation_phase(controller_, GTK_PHASE_CAPTURE);
   g_signal_connect(controller_, "event", G_CALLBACK(onEvent), this);
   gtk_widget_add_controller(root_, controller_);
+
+  // Ctrl+C copies selected text from anywhere in the window; a focused
+  // TextInput handles its own first (global shortcuts run after it).
+  shortcuts_ = gtk_shortcut_controller_new();
+  gtk_shortcut_controller_set_scope(GTK_SHORTCUT_CONTROLLER(shortcuts_),
+                                    GTK_SHORTCUT_SCOPE_GLOBAL);
+  for (const char *accel : {"<Control>c", "<Control>Insert"}) {
+    gtk_shortcut_controller_add_shortcut(
+        GTK_SHORTCUT_CONTROLLER(shortcuts_),
+        gtk_shortcut_new(gtk_shortcut_trigger_parse_string(accel),
+                         gtk_callback_action_new(onCopyShortcut, this, nullptr)));
+  }
+  gtk_widget_add_controller(root_, shortcuts_);
 }
 
 GtkPointerHandler::~GtkPointerHandler() {
   g_signal_handlers_disconnect_by_data(controller_, this);
   gtk_widget_remove_controller(root_, controller_);
+  gtk_widget_remove_controller(root_, shortcuts_);
 }
 
 gboolean GtkPointerHandler::onEvent(GtkEventControllerLegacy *, GdkEvent *event,
@@ -268,6 +284,24 @@ void GtkPointerHandler::dispatch(const Input &input) {
       break;
     }
   }
+
+  // After the touches: a selection that turns non-empty cancels them.
+  if (input.device == Device::Mouse && input.button == 1) {
+    if (input.phase == Phase::Down) {
+      if (!beginSelection(input, target, clickCount(input))) clearSelection();
+    } else if (input.phase == Phase::Move && selecting_) {
+      extendSelection(input);
+    } else if (input.phase == Phase::Up && selecting_) {
+      selecting_ = false;
+      // X11 and Wayland's primary selection: middle-click pastes it.
+      std::string text = selectedText();
+      if (!text.empty()) {
+        gdk_clipboard_set_text(
+            gdk_display_get_primary_clipboard(gtk_widget_get_display(root_)),
+            text.c_str());
+      }
+    }
+  }
 }
 
 void GtkPointerHandler::cancelTouches() {
@@ -446,11 +480,115 @@ void GtkPointerHandler::updateHover(const Input &input, const Target &target) {
   hovered_ = std::move(path);
 }
 
+int GtkPointerHandler::clickCount(const Input &input) {
+  // GTK's double-click time and distance (a third click within them is a
+  // triple click).
+  int time = 400, distance = 5;
+  g_object_get(gtk_widget_get_settings(root_), "gtk-double-click-time", &time,
+               "gtk-double-click-distance", &distance, nullptr);
+  bool again = clicks_ > 0 && input.timeMs - lastClickMs_ <= uint32_t(time) &&
+               std::abs(input.x - lastClickX_) <= distance &&
+               std::abs(input.y - lastClickY_) <= distance;
+  clicks_ = again ? clicks_ % 3 + 1 : 1;
+  lastClickMs_ = input.timeMs;
+  lastClickX_ = input.x;
+  lastClickY_ = input.y;
+  return clicks_;
+}
+
+// A primary press on selectable text: a caret (nothing selected), the
+// word, or the paragraph, which a drag then extends.
+bool GtkPointerHandler::beginSelection(const Input &input, const Target &target,
+                                       int clicks) {
+  GtkWidget *widget = target.widget.get();
+  if (!widget || !RN_IS_TEXT(widget) ||
+      !mountingManager_.isSelectableText(
+          mountingManager_.targetForView(widget).tag)) {
+    return false;
+  }
+  auto *text = RN_TEXT(widget);
+  graphene_point_t p{float(input.x), float(input.y)}, local;
+  if (!gtk_widget_compute_point(root_, widget, &p, &local)) return false;
+  bool extend = clicks == 1 && (input.modifiers & GDK_SHIFT_MASK) &&
+                selectionWidget_.get() == widget;
+  if (selectionWidget_ && selectionWidget_.get() != widget) clearSelection();
+  selectionWidget_ = target.widget;
+  selectionUnit_ = clicks;
+  selecting_ = true;
+  if (extend) {
+    // Shift+click: from the selection's start (or the caret) to here.
+    extendSelection(input);
+    return true;
+  }
+  int start = rn_text_index_at(text, local.x, local.y, clicks == 1);
+  int end = start;
+  if (clicks == 2) rn_text_extend_to_words(text, &start, &end);
+  if (clicks == 3) rn_text_extend_to_paragraph(text, &start, &end);
+  anchorStart_ = start;
+  anchorEnd_ = end;
+  rn_text_set_selection(text, start, end);
+  if (start != end) cancelTouches();
+  return true;
+}
+
+void GtkPointerHandler::extendSelection(const Input &input) {
+  GtkWidget *widget = selectionWidget_.get();
+  if (!widget) return;
+  auto *text = RN_TEXT(widget);
+  graphene_point_t p{float(input.x), float(input.y)}, local;
+  if (!gtk_widget_compute_point(root_, widget, &p, &local)) return;
+  int start = rn_text_index_at(text, local.x, local.y, selectionUnit_ == 1);
+  int end = start;
+  if (selectionUnit_ == 2) rn_text_extend_to_words(text, &start, &end);
+  if (selectionUnit_ == 3) rn_text_extend_to_paragraph(text, &start, &end);
+  // Backwards from the anchor's end, or forwards from its start.
+  if (start < anchorStart_) {
+    rn_text_set_selection(text, anchorEnd_, start);
+  } else {
+    rn_text_set_selection(text, anchorStart_, std::max(end, anchorEnd_));
+  }
+  int s, e;
+  // Selecting, not pressing: whatever the press started is cancelled.
+  if (rn_text_get_selection(text, &s, &e)) cancelTouches();
+}
+
+void GtkPointerHandler::clearSelection() {
+  if (selectionWidget_) rn_text_set_selection(RN_TEXT(selectionWidget_.get()), 0, 0);
+  selectionWidget_ = nullptr;
+  selecting_ = false;
+}
+
+std::string GtkPointerHandler::selectedText() const {
+  if (!selectionWidget_) return "";
+  char *text = rn_text_get_selected_text(RN_TEXT(selectionWidget_.get()));
+  std::string s = text ? text : "";
+  g_free(text);
+  return s;
+}
+
+bool GtkPointerHandler::copySelection() {
+  std::string text = selectedText();
+  if (text.empty()) return false;
+  gdk_clipboard_set_text(gdk_display_get_clipboard(gtk_widget_get_display(root_)),
+                         text.c_str());
+  return true;
+}
+
+gboolean GtkPointerHandler::onCopyShortcut(GtkWidget *, GVariant *,
+                                           gpointer self) {
+  return static_cast<GtkPointerHandler *>(self)->copySelection();
+}
+
 void GtkPointerHandler::showCopyMenu(const Target &target, double x, double y) {
   if (!target.widget || !RN_IS_TEXT(target.widget.get())) return;
-  std::string text = rn_text_get_text(RN_TEXT(target.widget.get()));
+  // The selection if this paragraph has one, else all of it.
+  auto *paragraph = RN_TEXT(target.widget.get());
+  char *selected = rn_text_get_selected_text(paragraph);
+  std::string text = selected ? selected : rn_text_get_text(paragraph);
+  g_free(selected);
   GMenu *menu = g_menu_new();
   g_menu_append(menu, "Copy", "rngtk-text.copy");
+  g_menu_append(menu, "Select All", "rngtk-text.select-all");
   GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
   g_object_unref(menu);
 
@@ -468,6 +606,26 @@ void GtkPointerHandler::showCopyMenu(const Target &target, double x, double y) {
       GConnectFlags(0));
   g_action_map_add_action(G_ACTION_MAP(group), G_ACTION(copy));
   g_object_unref(copy);
+  GSimpleAction *selectAll = g_simple_action_new("select-all", nullptr);
+  struct SelectAll {
+    GtkPointerHandler *handler;
+    std::shared_ptr<GtkWidget> widget;
+  };
+  g_signal_connect_data(
+      selectAll, "activate",
+      G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
+        auto *d = static_cast<SelectAll *>(data);
+        auto *text = RN_TEXT(d->widget.get());
+        if (d->handler->selectionWidget_ != d->widget) d->handler->clearSelection();
+        d->handler->selectionWidget_ = d->widget;
+        d->handler->selecting_ = false;
+        rn_text_set_selection(text, 0, int(strlen(rn_text_get_text(text))));
+      }),
+      new SelectAll{this, target.widget},
+      +[](gpointer data, GClosure *) { delete static_cast<SelectAll *>(data); },
+      GConnectFlags(0));
+  g_action_map_add_action(G_ACTION_MAP(group), G_ACTION(selectAll));
+  g_object_unref(selectAll);
   gtk_widget_insert_action_group(popover, "rngtk-text", G_ACTION_GROUP(group));
   g_object_unref(group);
 

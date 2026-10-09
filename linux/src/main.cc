@@ -1222,6 +1222,217 @@ void add_appearance_steps() {
 }
 
 // ---------------------------------------------------------------------------
+// GallerySelection checks
+
+bool is_selection() { return opts.module == "GallerySelection"; }
+
+// Root coordinates inside byte `index` of paragraph `id`: its vertical
+// middle, at `fx` of its width.
+graphene_point_t text_point(const char *id, int index, float fx = 0.5f) {
+  GtkWidget *v = by_id(id);
+  if (!v || !RN_IS_TEXT(v)) return {};
+  PangoRectangle r;
+  pango_layout_index_to_pos(rn_text_get_layout(RN_TEXT(v)), index, &r);
+  float in[4];
+  rn_text_get_insets(RN_TEXT(v), in);
+  graphene_point_t p{in[3] + (r.x + r.width * fx) / PANGO_SCALE,
+                     in[0] + (r.y + r.height / 2.0f) / PANGO_SCALE},
+      out{};
+  if (!gtk_widget_compute_point(v, app.root, &p, &out)) return {};
+  return out;
+}
+
+// Mouse input with its own clock: gestures 1 s apart, clicks within one
+// 50 ms apart (a double or triple click).
+uint32_t mouse_ms = 1000000;
+void mouse(rngtk::GtkPointerHandler::Phase phase, graphene_point_t p,
+           int button = 1, GdkModifierType mods = GdkModifierType(0)) {
+  rngtk::GtkPointerHandler::Input input{};
+  input.phase = phase;
+  input.x = p.x;
+  input.y = p.y;
+  input.button = button;
+  input.modifiers = mods;
+  input.timeMs = mouse_ms;
+  app.host->pointerHandler()->dispatch(input);
+}
+void clicks(graphene_point_t p, int n, int button = 1,
+            GdkModifierType mods = GdkModifierType(0)) {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  mouse_ms += 1000;
+  for (int i = 0; i < n; i++) {
+    mouse(Phase::Down, p, button, mods);
+    mouse_ms += 20;
+    mouse(Phase::Up, p, button, mods);
+    mouse_ms += 30;
+  }
+}
+void drag(graphene_point_t from, graphene_point_t to) {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  mouse_ms += 1000;
+  mouse(Phase::Down, from);
+  for (int i = 1; i <= 4; i++) {
+    mouse_ms += 16;
+    mouse(Phase::Move, graphene_point_t{from.x + (to.x - from.x) * i / 4,
+                                        from.y + (to.y - from.y) * i / 4});
+  }
+  mouse(Phase::Up, to);
+}
+
+std::string selected() { return app.host->pointerHandler()->selectedText(); }
+
+std::string clipboard_text;
+void read_clipboard() {
+  clipboard_text = "(pending)";
+  gdk_clipboard_read_text_async(
+      gdk_display_get_clipboard(gdk_display_get_default()), nullptr,
+      [](GObject *source, GAsyncResult *result, gpointer) {
+        char *text =
+            gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, nullptr);
+        clipboard_text = text ? text : "";
+        g_free(text);
+      },
+      nullptr);
+}
+
+// What Ctrl+C runs: the root's global shortcut.
+bool press_ctrl_c() {
+  GListModel *controllers = gtk_widget_observe_controllers(app.root);
+  bool done = false;
+  for (guint i = 0; !done && i < g_list_model_get_n_items(controllers); i++) {
+    auto *c = static_cast<GtkEventController *>(g_list_model_get_item(controllers, i));
+    if (GTK_IS_SHORTCUT_CONTROLLER(c)) {
+      GListModel *items = G_LIST_MODEL(c);
+      for (guint j = 0; !done && j < g_list_model_get_n_items(items); j++) {
+        auto *shortcut = static_cast<GtkShortcut *>(g_list_model_get_item(items, j));
+        char *trigger = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+        if (std::string(trigger) == "<Control>c") {
+          done = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut),
+                                              GTK_SHORTCUT_ACTION_EXCLUSIVE,
+                                              app.root, nullptr);
+        }
+        g_free(trigger);
+        g_object_unref(shortcut);
+      }
+    }
+    g_object_unref(c);
+  }
+  g_object_unref(controllers);
+  return done;
+}
+
+// The right-click menu's action (copy, select-all) on the root's popover.
+void activate_menu(const char *action) {
+  for (GtkWidget *c = gtk_widget_get_first_child(app.root); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (GTK_IS_POPOVER(c) && gtk_widget_get_visible(c)) {
+      gtk_widget_activate_action(c, action, nullptr);
+      gtk_popover_popdown(GTK_POPOVER(c));
+    }
+  }
+}
+
+// Some pixel in the cell of paragraph `id`'s byte `index` is tinted
+// (not white, gray or black: a highlight under the text), or `want`.
+bool highlighted(const char *id, int index, const rngtk::Rgba8 *want = nullptr) {
+  GtkWidget *v = by_id(id);
+  GdkTexture *tex = v ? rngtk::render_widget(app.root) : nullptr;
+  if (!tex) return false;
+  PangoRectangle r;
+  pango_layout_index_to_pos(rn_text_get_layout(RN_TEXT(v)), index, &r);
+  graphene_point_t a = text_point(id, index, 0), b = text_point(id, index, 1);
+  graphene_rect_t cell{{a.x, a.y - r.height / 2.0f / PANGO_SCALE},
+                       {b.x - a.x, float(r.height) / PANGO_SCALE}};
+  bool found = any_pixel(tex, cell, [want](rngtk::Rgba8 p) {
+    if (want) return rngtk::near(p, *want, 12);
+    int hi = std::max({p.r, p.g, p.b}), lo = std::min({p.r, p.g, p.b});
+    return hi - lo > 25;
+  });
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return found;
+}
+
+void add_selection_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "dragging across selectable text selects it, highlighted",
+      [] { drag(text_point("para", 0, 0.1f), text_point("para", 9, 0.9f)); },
+      [] {
+        return selected() == "Alpha beta" && highlighted("para", 2) &&
+               !highlighted("para", 13);
+      }});
+  app.steps.push_back(Step{
+      "Ctrl+C copies the selection",
+      [] {
+        if (!press_ctrl_c()) check(false, "Ctrl+C handled");
+        read_clipboard();
+      },
+      [] { return clipboard_text == "Alpha beta"; }});
+  app.steps.push_back(Step{"double-click selects a word",
+                           [] { clicks(text_point("para", 13), 2); },
+                           [] { return selected() == "gamma"; }});
+  app.steps.push_back(Step{"triple-click selects the paragraph",
+                           [] { clicks(text_point("para", 7), 3); },
+                           [] { return selected() == "Alpha beta gamma."; }});
+  app.steps.push_back(Step{
+      "a drag from the second line backwards selects across the newline",
+      [] { drag(text_point("para", 23, 0.9f), text_point("para", 11, 0.1f)); },
+      [] { return selected() == "gamma.\nSecond"; }});
+  app.steps.push_back(Step{
+      "Shift+click extends the selection",
+      [] {
+        clicks(text_point("para", 0, 0.1f), 1);
+        clicks(text_point("para", 4, 0.9f), 1, 1, GDK_SHIFT_MASK);
+      },
+      [] { return selected() == "Alpha"; }});
+  app.steps.push_back(Step{
+      "right-click Copy copies the selection (not the whole text)",
+      [] {
+        clicks(text_point("para", 7), 2);  // "beta"
+        clicks(text_point("para", 7), 1, 3);
+        activate_menu("rngtk-text.copy");
+        read_clipboard();
+      },
+      [] { return clipboard_text == "beta" && selected() == "beta"; }});
+  app.steps.push_back(Step{
+      "right-click Select All",
+      [] {
+        clicks(text_point("para", 2), 1, 3);
+        activate_menu("rngtk-text.select-all");
+      },
+      [] { return selected() == "Alpha beta gamma.\nSecond paragraph here."; }});
+  app.steps.push_back(Step{
+      "a click on non-selectable text presses it and clears the selection",
+      [] { clicks(text_point("plain", 4), 1); },
+      [] { return selected().empty() && has_text(app.root, "plain presses 1"); }});
+  app.steps.push_back(Step{
+      "dragging over non-selectable text selects nothing",
+      [] { drag(text_point("plain", 0, 0.1f), text_point("plain", 8, 0.9f)); },
+      [] { return selected().empty(); }});
+  app.steps.push_back(Step{"a click on selectable text in a Pressable presses it",
+                           [] { clicks(text_point("wrapped", 3), 1); },
+                           [] { return has_text(app.root, "wrapped presses 1"); }});
+  app.steps.push_back(Step{
+      "a drag over it selects instead (the press is cancelled)",
+      [] { drag(text_point("wrapped", 0, 0.1f), text_point("wrapped", 9, 0.9f)); },
+      [] { return selected() == "Selectable"; }});
+  app.steps.push_back(after_frames("  ...wrapped presses stay 1", 15, [] {
+    return has_text(app.root, "wrapped presses 1");
+  }));
+  app.steps.push_back(Step{
+      "selectionColor paints the highlight",
+      [] { clicks(text_point("red", 3), 2); },
+      [] {
+        rngtk::Rgba8 red{0xFF, 0, 0, 0xFF};
+        return selected() == "Highlighted" && highlighted("red", 3, &red);
+      }});
+  app.steps.push_back(Step{
+      "the wheel still scrolls a ScrollView of selectable text",
+      [] { wheel("scroller", 0, 3); }, [] { return offset_of("scroller") > 0; }});
+}
+
+// ---------------------------------------------------------------------------
 // GalleryControls checks
 
 void add_resize_steps();
@@ -1555,6 +1766,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_selection() && app.steps.empty()) {
+    add_selection_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_appearance() && app.steps.empty()) {
     add_appearance_steps();
     enter(Phase::Steps);
@@ -1585,7 +1799,7 @@ void check_app(bool first) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else if (is_images()) {
       verify_images(tex);
-    } else if (is_controls() || is_appearance()) {
+    } else if (is_controls() || is_appearance() || is_selection()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
