@@ -197,7 +197,19 @@ describe('createLinuxResolver', () => {
     assert.equal(resolve(path.join(other, 'B.js'), './A').filePath, path.join(other, 'A.js'));
   });
 
-  test('does nothing for other platforms', () => {
+  test("react-native-webview gets its iOS JS only with the Linux port installed", () => {
+    const wv = path.join(app, 'node_modules', 'react-native-webview', 'src');
+    write(path.join(wv, 'index.js'));
+    write(path.join(wv, 'WebView.js'));
+    write(path.join(wv, 'WebView.ios.js'));
+    const from = path.join(wv, 'index.js');
+    // Without the port: the library's own "not supported" WebView.
+    assert.equal(resolve(from, './WebView').filePath, path.join(wv, 'WebView.js'));
+    write(path.join(app, 'node_modules', '@curiosity26', 'react-native-gtk4-webview', 'package.json'), '{}');
+    assert.equal(resolve(from, './WebView').filePath, path.join(wv, 'WebView.ios.js'));
+  });
+
+    test('does nothing for other platforms', () => {
     const from = path.join(rn, 'Libraries', 'Utilities', 'Thing.js');
     assert.equal(
       resolve(from, './Platform', 'android').filePath,

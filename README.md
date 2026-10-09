@@ -153,5 +153,5 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    AppStream MetaInfo and icons, Flatpak, .deb and .rpm
    ([docs/packaging.md](docs/packaging.md)); prebuilt hosts and the npm
    release ([docs/releasing.md](docs/releasing.md)); ports of
-   async-storage, netinfo, safe-area-context and vector-icons
-   ([docs/libraries.md](docs/libraries.md)). **In progress.**
+   async-storage, netinfo, safe-area-context, vector-icons, svg and
+   webview ([docs/libraries.md](docs/libraries.md)). **In progress.**
