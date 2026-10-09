@@ -41,6 +41,7 @@
     "!linux/tests/",
     "scripts/fetch-rn-deps.py",
     "scripts/build-hermes.sh",
+    "scripts/codegen-deps/",
     "rn-version.properties",
     "prebuilt-hosts.json",
     "CHANGELOG.md"
