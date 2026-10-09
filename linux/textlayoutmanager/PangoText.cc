@@ -77,14 +77,27 @@ PangoStyle to_pango(FontStyle style) {
   }
 }
 
+}  // namespace
+
+float effective_font_size(const TextAttributes &a) {
+  float size = std::isnan(a.fontSize) ? 14.0f : a.fontSize;
+  float multiplier = std::isnan(a.fontSizeMultiplier) ? 1.0f : a.fontSizeMultiplier;
+  if (a.allowFontScaling.has_value() && !*a.allowFontScaling) multiplier = 1;
+  if (!std::isnan(a.maxFontSizeMultiplier) && a.maxFontSizeMultiplier >= 1) {
+    multiplier = std::min(multiplier, float(a.maxFontSizeMultiplier));
+  }
+  return size * multiplier;
+}
+
+namespace {
+
 void apply_fragment(PangoAttrList *list, const TextAttributes &a, guint start,
                     guint end) {
   PangoFontDescription *desc = pango_font_description_new();
   pango_font_description_set_family(
       desc, a.fontFamily.empty() ? kDefaultFontFamily : a.fontFamily.c_str());
-  float size = std::isnan(a.fontSize) ? 14.0f : a.fontSize;
-  if (!std::isnan(a.fontSizeMultiplier)) size *= a.fontSizeMultiplier;
-  pango_font_description_set_absolute_size(desc, size * PANGO_SCALE);
+  pango_font_description_set_absolute_size(desc,
+                                           effective_font_size(a) * PANGO_SCALE);
   if (a.fontWeight) {
     pango_font_description_set_weight(
         desc, static_cast<PangoWeight>(static_cast<int>(*a.fontWeight)));

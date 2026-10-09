@@ -25,6 +25,11 @@ void set_main_thread_pango_context(PangoContext *context);
 // thread-safe).
 PangoContext *pango_context_for_current_thread();
 
+// The font size to draw at: fontSize times the font scale
+// (fontSizeMultiplier, GNOME's text scaling), unless allowFontScaling is
+// false, capped by maxFontSizeMultiplier (>= 1), as on Android.
+float effective_font_size(const facebook::react::TextAttributes &attributes);
+
 // Builds a layout for the string. max_width < 0 means unconstrained.
 // Returns a new reference.
 PangoLayout *create_pango_layout(

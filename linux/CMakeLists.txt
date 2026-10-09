@@ -325,6 +325,7 @@ add_library(rngtk_host_objs OBJECT
   imagemanager/ImageManager.cpp
   src/GtkViewProps.cc
   src/PlatformConstantsModule.cc
+  src/PlatformModules.cc
   src/RNGtkHost.cc
   src/SoupNetworking.cc)
 target_include_directories(rngtk_host_objs PUBLIC src components include)
@@ -513,6 +514,13 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-platform-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryPlatform --width 940 --height 680 --self-test
+                 --url rngtk-test:initial)
+add_test(NAME gallery-platform-rtl-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryPlatform --width 940 --height 680 --self-test --rtl)
 add_test(NAME gallery-accessibility-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryAccessibility --width 940 --height 680 --self-test)

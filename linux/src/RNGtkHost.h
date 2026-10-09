@@ -5,6 +5,8 @@
 #include <folly/dynamic.h>
 #include <gtk/gtk.h>
 #include <react/nativemodule/TurboModuleProvider.h>
+#include <react/renderer/core/LayoutConstraints.h>
+#include <react/renderer/core/LayoutContext.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <atomic>
@@ -25,6 +27,7 @@ class SurfaceDelegate;
 namespace rngtk {
 
 class AccessibilityStatus;
+struct PlatformState;
 class Appearance;
 class DevUI;
 class JsMessageQueueThread;
@@ -54,6 +57,11 @@ struct RNGtkHostOptions {
   bool followSystemAccessibility = true;
   // More TurboModules, asked before the host's own.
   facebook::react::TurboModuleProviders extraTurboModules;
+  // Linking.getInitialURL(): the URL the app was started with.
+  std::string initialURL;
+  // Tests: called instead of launching a URL for Linking.openURL; true if
+  // it took it.
+  std::function<bool(const std::string &)> openURLOverride;
 };
 
 class RNGtkHost {
@@ -83,6 +91,13 @@ class RNGtkHost {
   void setSize(float width, float height);
   // When on, setSize() follows the overlay's allocation after each layout.
   void setFollowsWindowSize(bool follows);
+
+  // Linking: a URL passed to the running app (GApplication's open): a
+  // 'url' event, or the initial URL before JS runs.
+  void openURL(const std::string &url);
+  // Tests: the AppState as if the window changed (0 active, 1 inactive,
+  // 2 background).
+  void setAppStateForTesting(int state) { setAppState(state); }
 
   // Dev mode: reloads the JS (like `r` in Metro's terminal).
   void reload();
@@ -135,6 +150,15 @@ class RNGtkHost {
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
   void onAppearanceChanged();
+  // AppState from the window: active, inactive or minimized/suspended.
+  void connectWindowState();
+  void updateAppState();
+  void setAppState(int state);
+  // The surfaces' layout: size, RTL direction, font scale.
+  facebook::react::LayoutConstraints layoutConstraints() const;
+  facebook::react::LayoutContext layoutContext() const;
+  void refreshLayout();
+  static void onFontDpi(GObject *, GParamSpec *, gpointer self);
   // AccessibilityInfo.setAccessibilityFocus / announceForAccessibility.
   void focusForAccessibility(facebook::react::Tag tag);
   void announce(const std::string &text, GtkAccessibleAnnouncementPriority priority);
@@ -165,6 +189,10 @@ class RNGtkHost {
   // Outlives ReactHost (and its Appearance module).
   std::shared_ptr<Appearance> appearance_;
   std::shared_ptr<AccessibilityStatus> accessibilityStatus_;
+  std::shared_ptr<PlatformState> platform_;
+  GtkWindow *window_{nullptr};
+  GdkSurface *windowSurface_{nullptr};
+  gulong fontDpiHandler_{0};
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;

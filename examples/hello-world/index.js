@@ -8,6 +8,7 @@ import GalleryImages from './GalleryImages';
 import GalleryKeyboard from './GalleryKeyboard';
 import GalleryLists from './GalleryLists';
 import GalleryMouse from './GalleryMouse';
+import GalleryPlatform from './GalleryPlatform';
 import GallerySelection from './GallerySelection';
 import Showcase from './Showcase';
 
@@ -21,4 +22,5 @@ AppRegistry.registerComponent('GallerySelection', () => GallerySelection);
 AppRegistry.registerComponent('GalleryKeyboard', () => GalleryKeyboard);
 AppRegistry.registerComponent('GalleryMouse', () => GalleryMouse);
 AppRegistry.registerComponent('GalleryAccessibility', () => GalleryAccessibility);
+AppRegistry.registerComponent('GalleryPlatform', () => GalleryPlatform);
 AppRegistry.registerComponent('Showcase', () => Showcase);

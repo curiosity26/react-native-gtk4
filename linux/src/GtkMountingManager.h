@@ -73,6 +73,9 @@ class GtkMountingManager
   void announce(GtkWidget *from, const std::string &text,
                 GtkAccessibleAnnouncementPriority priority);
   const std::string &lastAnnouncement() const { return lastAnnouncement_; }
+  // GNOME's text scaling, for TextInput's font (Text gets it through
+  // the layout context's fontSizeMultiplier).
+  void setFontScale(float scale);
   // Main thread: re-applies every mounted view's colors, after the light
   // or dark palette PlatformColors resolve to changed.
   void refreshColors();
@@ -227,6 +230,7 @@ class GtkMountingManager
   std::shared_ptr<class GtkImageLoader> imageLoader_;
   int mountCount_{0};
   std::string lastAnnouncement_;
+  float fontScale_{1};
 
   std::thread::id mainThread_;
   std::mutex pendingMutex_;

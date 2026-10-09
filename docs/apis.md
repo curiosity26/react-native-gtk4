@@ -1,7 +1,10 @@
-# APIs: Appearance, PlatformColor, AccessibilityInfo
+# APIs
 
-React Native's JS APIs as the GTK host implements them. Components are in
-[components.md](components.md).
+React Native's JS APIs as the GTK host implements them: Appearance,
+PlatformColor, AccessibilityInfo, Linking, AppState, Clipboard,
+PixelRatio, I18nManager, Share, Vibration.
+
+Components are in [components.md](components.md).
 
 ## Appearance and dark mode
 
@@ -105,7 +108,75 @@ started, reduce motion by flipping GTK's setting, announcements and focus);
 add `--system-accessibility` to flip the AT-SPI bus's `ScreenReaderEnabled`
 for real (Orca isn't started) and restore it.
 
-## Testing Appearance and PlatformColor
+## Linking
+
+The host's `LinkingManager` module (iOS's shape; `linux/src/PlatformModules.cc`).
+
+| API | Linux |
+| --- | --- |
+| `openURL(url)` | the desktop's default handler for the scheme (GIO, with GDK's launch context, so the handler gets focus on Wayland); rejects when there is none. In a Flatpak or Snap, GtkUriLauncher and the OpenURI portal |
+| `canOpenURL(url)` | whether the desktop has a default handler for the scheme (`file:` URLs: whether the file exists) |
+| `getInitialURL()` | the URL the app was started with: `myapp 'myapp://open?id=7'`, or a `.desktop` file's `Exec=myapp %u` (with `MimeType=x-scheme-handler/myapp;`), exactly as given |
+| `addEventListener('url')` | URLs passed to the app while it runs: `rngtk::runApp` apps are unique GApplications, so a second launch with a URL (or a click on a link the app handles) hands it to the running one |
+| `openSettings()` | rejects: Linux apps have no settings page |
+| `sendIntent` | Android only |
+
+## AppState
+
+| State | When |
+| --- | --- |
+| `active` | the window is the active window |
+| `inactive` | another window is active |
+| `background` | the window is minimized (X11) or suspended (Wayland compositors that report it, when it isn't visible); Wayland can't tell minimized otherwise |
+
+`change` events follow, and Android's `focus` / `blur` events fire when
+the window gains or loses activation. `memoryWarning` never fires.
+
+## Clipboard
+
+`Clipboard.getString()` / `setString()` (React Native's deprecated core
+module): GDK's clipboard. `getString()` resolves `''` when the clipboard
+holds no text.
+
+## PixelRatio and font scale
+
+`PixelRatio.get()` is the monitor's scale. `PixelRatio.getFontScale()` and
+`Dimensions`' `fontScale` follow GNOME's text scaling (Settings >
+Accessibility > Large Text, `text-scaling-factor`), which reaches GTK as
+`gtk-xft-dpi`: when it changes, `Dimensions` emits `change` and text lays
+out again. Text and TextInput scale their font by it unless
+`allowFontScaling={false}`, capped by `maxFontSizeMultiplier`, as on
+Android.
+
+## I18nManager
+
+`isRTL` comes from the locale (GTK's default direction, from its
+translations), unless `allowRTL(false)` or `forceRTL(true)`. Those and
+`swapLeftAndRightInRTL` are saved in
+`$XDG_CONFIG_HOME/react-native-gtk4/<appId>/i18n.ini` and apply at the
+next reload or start, as on iOS. Right to left, Yoga lays out mirrored
+(rows run right to left) and GTK's own widgets switch direction.
+`localeIdentifier` is the first of GLib's language names (`en_US`).
+
+## Share and Vibration
+
+Linux desktops have neither. `Share.share()` (an override of
+`Libraries/Share/Share`, which rejects other platforms) checks its
+arguments and resolves `{action: 'dismissedAction'}`. `Vibration` accepts
+every call and does nothing.
+
+## Testing
+
+The `GalleryPlatform` page (`--module GalleryPlatform --self-test --url
+rngtk-test:initial`, and again with `--rtl`) checks the initial URL, `url`
+events, `canOpenURL` and `openURL` (against a handler for `rngtk-test:`
+installed in the test's own XDG directories), AppState's changes and
+focus/blur events, the clipboard, Vibration, Share, the font scale (by
+changing `gtk-xft-dpi`; Text grows, `allowFontScaling={false}` doesn't)
+and RTL layout, on Wayland and X11. GNOME's real text scaling and URLs
+handed to a running app were checked by hand on both.
+
+### Appearance and PlatformColor
 
 `rn-gtk-host --module GalleryAppearance --self-test` switches the scheme
 with `setColorScheme`, and as if the desktop changed, and checks

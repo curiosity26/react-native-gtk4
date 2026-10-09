@@ -8,16 +8,22 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  AppState,
   Appearance,
   Button,
+  Clipboard,
   Easing,
   FlatList,
+  I18nManager,
   Image,
+  Linking,
+  PixelRatio,
   Platform,
   PlatformColor,
   Pressable,
   ScrollView,
   SectionList,
+  Share,
   StyleSheet,
   Switch,
   Text,
@@ -26,6 +32,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   TurboModuleRegistry,
+  Vibration,
   View,
   findNodeHandle,
   useColorScheme,
@@ -633,6 +640,110 @@ function AccessibilityPage() {
   );
 }
 
+// ---- Platform APIs ------------------------------------------------------------
+
+function PlatformPage() {
+  const log = useLog();
+  const [initialURL, setInitialURL] = useState('…');
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [clip, setClip] = useState('');
+  const [rtl, setRtl] = useState(I18nManager.isRTL);
+  const {fontScale, scale} = useWindowDimensions();
+  useEffect(() => {
+    Linking.getInitialURL().then(url => setInitialURL(url ?? 'none'));
+    const subs = [
+      Linking.addEventListener('url', ({url}) => log(`Linking url event: ${url}`)),
+      AppState.addEventListener('change', s => {
+        setAppState(s);
+        log(`AppState ${s}`);
+      }),
+    ];
+    return () => subs.forEach(s => s.remove());
+  }, [log]);
+  const open = url =>
+    Linking.openURL(url).then(
+      () => log(`opened ${url}`),
+      e => log(`openURL failed: ${e.message}`),
+    );
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Linking"
+        hint="openURL uses the desktop's default handler. Start the app with a URL (rn-gtk-host --url, or an app's own command line / .desktop %u) for getInitialURL; a URL passed to a running app arrives as a 'url' event.">
+        <Text style={styles.mono}>getInitialURL() = {initialURL}</Text>
+        <View style={styles.row}>
+          <Btn title="open reactnative.dev" onPress={() => open('https://reactnative.dev')} />
+          <Btn title="mailto:" onPress={() => open('mailto:someone@example.com?subject=Hello')} />
+          <Btn
+            title="canOpenURL"
+            onPress={async () => {
+              for (const url of ['https://example.com', 'mailto:a@b.c', 'nosuchscheme:x']) {
+                log(`canOpenURL(${url}) = ${await Linking.canOpenURL(url)}`);
+              }
+            }}
+          />
+        </View>
+      </Section>
+      <Section title="AppState" hint="Switch to another window and back: inactive while it isn't the active window, background when minimized (X11) or hidden.">
+        <Text style={styles.mono}>AppState.currentState = {appState}</Text>
+      </Section>
+      <Section title="Clipboard" hint="GDK's clipboard: copy here, paste anywhere (and back).">
+        <View style={styles.row}>
+          <Btn title="setString('Hello from RN')" onPress={() => Clipboard.setString('Hello from RN')} />
+          <Btn title="getString()" onPress={() => Clipboard.getString().then(setClip)} />
+        </View>
+        <Text style={styles.mono}>getString() = {JSON.stringify(clip)}</Text>
+      </Section>
+      <Section
+        title="PixelRatio and font scale"
+        hint="Settings > Accessibility > Large Text (or text-scaling-factor) scales Text, unless allowFontScaling={false}.">
+        <Text style={styles.mono}>
+          PixelRatio.get() = {PixelRatio.get()} · fontScale = {fontScale.toFixed(2)} · scale = {scale}
+        </Text>
+        <Text style={[styles.body, {fontSize: 18}]}>This text follows the font scale.</Text>
+        <Text allowFontScaling={false} style={[styles.body, {fontSize: 18}]}>
+          This one doesn't (allowFontScaling=false).
+        </Text>
+      </Section>
+      <Section
+        title="I18nManager"
+        hint="Right-to-left comes from the locale; forceRTL is saved and applies at the next reload (Ctrl+R) or start, as on iOS.">
+        <Text style={styles.mono}>
+          isRTL = {String(I18nManager.isRTL)} · locale = {I18nManager.getConstants().localeIdentifier}
+        </Text>
+        <View style={styles.row}>
+          <Btn
+            title={rtl ? 'forceRTL(false)' : 'forceRTL(true)'}
+            onPress={() => {
+              I18nManager.forceRTL(!rtl);
+              setRtl(!rtl);
+              log(`forceRTL(${!rtl}): reload to apply`);
+            }}
+          />
+          <View style={[styles.swatch, {width: 40, height: 40, backgroundColor: '#3584E4'}]} />
+          <View style={[styles.swatch, {width: 40, height: 40, backgroundColor: '#E01B24'}]} />
+          <Text style={styles.body}>(blue is first: on the right in RTL)</Text>
+        </View>
+      </Section>
+      <Section title="Share and Vibration" hint="Linux has neither: Share resolves dismissed, Vibration does nothing.">
+        <View style={styles.row}>
+          <Btn
+            title="Share.share"
+            onPress={() => Share.share({message: 'Hello'}).then(r => log(`Share: ${r.action}`))}
+          />
+          <Btn
+            title="Vibration.vibrate"
+            onPress={() => {
+              Vibration.vibrate();
+              log('Vibration.vibrate(): no-op');
+            }}
+          />
+        </View>
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1040,6 +1151,7 @@ const PAGES = [
   ['Images', Images],
   ['Animation', Animation],
   ['Network', Network],
+  ['Platform', PlatformPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.

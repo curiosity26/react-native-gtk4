@@ -26,10 +26,13 @@
 //   --system-accessibility follow the AT-SPI bus's screen reader state;
 //                          GalleryAccessibility then flips it (without
 //                          starting Orca) and restores it
+//   --url URL              Linking.getInitialURL()
+//   --rtl                  GalleryPlatform: start with forceRTL(true) saved
 //   --test-animation       before the first reload and after each one,
 //                          hold the card (a TouchableOpacity) and check
 //                          that its native-driver fade runs, then release
 #include <ReactCommon/TurboModule.h>
+#include <glib/gstdio.h>
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
@@ -94,6 +97,10 @@ struct Options {
   // GalleryAccessibility: flip the AT-SPI bus's ScreenReaderEnabled (what
   // GNOME sets while Orca runs; Orca isn't started) and follow it.
   bool system_accessibility = false;
+  // Linking.getInitialURL() (as if the app was started with this URL).
+  std::string url;
+  // GalleryPlatform: start with I18nManager.forceRTL(true) saved.
+  bool rtl = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
@@ -2149,6 +2156,163 @@ void add_accessibility_steps() {
                            [] { return !gtk_widget_get_focusable(by_id("note")); }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryPlatform checks
+
+bool is_platform() { return opts.module == "GalleryPlatform"; }
+
+// The self-test's own XDG data and config directories: a handler for
+// rngtk-test: URLs (a script that writes the URL to opened.txt), and
+// I18nManager's saved settings. Set up before GIO reads them.
+std::string xdg_dir;
+
+void write_file(const std::string &path, const std::string &content, int mode = 0644) {
+  gchar *dir = g_path_get_dirname(path.c_str());
+  g_mkdir_with_parents(dir, 0700);
+  g_free(dir);
+  g_file_set_contents(path.c_str(), content.c_str(), -1, nullptr);
+  g_chmod(path.c_str(), mode);
+}
+
+void set_up_platform_xdg() {
+  gchar *dir = g_dir_make_tmp("rngtk-platform-XXXXXX", nullptr);
+  if (!dir) return;
+  xdg_dir = dir;
+  g_free(dir);
+  std::string data = xdg_dir + "/data", config = xdg_dir + "/config";
+  write_file(xdg_dir + "/handler.sh",
+             "#!/bin/sh\nprintf '%s' \"$1\" > \"" + xdg_dir + "/opened.txt\"\n", 0755);
+  write_file(data + "/applications/rngtk-test-handler.desktop",
+             "[Desktop Entry]\nType=Application\nName=rngtk test URL handler\n"
+             "Exec=" + xdg_dir + "/handler.sh %u\n"
+             "MimeType=x-scheme-handler/rngtk-test;\nNoDisplay=true\n");
+  write_file(config + "/mimeapps.list",
+             "[Default Applications]\nx-scheme-handler/rngtk-test=rngtk-test-handler.desktop\n");
+  if (opts.rtl) {
+    write_file(config + "/react-native-gtk4/dev.curiosity26.RNGtk4/i18n.ini",
+               "[I18n]\nforceRTL=true\n");
+  }
+  g_setenv("XDG_DATA_HOME", data.c_str(), TRUE);
+  g_setenv("XDG_CONFIG_HOME", config.c_str(), TRUE);
+}
+
+void remove_tree(const std::string &path) {
+  if (GDir *dir = g_dir_open(path.c_str(), 0, nullptr)) {
+    while (const char *name = g_dir_read_name(dir)) remove_tree(path + "/" + name);
+    g_dir_close(dir);
+  }
+  g_remove(path.c_str());
+}
+
+std::string read_text(const std::string &path) {
+  gchar *content = nullptr;
+  if (!g_file_get_contents(path.c_str(), &content, nullptr, nullptr)) return "";
+  std::string s = content;
+  g_free(content);
+  return s;
+}
+
+float text_height(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v ? rn_widget_get_frame(v).size.height : 0;
+}
+
+void add_platform_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  if (opts.rtl) {
+    app.steps.push_back(Step{"I18nManager.forceRTL saved: isRTL, and rows lay out right to left",
+                             [] {},
+                             [] {
+                               graphene_rect_t a = bounds_in_root(by_id("first"));
+                               graphene_rect_t b = bounds_in_root(by_id("second"));
+                               return has_text(app.root, "isRTL true") &&
+                                      a.origin.x > b.origin.x &&
+                                      gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL;
+                             }});
+    return;
+  }
+  app.steps.push_back(Step{"Linking.getInitialURL: the URL the app started with", [] {},
+                           [] { return has_text(app.root, "initial: " + opts.url); }});
+  app.steps.push_back(Step{"canOpenURL: a scheme with a handler, and one without",
+                           [] { click("can-open"); },
+                           [] {
+                             return has_text(app.root, "can rngtk-test: yes · can nosuch: no");
+                           }});
+  app.steps.push_back(Step{"openURL launches the desktop's handler for the scheme",
+                           [] { click("open"); },
+                           [] {
+                             return has_text(app.root, "opened: ok") &&
+                                    read_text(xdg_dir + "/opened.txt") ==
+                                        "rngtk-test:opened?x=1";
+                           }});
+  app.steps.push_back(Step{"openURL rejects a URL nothing handles", [] { click("open-bad"); },
+                           [] { return has_text(app.root, "open bad: rejected"); }});
+  app.steps.push_back(Step{"a URL passed to the running app: a Linking 'url' event",
+                           [] { app.host->openURL("rngtk-test:later"); },
+                           [] { return has_text(app.root, "last url: rngtk-test:later"); }});
+  // (The real window may or may not be active while the test runs: it
+  // starts from active, as the state the window reports.)
+  static std::string focus_before;
+  app.steps.push_back(Step{"AppState: active while the window is",
+                           [] { app.host->setAppStateForTesting(0); },
+                           [] { return has_text(app.root, "app state active · focus"); }});
+  app.steps.push_back(Step{"AppState: inactive when another window is active (blur)",
+                           [] { app.host->setAppStateForTesting(1); },
+                           [] { return has_text(app.root, "app state inactive · focus"); }});
+  app.steps.push_back(Step{"AppState: background when minimized (no focus event)",
+                           [] { app.host->setAppStateForTesting(2); },
+                           [] { return has_text(app.root, "app state background"); }});
+  app.steps.push_back(Step{"AppState: active again (focus)",
+                           [] { app.host->setAppStateForTesting(0); },
+                           [] { return has_text(app.root, "app state active · focus"); }});
+  app.steps.push_back(Step{"Clipboard.setString / getString", [] { click("clipboard"); },
+                           [] { return has_text(app.root, "clipboard: clipboard from JS"); }});
+  app.steps.push_back(Step{"Vibration: accepted, no-op", [] { click("vibrate"); },
+                           [] { return has_text(app.root, "vibrated yes"); }});
+  app.steps.push_back(Step{"Share.share: a stub that resolves dismissed", [] { click("share"); },
+                           [] { return has_text(app.root, "share: dismissedAction"); }});
+  app.steps.push_back(Step{"I18nManager: left to right by default", [] {},
+                           [] {
+                             graphene_rect_t a = bounds_in_root(by_id("first"));
+                             graphene_rect_t b = bounds_in_root(by_id("second"));
+                             return has_text(app.root, "isRTL false") && a.origin.x < b.origin.x;
+                           }});
+  app.steps.push_back(Step{
+      "I18nManager.forceRTL(true) is saved for the next start",
+      [] { click("force-rtl"); },
+      [] {
+        return read_text(xdg_dir + "/config/react-native-gtk4/dev.curiosity26.RNGtk4/i18n.ini")
+                   .find("forceRTL=true") != std::string::npos;
+      }});
+  static int dpi_before = 0;
+  static float scaled_before = 0, unscaled_before = 0;
+  app.steps.push_back(Step{
+      "GNOME text scaling (gtk-xft-dpi x1.5): fontScale, and Text grows (allowFontScaling)",
+      [] {
+        g_object_get(gtk_settings_get_default(), "gtk-xft-dpi", &dpi_before, nullptr);
+        scaled_before = text_height("scaled");
+        unscaled_before = text_height("unscaled");
+        g_object_set(gtk_settings_get_default(), "gtk-xft-dpi", int(96 * 1024 * 1.5), nullptr);
+      },
+      [] {
+        float scaled = text_height("scaled"), unscaled = text_height("unscaled");
+        if (!has_text(app.root, "fontScale 1.50") || !has_text(app.root, "getFontScale 1.50")) {
+          return false;
+        }
+        printf("  Text height %.0f -> %.0f, allowFontScaling={false} %.0f -> %.0f\n",
+               scaled_before, scaled, unscaled_before, unscaled);
+        return scaled > scaled_before * 1.3f && std::abs(unscaled - unscaled_before) < 1;
+      }});
+  app.steps.push_back(Step{"  ...and back",
+                           [] {
+                             g_object_set(gtk_settings_get_default(), "gtk-xft-dpi",
+                                          dpi_before > 0 ? dpi_before : 96 * 1024, nullptr);
+                           },
+                           [] {
+                             return std::abs(text_height("scaled") - scaled_before) < 1;
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -2241,6 +2405,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_platform() && app.steps.empty()) {
+    add_platform_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
@@ -2284,7 +2451,7 @@ void check_app(bool first) {
     } else if (is_images()) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
-               is_mouse() || is_accessibility()) {
+               is_mouse() || is_accessibility() || is_platform()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -2429,6 +2596,16 @@ gboolean on_timeout(gpointer) {
                          : "the first mount";
   fprintf(stderr, "FAIL timed out after %d ms waiting for %s\n",
           opts.timeout_ms, what);
+  if (app.phase == Phase::Steps) {
+    // What the page shows, to see why.
+    std::function<void(GtkWidget *)> dump = [&](GtkWidget *w) {
+      if (RN_IS_TEXT(w)) fprintf(stderr, "  text: %s\n", rn_text_get_text(RN_TEXT(w)));
+      for (GtkWidget *c = gtk_widget_get_first_child(w); c; c = gtk_widget_get_next_sibling(c)) {
+        dump(c);
+      }
+    };
+    dump(app.root);
+  }
   if (app.host->devUI() && !app.host->devUI()->bannerText().empty()) {
     fprintf(stderr, "dev banner: %s\n", app.host->devUI()->bannerText().c_str());
   }
@@ -2470,6 +2647,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
         if (name != "ShowcaseDesktop") return nullptr;
         return std::make_shared<ShowcaseDesktopModule>(jsInvoker);
       }},
+      .initialURL = opts.url,
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
@@ -2511,7 +2689,7 @@ int usage() {
           "         [--expect-text TEXT] [--expect-logbox]\n"
           "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
           "         [--test-animation] [--system-appearance]\n"
-          "         [--system-accessibility] [--verbose]\n");
+          "         [--system-accessibility] [--url URL] [--rtl] [--verbose]\n");
   return 2;
 }
 
@@ -2543,6 +2721,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--test-animation")) opts.test_animation = true;
     else if (!strcmp(argv[i], "--system-appearance")) opts.system_appearance = true;
     else if (!strcmp(argv[i], "--system-accessibility")) opts.system_accessibility = true;
+    else if (arg("--url")) opts.url = argv[++i];
+    else if (!strcmp(argv[i], "--rtl")) opts.rtl = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {
@@ -2566,6 +2746,7 @@ int main(int argc, char **argv) {
   FLAGS_logtostderr = true;
   FLAGS_minloglevel = opts.verbose ? 0 : 1;  // info, or warnings and up
   rngtk::setUpFeatureFlags();
+  if (opts.self_test && is_platform()) set_up_platform_xdg();
 
   GtkApplication *gtk_app = gtk_application_new(
       "dev.curiosity26.RNGtk4.Host", G_APPLICATION_NON_UNIQUE);
@@ -2574,6 +2755,7 @@ int main(int argc, char **argv) {
   restore_desktop_color_scheme();
   if (restore_screen_reader) set_bus_screen_reader(false);
   delete app.host;
+  if (!xdg_dir.empty()) remove_tree(xdg_dir);
   g_object_unref(gtk_app);
   return status ? status : app.exit_code;
 }

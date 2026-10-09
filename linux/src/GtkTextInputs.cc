@@ -126,11 +126,11 @@ void GtkMountingManager::updateTextInput(GtkWidget *widget,
   rn_text_input_set_insets(input, in.top, in.right, in.bottom, in.left);
 
   if (oldView.props != newView.props) {
-    auto attrs = props->getEffectiveTextAttributes(1);
+    auto attrs = props->getEffectiveTextAttributes(fontScale_);
     RNTextInputStyle style{};
     std::string family = attrs.fontFamily;
     style.font_family = family.empty() ? nullptr : family.c_str();
-    style.font_size = std::isnan(attrs.fontSize) ? 14 : attrs.fontSize;
+    style.font_size = effective_font_size(attrs);
     style.font_weight = attrs.fontWeight ? int(*attrs.fontWeight) : 0;
     style.italic = attrs.fontStyle == FontStyle::Italic;
     style.color = attrs.foregroundColor ? to_rgba(attrs.foregroundColor)
