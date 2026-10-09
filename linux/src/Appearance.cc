@@ -74,6 +74,41 @@ Appearance::Scheme Appearance::parseScheme(const std::string &name) {
   return Scheme::Unspecified;  // 'unspecified', 'auto'
 }
 
+namespace {
+
+// GTK 4.20 replaced gtk-application-prefer-dark-theme with
+// gtk-interface-color-scheme (GtkInterfaceColorScheme: 1 default, 2 dark,
+// 3 light) and warns about the old one; the host builds against 4.14 and
+// runs on either.
+bool hasColorScheme(GtkSettings *settings) {
+  return g_object_class_find_property(G_OBJECT_GET_CLASS(settings),
+                                      "gtk-interface-color-scheme") != nullptr;
+}
+
+bool settingsPreferDark(GtkSettings *settings) {
+  if (hasColorScheme(settings)) {
+    int scheme = 0;
+    g_object_get(settings, "gtk-interface-color-scheme", &scheme, nullptr);
+    return scheme == 2;
+  }
+  gboolean preferDark = FALSE;
+  g_object_get(settings, "gtk-application-prefer-dark-theme", &preferDark,
+               nullptr);
+  return preferDark;
+}
+
+void setSettingsDark(GtkSettings *settings, bool dark) {
+  if (hasColorScheme(settings)) {
+    g_object_set(settings, "gtk-interface-color-scheme", dark ? 2 : 3,
+                 nullptr);
+  } else {
+    g_object_set(settings, "gtk-application-prefer-dark-theme", dark,
+                 nullptr);
+  }
+}
+
+}  // namespace
+
 Appearance::Appearance(GdkDisplay *display, bool followSystem,
                        OnChange onChange)
     : settings_(gtk_settings_get_for_display(display)),
@@ -81,10 +116,7 @@ Appearance::Appearance(GdkDisplay *display, bool followSystem,
       followSystem_(followSystem) {
   systemTheme_ = themeName(settings_);
   // The user's own setting (settings.ini, XSettings), before we set it.
-  gboolean preferDark = FALSE;
-  g_object_get(settings_, "gtk-application-prefer-dark-theme", &preferDark,
-               nullptr);
-  userPreferDark_ = preferDark;
+  userPreferDark_ = settingsPreferDark(settings_);
   if (followSystem) {
     GError *error = nullptr;
     bus_ = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
@@ -223,7 +255,7 @@ void Appearance::apply(bool notify) {
 
   // GTK's own widgets: the theme's dark variant, or its light one when
   // the desktop's theme is a dark theme and the app is light.
-  g_object_set(settings_, "gtk-application-prefer-dark-theme", dark, nullptr);
+  setSettingsDark(settings_, dark);
   bool swap = !dark && isDarkTheme(systemTheme_);
   if (swap != swappedTheme_) {
     settingTheme_ = true;

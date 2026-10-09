@@ -45,7 +45,8 @@ out-of-tree platform like react-native-windows and react-native-macos.
 - `react-native package-linux`: the app's identity from app.json's `linux`
   block (id, name, summary, icon, categories, license, ...), a `.desktop`
   file, AppStream MetaInfo and hicolor icons. Formats: an installable tree
-  (`dir`, with `install.sh`) and `.deb`.
+  (`dir`, with `install.sh`), Flatpak (a Flathub-style manifest that
+  builds from source offline, and a bundle), `.deb` and `.rpm`.
 - Packages ship a Release build of the host.
 - Prebuilt hosts: the release attaches Debug and Release hosts for x86_64
   and aarch64 (Ubuntu 24.04 and derivatives), and `run-linux` and

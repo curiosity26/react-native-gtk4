@@ -10,7 +10,12 @@ prepare* tasks), laid out the same way so Fantom's CMake files work as is:
   <deps>/third-party-ndk/...   boost, double-conversion, fast_float, fmt, glog
   <deps>/fantom-third-party/...folly, gflags, nlohmann_json
 
-Usage: scripts/fetch-rn-deps.py [--deps DIR]
+Usage: scripts/fetch-rn-deps.py [--deps DIR] [--offline]
+
+--offline downloads nothing: the archives and checkouts must be in place
+already (<deps>/react-native, <deps>/hermes, <deps>/downloads/...), as a
+Flatpak manifest's sources put them (package-linux --format flatpak), and
+npm installs from its cache.
 """
 import argparse
 import io
@@ -34,6 +39,9 @@ VERSIONS = dict(
 )
 
 
+OFFLINE = False
+
+
 def log(msg):
     print(f"[fetch-rn-deps] {msg}", flush=True)
 
@@ -41,6 +49,8 @@ def log(msg):
 def download(url, dest: Path):
     if dest.exists():
         return dest
+    if OFFLINE:
+        sys.exit(f"[fetch-rn-deps] offline, and {dest} is missing ({url})")
     dest.parent.mkdir(parents=True, exist_ok=True)
     log(f"downloading {url}")
     tmp = dest.with_suffix(dest.suffix + ".part")
@@ -93,6 +103,11 @@ def github_checkout(repo, tag, top, downloads: Path):
 def git_clone(url, tag, dest: Path):
     if (dest / ".git").exists():
         return
+    if OFFLINE:
+        # An extracted archive of the tag stands in for the checkout.
+        if dest.is_dir() and any(dest.iterdir()):
+            return
+        sys.exit(f"[fetch-rn-deps] offline, and {dest} is missing ({url} at {tag})")
     log(f"cloning {url} at {tag}")
     subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", tag,
                     url, str(dest)], check=True)
@@ -102,7 +117,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--deps", default=os.environ.get(
         "RNGTK_DEPS_DIR", str(ROOT / "third-party" / "deps")))
+    ap.add_argument("--offline", action="store_true")
     args = ap.parse_args()
+    global OFFLINE
+    OFFLINE = args.offline
     deps = Path(args.deps).resolve()
     downloads = deps / "downloads"
     ndk = deps / "third-party-ndk"
@@ -242,12 +260,13 @@ def main():
     if not out.exists():
         node = deps / "node"
         node.mkdir(exist_ok=True)
-        (node / "package.json").write_text('{"private": true}\n')
-        ver = VERSIONS["reactNative"]
+        # react-native and @react-native/codegen, as scripts/codegen-deps'
+        # lock pins them.
+        for f in ("package.json", "package-lock.json"):
+            shutil.copy(ROOT / "scripts" / "codegen-deps" / f, node / f)
         log("installing react-native and @react-native/codegen from npm")
-        subprocess.run(["npm", "install", "--no-audit", "--no-fund",
-                        "--ignore-scripts", f"react-native@{ver}",
-                        f"@react-native/codegen@{ver}"], cwd=node, check=True)
+        subprocess.run(["npm", "ci", "--no-audit", "--no-fund", "--ignore-scripts"]
+                       + (["--offline"] if OFFLINE else []), cwd=node, check=True)
         nm = node / "node_modules"
         schema = deps / "codegen-schema.json"
         subprocess.run(["node", str(nm / "@react-native/codegen/lib/cli/combine/"

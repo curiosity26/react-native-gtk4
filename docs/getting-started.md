@@ -100,6 +100,7 @@ with the template's; `--app-id org.example.MyApp` sets the application id.
   0.87.1/host/<id>/build/              the host library's build (~750 MB)
   0.87.1/host/<id>/install/            librngtk_host.so, libhermesvm.so, libjsi.so, headers, CMake config
   0.87.1/host/<id>-release/            the host's Release build, for package-linux
+  flatpak/                             flatpak-builder's state and source archives (package-linux --format flatpak)
 ```
 
 **Prebuilt hosts.** On Ubuntu 24.04 and distributions based on it (Linux

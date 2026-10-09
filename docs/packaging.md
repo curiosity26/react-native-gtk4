@@ -11,11 +11,13 @@ npx react-native package-linux --format dir --version 1.2.0 --smoke
 
 | Option | |
 | --- | --- |
-| `--format <format>` | `dir` (an installed tree with `install.sh`) or `deb` |
+| `--format <format>` | `dir` (an installed tree with `install.sh`), `flatpak`, `deb` or `rpm` |
 | `--output <dir>` | Where the package goes (default `linux/build/package`) |
 | `--version <version>` | The app's version (default: app.json's `linux.version`, or package.json's `version`) |
-| `--smoke` | Launch the packaged app with `--smoke` afterwards and exit with its status |
-| `--prefix <dir>` | `dir`: install straight into a prefix |
+| `--smoke` | Launch the packaged app with `--smoke` afterwards and exit with its status (Flatpak: installs the bundle for your user first) |
+| `--local` | Flatpak: build from the project's directories instead of tarballs, with ccache |
+| `--manifest-only` | Flatpak: write the manifest and its sources, don't build |
+| `--prefix <dir>` | `dir`: install straight into a prefix (what the Flatpak build does inside the sandbox) |
 | `--host <dir>` | Build against this host's CMake config instead of the cache's |
 | `--logging` | Show all build output |
 | `--no-checks` | Skip the prerequisite checks |
@@ -64,8 +66,11 @@ it:
 | `developer` | none | `{id, name}`: Flathub requires it |
 | `screenshots` | none | URLs (strings, or `{url, caption}`): software centres show them; Flathub requires one |
 | `releases` | the current version, dated today | Older releases for the MetaInfo's history. The date is `SOURCE_DATE_EPOCH`'s when it's set, for reproducible builds |
-| `maintainer` | package.json's `author`, `$DEBEMAIL`, git's user | `"Name <email>"` for the `.deb` |
+| `network` | `false` | Flatpak: the sandbox gets the network (`--share=network`) only when this is `true` |
+| `flatpak` | | `{runtimeVersion, node, llvm, finishArgs}`: another GNOME runtime or SDK extensions, more `finish-args` |
+| `maintainer` | package.json's `author`, `$DEBEMAIL`, git's user | `"Name <email>"` for `.deb` and `.rpm` |
 | `deb` | | `{package, section, revision}`: the Debian package name (default: the app's, lowercase) |
+| `rpm` | | `{name}`: the RPM name (default: the app's, lowercase) |
 
 Packages are built against a Release build of the host library: optimized,
 with React Native's debugger code kept so it matches the Hermes build
@@ -123,6 +128,63 @@ ignores an app whose `Exec` it can't find. It then refuses the app's
 notifications (`org.gtk.Notifications.Error.InvalidApp`) and shows its
 windows with a generic icon.
 
+### flatpak
+
+```sh
+npx react-native package-linux --format flatpak            # Flathub-style: archives with checksums
+npx react-native package-linux --format flatpak --local    # faster rebuilds while developing
+```
+
+writes `linux/build/package/flatpak/<appId>.json`, a
+[flatpak-builder](https://docs.flatpak.org/en/latest/flatpak-builder.html)
+manifest, and builds `linux/build/package/<App>-<version>-<arch>.flatpak`
+from it. Install that with `flatpak install --user <file>.flatpak`.
+
+The manifest builds everything from source in the GNOME 51 SDK, with no
+network during the build, as Flathub requires:
+
+- **`react-native-gtk4`**: React Native's sources, Hermes and the
+  third-party C++ libraries (boost, folly, glog, fmt, ...) as the tag
+  archives React Native pins, with their sha256. The package's host
+  sources. The npm packages React Native's codegen runs with
+  (`scripts/codegen-deps`). Builds Hermes and the Release host into
+  `/app/rngtk`, which is removed from the finished app.
+- **`<App>`**: the app's sources and its `node_modules` as offline npm
+  sources (`app-npm-sources.json`, from
+  [flatpak-node-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/node)).
+  It runs `npm ci --offline` and then `package-linux --prefix /app`
+  inside the sandbox.
+
+It needs `flatpak`, `flatpak-builder` and flatpak-node-generator (pipx
+install it from flatpak-builder-tools, or point `FLATPAK_NODE_GENERATOR` at
+it). The GNOME SDK and the `node24` and `llvm22` extensions are installed
+from Flathub for your user on the first build. flatpak-builder's state
+lives in the package's cache (`flatpak/`) for every app. The first build
+compiles React Native, Hermes and the host; after that only the app's
+module rebuilds, unless the package changed.
+
+`finish-args` are minimal: `--socket=wayland`, `--socket=fallback-x11`,
+`--share=ipc`, `--device=dri`, plus `--share=network` when app.json's
+`linux.network` is `true`. Files (`Dialogs`), notifications and
+`Linking.openURL` go through the desktop portals, which GTK and GIO use
+by themselves inside a sandbox. App-specific permissions go in
+`linux.flatpak.finishArgs`.
+
+`fallback-x11` gives the app X11 only on an X11 session; on a Wayland
+session it's Wayland, whatever `GDK_BACKEND` says. To try X11 from a
+Wayland session: `flatpak run --nosocket=wayland --socket=x11 <appId>`.
+
+Tested with the Showcase on an aarch64 VM (Ubuntu 24.04, 2 cores): the
+first build took about 11 minutes, compiling Hermes and the host in the
+SDK. The bundle is 3.2 MB. It runs on Wayland and X11, and its
+notifications, file dialogs and `openURL` go through the Notification,
+FileChooser and OpenURI portals.
+
+For Flathub, replace the app's `sources/<App>-<version>.tar.gz` with its
+release archive URL (or a git tag) and sha256. The rest of the manifest
+already uses public URLs. A package installed from GitHub Packages comes
+from npm's own cache, because flatpak-builder can't authenticate to it.
+
 ### deb
 
 ```sh
@@ -136,6 +198,36 @@ libraries the app and its host link), a machine-readable
 `changelog.Debian.gz`. It's checked with `lintian` when it's installed
 (`sudo apt install lintian`). Build it on the release you ship for:
 `Depends` names that release's library packages (`libicu74`, ...).
+
+### rpm
+
+```sh
+npx react-native package-linux --format rpm
+sudo dnf install ./linux/build/package/myapp-1.0.0-1.<arch>.rpm
+```
+
+A generated spec (kept next to the `.rpm`) installs the tree under
+`/usr`. rpm's dependency generators find the system libraries, and the
+host libraries stay private (`__provides_exclude_from`,
+`__requires_exclude`), with the executable's RUNPATH pointing at them
+(`<name>.rpmlintrc` next to the spec tells rpmlint so). It's checked with
+`rpmlint`. Build it on the distribution it's for. Fedora's library
+sonames differ from Ubuntu's (ICU's, for one), so an RPM built on Ubuntu
+won't install on Fedora.
+
+From another distribution, build it in a container (podman or docker):
+
+```sh
+node_modules/@curiosity26/react-native-gtk4/scripts/package-in-container.sh . --format rpm
+```
+
+The script makes a Fedora 44 builder image once (`--image` picks another
+distribution, a Debian or Ubuntu one for a `.deb`). It copies the app's
+sources in, runs `npm ci` and `package-linux` there, and leaves the
+package in `linux/build/package-fedora-44/`. Its build cache is a
+volume, so later runs only rebuild the app. On the VM above, the first
+run took 7.5 minutes; the RPM installs with dnf on a clean Fedora 44 and
+runs on Wayland and X11 (GTK 4.22).
 
 ## The Showcase
 
