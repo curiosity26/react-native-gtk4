@@ -9,14 +9,18 @@
     "@curiosity26/react-native-gtk4-async-storage": "file:../../packages/async-storage",
     "@curiosity26/react-native-gtk4-netinfo": "file:../../packages/netinfo",
     "@curiosity26/react-native-gtk4-safe-area-context": "file:../../packages/safe-area-context",
+    "@curiosity26/react-native-gtk4-svg": "file:../../packages/svg",
     "@curiosity26/react-native-gtk4-vector-icons": "file:../../packages/vector-icons",
+    "@curiosity26/react-native-gtk4-webview": "file:../../packages/webview",
     "@react-native-async-storage/async-storage": "3.1.1",
     "@react-native-community/netinfo": "12.0.1",
     "@react-native-vector-icons/fontawesome6": "13.1.4",
     "@react-native-vector-icons/ionicons": "13.1.4",
     "react": "19.2.3",
     "react-native": "0.87.1",
-    "react-native-safe-area-context": "5.10.1"
+    "react-native-safe-area-context": "5.10.1",
+    "react-native-svg": "15.15.5",
+    "react-native-webview": "14.0.1"
   },
   "devDependencies": {
     "@react-native-community/cli": "20.2.0",

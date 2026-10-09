@@ -7,7 +7,8 @@
 #   scripts/package-in-container.sh examples/hello-world --format rpm
 #
 # IMAGE defaults to registry.fedoraproject.org/fedora:44, with the build
-# prerequisites added (an image "rngtk-builder-<distro>-<version>", made
+# prerequisites (and librsvg's and WebKitGTK's, for the svg and webview
+# ports) added (an image "rngtk-builder-<distro>-<version>", made
 # once). The app's sources are copied in (its git files, or everything but
 # node_modules and build trees; an app inside this repository brings the
 # repository), npm ci runs inside, and the package lands in
@@ -38,9 +39,9 @@ if ! "$engine" image exists "$builder" 2>/dev/null && ! "$engine" image inspect 
   echo "== building $builder from $image"
   case $image in
     *fedora*|*centos*|*rocky*|*alma*)
-      install='dnf install -y --setopt=install_weak_deps=False clang cmake ninja-build pkgconf-pkg-config git python3 gtk4-devel libsoup3-devel openssl-devel libicu-devel readline-devel libatomic nodejs npm rpm-build rpmlint desktop-file-utils appstream python3-gobject gdk-pixbuf2 librsvg2 fontconfig-devel findutils tar gzip curl which file && dnf clean all' ;;
+      install='dnf install -y --setopt=install_weak_deps=False clang cmake ninja-build pkgconf-pkg-config git python3 gtk4-devel libsoup3-devel openssl-devel libicu-devel readline-devel libatomic librsvg2-devel webkitgtk6.0-devel nodejs npm rpm-build rpmlint desktop-file-utils appstream python3-gobject gdk-pixbuf2 librsvg2 fontconfig-devel findutils tar gzip curl which file && dnf clean all' ;;
     *debian*|*ubuntu*)
-      install='apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends clang cmake ninja-build pkg-config git python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev nodejs npm dpkg-dev fakeroot lintian desktop-file-utils appstream python3-gi gir1.2-gdkpixbuf-2.0 librsvg2-common ca-certificates curl file && rm -rf /var/lib/apt/lists/*' ;;
+      install='apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends clang cmake ninja-build pkg-config git python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev librsvg2-dev libwebkitgtk-6.0-dev nodejs npm dpkg-dev fakeroot lintian desktop-file-utils appstream python3-gi gir1.2-gdkpixbuf-2.0 librsvg2-common ca-certificates curl file && rm -rf /var/lib/apt/lists/*' ;;
     *) echo "no package list for $image: pass a prepared image" >&2; exit 1 ;;
   esac
   printf 'FROM %s\nRUN %s\n' "$image" "$install" | "$engine" build -t "$builder" -f - "$here"

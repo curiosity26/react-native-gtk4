@@ -56,3 +56,7 @@ out-of-tree platform like react-native-windows and react-native-macos.
   files under `$XDG_DATA_HOME/<app id>`), netinfo (GNetworkMonitor and
   NetworkManager), safe-area-context (`initialWindowMetrics`) and
   vector-icons (fonts through fontconfig).
+- react-native-svg (librsvg) and react-native-webview (WebKitGTK 6.0)
+  ports, with container components in the library API
+  (`NativeComponent::insertChild`/`removeChild`).
+- The app's command line takes `--initial-props JSON`.
