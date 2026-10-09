@@ -403,7 +403,7 @@ export function makeLibraryPages(helpers) {
           </View>
           <View style={styles.row}>
             <Btn title="postMessage to the page" onPress={() => htmlRef.current?.postMessage(`hello at ${new Date().toLocaleTimeString()}`)} />
-            <Btn title="injectJavaScript" onPress={() => htmlRef.current?.injectJavaScript("document.body.style.background = '#E5F1FF'; true;")} />
+            <Btn title="injectJavaScript" onPress={() => htmlRef.current?.injectJavaScript("document.body.style.background = '#E5F1FF'; window.ReactNativeWebView.postMessage('the injected script ran'); true;")} />
           </View>
         </Section>
         <Section title="A web page" hint="reactnative.dev, with the navigation state from onNavigationStateChange.">
