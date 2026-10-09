@@ -32,6 +32,9 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     // The mouse entering and leaving the view (not bubbling).
     topMouseEnter: {registrationName: 'onMouseEnter'},
     topMouseLeave: {registrationName: 'onMouseLeave'},
+    // A context menu item was chosen: {id} (View.linux.js runs its
+    // onSelect).
+    topContextMenuSelect: {registrationName: 'onContextMenuSelect'},
   },
   validAttributes: {
     ...AndroidConfig.validAttributes,
@@ -54,6 +57,8 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     onMouseLeave: true,
     onAuxClick: true,
     onAuxClickCapture: true,
+    // Menu items for right-click, the Menu key and Shift+F10.
+    contextMenu: true,
   },
 };
 

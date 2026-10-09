@@ -97,6 +97,16 @@ class GtkMountingManager
   // (ViewEvents::Offset).
   bool hasEventListener(facebook::react::Tag tag, size_t offset) const;
   bool isSelectableText(facebook::react::Tag tag) const;
+  // Right-click, the Menu key or Shift+F10 on `widget` (under `root`, a
+  // surface's or a modal's root): pops up the contextMenu of the nearest
+  // view that has one, at (x, y) in root coordinates, or at the view when
+  // x < 0. A TextInput or selectable Text keeps its own menu unless it has
+  // a contextMenu itself. False if nothing popped up.
+  bool showContextMenu(GtkWidget *root, GtkWidget *widget, double x, double y);
+  // The context menu showing now (tests), or null.
+  GtkWidget *contextMenuPopover() const {
+    return contextMenu_ && gtk_widget_get_visible(contextMenu_) ? contextMenu_ : nullptr;
+  }
   // The mounted view's props, or null.
   facebook::react::Props::Shared propsForTag(facebook::react::Tag tag) const;
   // The mounted view with this nativeID, for tests.
@@ -268,6 +278,7 @@ class GtkMountingManager
   std::shared_ptr<class GtkImageLoader> imageLoader_;
   int mountCount_{0};
   std::string lastAnnouncement_;
+  GtkWidget *contextMenu_{nullptr};  // weak
   float fontScale_{1};
   bool screenReaderActive_{false};
 

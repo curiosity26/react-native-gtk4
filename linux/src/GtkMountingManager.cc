@@ -63,6 +63,9 @@ GtkMountingManager::GtkMountingManager(OnAfterMount onAfterMount)
       mainThread_(std::this_thread::get_id()) {}
 
 GtkMountingManager::~GtkMountingManager() noexcept {
+  if (contextMenu_) {
+    g_object_remove_weak_pointer(G_OBJECT(contextMenu_), reinterpret_cast<gpointer *>(&contextMenu_));
+  }
   closeAllModals();
   for (auto &[tag, widget] : views_) g_object_unref(widget);
 }

@@ -125,6 +125,8 @@ class GtkPointerHandler {
   int auxButton_ = 0;
   int buttons_ = 0;              // W3C buttons bitmask
   bool realInput_ = true;
+  // A right-click just opened a context menu (GTK then skips the press).
+  bool contextMenuShown_ = false;
   GtkEventController *shortcuts_;
 
   // The paragraph with a selection (or being dragged over), what the

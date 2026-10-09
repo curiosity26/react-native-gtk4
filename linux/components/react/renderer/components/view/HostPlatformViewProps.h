@@ -6,6 +6,7 @@
 
 #include <react/renderer/components/view/BaseViewProps.h>
 #include <react/renderer/core/PropsParserContext.h>
+#include <folly/dynamic.h>
 
 #include <optional>
 #include <string>
@@ -26,6 +27,16 @@ struct HandledKeyEvent {
 };
 
 void fromRawValue(const PropsParserContext &context, const RawValue &value, HandledKeyEvent &result);
+
+// contextMenu: the items View.linux.js serialized from the app's
+// (js/menuItems.js), as given; linux/src/GtkMenus.cc reads them.
+struct ContextMenuItems {
+  folly::dynamic items = nullptr;
+  bool empty() const { return !items.isArray() || items.empty(); }
+  bool operator==(const ContextMenuItems &other) const { return items == other.items; }
+};
+
+void fromRawValue(const PropsParserContext &context, const RawValue &value, ContextMenuItems &result);
 
 class HostPlatformViewProps : public BaseViewProps {
  public:
@@ -60,6 +71,8 @@ class HostPlatformViewProps : public BaseViewProps {
   bool onMouseLeave{false};
   bool onAuxClick{false};
   bool onAuxClickCapture{false};
+  // A menu for right-click, the Menu key and Shift+F10 (GtkPopoverMenu).
+  ContextMenuItems contextMenu{};
 };
 
 } // namespace facebook::react

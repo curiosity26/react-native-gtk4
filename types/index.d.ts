@@ -81,6 +81,10 @@ export type ViewPropsLinux = {
   onMouseLeave?: (event: {nativeEvent: {clientX: number; clientY: number; offsetX: number; offsetY: number}}) => void;
   /** A middle (button 1) or right (button 2) click. */
   onAuxClick?: (event: {nativeEvent: {button: number}}) => void;
+  /** A menu for right-click, the Menu key and Shift+F10 (TextInput too). */
+  contextMenu?: MenuItem[];
+  /** An item of contextMenu was chosen (after its onSelect). */
+  onContextMenuSelect?: (event: {nativeEvent: {id: string}}) => void;
 };
 
 /** A file type filter for Dialogs: matches any of its extensions, MIME types or patterns. */
@@ -116,4 +120,42 @@ export declare const Dialogs: {
   saveFile(options?: FileDialogOptions & {defaultName?: string}): Promise<string | null>;
   /** The folders picked; [] if cancelled. */
   openFolder(options?: FileDialogOptions & {multiple?: boolean}): Promise<string[]>;
+};
+
+/**
+ * A menu item: for a View's `contextMenu`, ContextMenu and MenuBar.
+ * `checked` alone makes a checkbox; radio items between two separators are
+ * one group. `shortcut`: 'Ctrl+Shift+S', 'Alt+F4', 'Delete', or GTK's
+ * '<Control>s' (a label in context menus; a working accelerator in the
+ * menu bar).
+ */
+export type MenuItem =
+  | {
+      title: string;
+      onSelect?: (item: MenuItem) => void;
+      disabled?: boolean;
+      checked?: boolean;
+      type?: 'item' | 'checkbox' | 'radio';
+      shortcut?: string;
+      /** A submenu. */
+      items?: MenuItem[];
+    }
+  | {type: 'separator'}
+  | '-';
+
+/** A View with a context menu; onSelect runs for every item chosen. */
+export declare function ContextMenu(
+  props: import('react-native').ViewProps & {items: MenuItem[]; onSelect?: (item: MenuItem) => void},
+): import('react').ReactElement;
+
+/** The app's menu bar: menus, each {title, items}. */
+export declare const MenuBar: {
+  setMenu(menus: Array<{title: string; items: MenuItem[]}>): void;
+  clear(): void;
+};
+
+export declare const Menu: {
+  ContextMenu: typeof ContextMenu;
+  setMenuBar: typeof MenuBar.setMenu;
+  clearMenuBar: typeof MenuBar.clear;
 };

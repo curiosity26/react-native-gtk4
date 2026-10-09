@@ -40,7 +40,7 @@ import {
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
-import {Dialogs} from '@curiosity26/react-native-gtk4';
+import {ContextMenu, Dialogs, MenuBar} from '@curiosity26/react-native-gtk4';
 
 const halves = require('./assets/halves.png');
 const tile = require('./assets/tile.png');
@@ -929,6 +929,95 @@ function DialogsPage() {
   );
 }
 
+// ---- Menus -----------------------------------------------------------------
+
+function MenusPage() {
+  const log = useLog();
+  const [bold, setBold] = useState(false);
+  const [align, setAlign] = useState('left');
+  const [bar, setBar] = useState(false);
+  useEffect(() => {
+    if (!bar) {
+      MenuBar.clear();
+      return;
+    }
+    MenuBar.setMenu([
+      {
+        title: 'File',
+        items: [
+          {title: 'New', shortcut: 'Ctrl+N', onSelect: () => log('MenuBar: New')},
+          {title: 'Open…', shortcut: 'Ctrl+O', onSelect: () => log('MenuBar: Open')},
+          {type: 'separator'},
+          {title: 'Hide the menu bar', onSelect: () => setBar(false)},
+        ],
+      },
+      {
+        title: 'Format',
+        items: [
+          {title: 'Bold', shortcut: 'Ctrl+B', checked: bold, onSelect: () => setBold(b => !b)},
+          {type: 'separator'},
+          ...['left', 'center', 'right'].map(a => ({
+            title: `Align ${a}`,
+            type: 'radio',
+            checked: align === a,
+            onSelect: () => setAlign(a),
+          })),
+        ],
+      },
+    ]);
+  }, [bar, bold, align, log]);
+  useEffect(() => () => MenuBar.clear(), []);
+  const formatItems = [
+    {title: 'Bold', shortcut: 'Ctrl+B', checked: bold, onSelect: () => setBold(b => !b)},
+    {
+      title: 'Align',
+      items: ['left', 'center', 'right'].map(a => ({
+        title: a,
+        type: 'radio',
+        checked: align === a,
+        onSelect: () => setAlign(a),
+      })),
+    },
+    '-',
+    {title: 'Copy text', onSelect: () => Clipboard.setString('Formatted text')},
+    {title: 'Paste (disabled)', disabled: true},
+  ];
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Context menus"
+        hint="Right-click, or focus inside and press the Menu key or Shift+F10. Any View takes contextMenu; <ContextMenu> adds an onSelect for all items. Text fields keep GTK's own menu unless they have one.">
+        <ContextMenu
+          items={formatItems}
+          onSelect={item => log(`ContextMenu: ${item.title}`)}
+          style={[styles.pad, {height: 120, gap: 10, paddingHorizontal: 16}]}>
+          <Text style={[styles.body, {fontWeight: bold ? 'bold' : 'normal', textAlign: align, alignSelf: 'stretch'}]}>
+            Formatted text (bold {String(bold)}, aligned {align})
+          </Text>
+          <Pressable focusable style={styles.pressBox}>
+            <Text style={styles.body}>Focus me, then press Menu</Text>
+          </Pressable>
+        </ContextMenu>
+        <View style={styles.row}>
+          <TextInput style={[styles.input, {flex: 1}]} placeholder="GTK's own menu (Cut, Copy, Paste, Emoji…)" />
+          <TextInput
+            style={[styles.input, {flex: 1}]}
+            placeholder="A contextMenu of its own"
+            contextMenu={[{title: 'Say hello', onSelect: () => log('TextInput menu: Say hello')}]}
+          />
+        </View>
+      </Section>
+      <Section
+        title="Menu bar"
+        hint="MenuBar.setMenu shows the app's menus under the title bar; their shortcuts work while they're closed. Call it again to update checkboxes and radio items.">
+        <View style={styles.row}>
+          <Btn title={bar ? 'Remove the menu bar' : 'Show a menu bar'} onPress={() => setBar(b => !b)} />
+        </View>
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1339,6 +1428,7 @@ const PAGES = [
   ['Platform', PlatformPage],
   ['Modal', ModalPage],
   ['Dialogs', DialogsPage],
+  ['Menus', MenusPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.

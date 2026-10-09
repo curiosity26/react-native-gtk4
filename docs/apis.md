@@ -4,7 +4,8 @@ React Native's JS APIs as the GTK host implements them: Appearance,
 PlatformColor, AccessibilityInfo, Linking, AppState, Clipboard,
 PixelRatio, I18nManager, Share, Vibration, Alert. Then the Linux APIs
 React Native has none for, which `@curiosity26/react-native-gtk4` exports:
-[Dialogs](#dialogs).
+[Dialogs](#dialogs), [MenuBar](#menubar) (and `ContextMenu`, in
+[components.md](components.md#context-menus)).
 
 Components are in [components.md](components.md).
 
@@ -220,6 +221,40 @@ Every method takes `title`, `buttonLabel` (the accept button), `defaultPath`
 (`{name, extensions, mimeTypes, patterns}`; the first is selected). Paths
 are local paths; a file without one (a remote location) comes back as its
 URI. Other failures reject.
+
+## MenuBar
+
+The app's menu bar, from `@curiosity26/react-native-gtk4`: menus of items
+(the same items as [context menus](components.md#context-menus)) that
+GtkApplicationWindow shows under the title bar. Item shortcuts are the
+app's accelerators (`gtk_application_set_accels_for_action`): they work
+while the menus are closed, in every app window.
+
+```js
+import {MenuBar} from '@curiosity26/react-native-gtk4';
+
+useEffect(() => {
+  MenuBar.setMenu([
+    {title: 'File', items: [
+      {title: 'New', shortcut: 'Ctrl+N', onSelect: newDocument},
+      {title: 'Open…', shortcut: 'Ctrl+O', onSelect: open},
+      {type: 'separator'},
+      {title: 'Quit', shortcut: 'Ctrl+Q', onSelect: quit},
+    ]},
+    {title: 'View', items: [
+      {title: 'Sidebar', checked: sidebar, shortcut: 'F9', onSelect: toggleSidebar},
+    ]},
+  ]);
+}, [sidebar]);
+```
+
+`setMenu` replaces the whole bar (call it again when a checkbox, radio item
+or `disabled` changes); `MenuBar.clear()` removes it. A reload clears the
+bar the old JS set. `Menu.setMenuBar` / `Menu.clearMenuBar` are the same.
+Desktops that show app menus themselves (`gtk-shell-shows-menubar`) take it
+from GTK. `GalleryMenus` checks the bar's menus, that the accelerators are
+registered, that Ctrl+N reaches New through the window's shortcuts with
+the menus closed, and a checkbox's state.
 
 ## Testing
 
