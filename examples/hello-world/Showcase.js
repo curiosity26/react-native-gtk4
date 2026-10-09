@@ -40,7 +40,7 @@ import {
   useColorScheme,
   useWindowDimensions,
 } from 'react-native';
-import {ContextMenu, Dialogs, MenuBar} from '@curiosity26/react-native-gtk4';
+import {ContextMenu, Dialogs, MenuBar, Windows, useWindow} from '@curiosity26/react-native-gtk4';
 
 const halves = require('./assets/halves.png');
 const tile = require('./assets/tile.png');
@@ -1018,6 +1018,99 @@ function MenusPage() {
   );
 }
 
+// ---- Windows ---------------------------------------------------------------
+
+// Shared by every window: they run in one JS runtime.
+const notes = {text: 'Notes are shared between windows.', listeners: new Set()};
+
+function useNotes() {
+  const [text, setText] = useState(notes.text);
+  useEffect(() => {
+    const update = t => setText(t);
+    notes.listeners.add(update);
+    return () => notes.listeners.delete(update);
+  }, []);
+  const set = t => {
+    notes.text = t;
+    notes.listeners.forEach(l => l(t));
+  };
+  return [text, set];
+}
+
+// A window of its own (registered in index.js as ShowcaseWindow).
+export function ShowcaseWindow({n}) {
+  const window = useWindow();
+  const {width, height} = useWindowDimensions();
+  const [text, setText] = useNotes();
+  return (
+    <View style={[styles.page, {flex: 1, gap: 10, backgroundColor: PlatformColor('window_bg_color')}]}>
+      <Text style={styles.sectionTitle}>Window {n} (id {window.id})</Text>
+      <Text style={styles.mono}>
+        useWindowDimensions() = {Math.round(width)} x {Math.round(height)} (this window's)
+      </Text>
+      <TextInput style={[styles.input, {minHeight: 80}]} value={text} onChangeText={setText} multiline />
+      <View style={styles.row}>
+        <Btn title="Rename" onPress={() => window.setTitle(`Window ${n}, renamed`)} />
+        <Btn title="600 x 400" onPress={() => window.setSize(600, 400)} />
+        <Btn title="Main window" onPress={() => Windows.main.focus()} />
+        <Btn title="Close" color="#FF3B30" onPress={() => window.close()} />
+      </View>
+    </View>
+  );
+}
+
+let windowCount = 0;
+
+function WindowsPage() {
+  const log = useLog();
+  const [text, setText] = useNotes();
+  const [open, setOpen] = useState(() => Windows.getAll().filter(w => !w.main).length);
+  const openWindow = interceptClose => {
+    const n = ++windowCount;
+    const w = Windows.open({
+      component: 'ShowcaseWindow',
+      initialProps: {n},
+      title: `Window ${n}`,
+      width: 480,
+      height: 320,
+      minWidth: 320,
+      minHeight: 240,
+      interceptClose,
+    });
+    setOpen(c => c + 1);
+    w.addListener('focus', () => log(`window ${n}: focus`));
+    w.addListener('resize', e => log(`window ${n}: resize ${e.width}x${e.height}`));
+    w.addListener('close-requested', () => {
+      log(`window ${n}: close-requested`);
+      if (interceptClose) {
+        Alert.alert(`Close window ${n}?`, null, [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Close', style: 'destructive', onPress: () => w.close()},
+        ]);
+      }
+    });
+    w.addListener('closed', () => {
+      log(`window ${n}: closed`);
+      setOpen(c => c - 1);
+    });
+  };
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <Section
+        title="Windows (@curiosity26/react-native-gtk4)"
+        hint="Each window shows a registered component as a surface of its own, in this JS runtime: edit the notes here or there. useWindowDimensions reports each window's own size. Closing this window while others are open hides it; the app quits with its last window.">
+        <View style={styles.row}>
+          <Btn title="Open a window" onPress={() => openWindow(false)} />
+          <Btn title="Open one that asks before closing" onPress={() => openWindow(true)} />
+          <Btn title="Rename this window" onPress={() => Windows.main.setTitle('Showcase — Windows')} />
+        </View>
+        <Text style={styles.mono}>{open} other window(s) open</Text>
+        <TextInput style={[styles.input, {minHeight: 80}]} value={text} onChangeText={setText} multiline />
+      </Section>
+    </ScrollView>
+  );
+}
+
 // ---- Lists -----------------------------------------------------------------
 
 const ROWS = Array.from({length: 1000}, (_, i) => ({id: String(i), title: `Row ${i + 1}`}));
@@ -1429,6 +1522,7 @@ const PAGES = [
   ['Modal', ModalPage],
   ['Dialogs', DialogsPage],
   ['Menus', MenusPage],
+  ['Windows', WindowsPage],
 ];
 
 // initialPage (a page name or index) opens that page first, e.g.

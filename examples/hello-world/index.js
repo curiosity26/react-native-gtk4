@@ -13,7 +13,8 @@ import GalleryDialogs from './GalleryDialogs';
 import GalleryMenus from './GalleryMenus';
 import GalleryModal from './GalleryModal';
 import GallerySelection from './GallerySelection';
-import Showcase from './Showcase';
+import GalleryWindows, {GalleryWindowChild} from './GalleryWindows';
+import Showcase, {ShowcaseWindow} from './Showcase';
 
 AppRegistry.registerComponent('HelloWorld', () => App);
 AppRegistry.registerComponent('Gallery', () => Gallery);
@@ -29,4 +30,7 @@ AppRegistry.registerComponent('GalleryPlatform', () => GalleryPlatform);
 AppRegistry.registerComponent('GalleryModal', () => GalleryModal);
 AppRegistry.registerComponent('GalleryDialogs', () => GalleryDialogs);
 AppRegistry.registerComponent('GalleryMenus', () => GalleryMenus);
+AppRegistry.registerComponent('GalleryWindows', () => GalleryWindows);
+AppRegistry.registerComponent('GalleryWindowChild', () => GalleryWindowChild);
 AppRegistry.registerComponent('Showcase', () => Showcase);
+AppRegistry.registerComponent('ShowcaseWindow', () => ShowcaseWindow);

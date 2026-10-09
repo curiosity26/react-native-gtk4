@@ -40,7 +40,10 @@ transparent, nested, a modal dialog to Orca
 ([docs/apis.md](docs/apis.md#alert)). Context menus on any view
 (`contextMenu`, `ContextMenu`) and the app's menu bar (`MenuBar`), with
 submenus, checkbox and radio items and shortcuts
-([docs/components.md](docs/components.md#context-menus)).
+([docs/components.md](docs/components.md#context-menus)). More windows
+(`Windows.open`), each a registered component in the same JS runtime,
+with their own size for `useWindowDimensions`
+([docs/apis.md](docs/apis.md#windows)).
 
 ## Quick start
 

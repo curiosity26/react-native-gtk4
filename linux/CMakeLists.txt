@@ -306,6 +306,7 @@ target_link_libraries(rngtk_widgets PUBLIC PkgConfig::GTK4 PkgConfig::PANGO)
 # The host: our sources, shared by the app library and the test harness.
 add_library(rngtk_host_objs OBJECT
   src/AccessibilityInfo.cc
+  src/AppWindows.cc
   src/Appearance.cc
   src/DevControls.cc
   src/DevUI.cc
@@ -548,6 +549,9 @@ add_test(NAME gallery-dialogs-self-test
 add_test(NAME gallery-menus-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryMenus --width 940 --height 680 --self-test)
+add_test(NAME gallery-windows-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryWindows --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

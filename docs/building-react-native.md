@@ -93,6 +93,7 @@ React Native's dev Babel preset warns about each one at runtime.)
 | `Share/Share` (not platform-split) | own | rejects every platform but iOS and Android; a stub that resolves dismissed ([apis.md](apis.md#share-and-vibration)) |
 | `Image/ImageViewNativeComponent` (not platform-split) | Android's view config | Image.android.js sends `defaultSource` as a string and `shouldNotifyLoadEvents`, which iOS's config drops |
 | `Components/View/View` (not platform-split) | own | adds `contextMenu` (items with `onSelect`, serialized for the host by `js/menuItems.js`); a plain function instead of Flow's component syntax |
+| `Utilities/useWindowDimensions` (not platform-split) | own | the size of the window the caller is in (its root tag), for apps with several windows; React Native's in the main window |
 | `Modal/Modal` (not platform-split) | iOS | `visible={false}` reaches the native view, which closes its window and sends `onDismiss` before Modal unmounts (iOS's order; Android unmounts at once). Also passes `accessibilityLabel` on, as the dialog's name |
 | `Components/TextInput/TextInput`, `Components/TextInput/TextInputState` (not platform-split) | iOS (and `contextMenu`) | they only render, focus and blur for 'ios' and 'android'; Linux uses the iOS native components (the host builds React Native's iOS C++ TextInput) |
 
@@ -140,6 +141,11 @@ resizes the surface, re-lays it out with `setSurfaceConstraints`, and emits
 `useWindowDimensions()` update as the window is resized. `rn-gtk-host
 --self-test` keeps the size it was given; the GalleryControls self-test
 turns resizing on and checks that a resize reaches JS.
+
+Windows opened with `Windows` (see [apis.md](apis.md#windows)) are surfaces
+of their own; `useWindowDimensions()` (overridden in
+`Utilities/useWindowDimensions.linux.js`) reports the caller's own window
+from its root tag, and `Dimensions` stays the main window's.
 
 ### The package's own APIs
 

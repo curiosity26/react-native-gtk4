@@ -3045,6 +3045,9 @@ void add_menus_steps() {
                            }});
   app.steps.push_back(Step{"  ...and so does Shift+F10",
                            [] {
+                             // (Focus comes back from the closed menu
+                             // asynchronously on X11.)
+                             gtk_widget_grab_focus(by_id("focus-me"));
                              app.host->keyboardHandler()->keyPressed(GDK_KEY_F10, 76,
                                                                      GDK_SHIFT_MASK);
                              app.host->keyboardHandler()->keyReleased(GDK_KEY_F10, 76,
@@ -3132,6 +3135,143 @@ void add_menus_steps() {
         if (v) g_variant_unref(v);
         return off;
       }});
+}
+
+// ---------------------------------------------------------------------------
+// GalleryWindows checks
+
+bool is_windows() { return opts.module == "GalleryWindows"; }
+
+// A click on view `id` in window `window` (its surface id).
+void click_in_window(SurfaceId window, const char *id) {
+  GtkWidget *v = by_id(id);
+  if (v && modal_of(v)) {
+    click_anywhere(id);  // a Modal's, over the window
+    return;
+  }
+  GtkWidget *root = app.host->rootFor(window);
+  rngtk::GtkPointerHandler *handler = app.host->pointerHandlerFor(window);
+  graphene_rect_t b{};
+  if (!v || !root || !handler || !gtk_widget_compute_bounds(v, root, &b)) return;
+  handler->setRealInputEnabled(false);
+  rngtk::GtkPointerHandler::Input input{};
+  input.x = b.origin.x + b.size.width / 2;
+  input.y = b.origin.y + b.size.height / 2;
+  input.timeMs = uint32_t(g_get_monotonic_time() / 1000);
+  input.phase = rngtk::GtkPointerHandler::Phase::Down;
+  handler->dispatch(input);
+  input.phase = rngtk::GtkPointerHandler::Phase::Up;
+  handler->dispatch(input);
+}
+
+size_t window_count() { return app.host->windowList().size(); }
+
+void add_windows_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  constexpr SurfaceId a = 11, b = 21;
+  app.steps.push_back(Step{
+      "Windows.open: another app window, the component as a surface of its own",
+      [] { click("open-a"); },
+      [] {
+        GtkWindow *w = app.host->windowFor(a);
+        GtkWidget *child = app.host->rootFor(a);
+        return w && gtk_widget_get_mapped(GTK_WIDGET(w)) && GTK_IS_APPLICATION_WINDOW(w) &&
+               std::string(gtk_window_get_title(w)) == "Child A" && child &&
+               has_text(child, "A · window 11 ·") && window_count() == 2;
+      }});
+  app.steps.push_back(Step{
+      "  ...useWindowDimensions: each window's own size", [] {},
+      [] {
+        GtkWidget *child = app.host->rootFor(a);
+        return has_text(child, "420 x 300") && has_text(app.root, "main window 1 · 940 x 680");
+      }});
+  app.steps.push_back(Step{
+      "  ...one JS runtime: state changed in the main window shows in the other",
+      [] { click("increment"); },
+      [] { return has_text(app.host->rootFor(a), "count 1") && has_text(app.root, "count 1"); }});
+  app.steps.push_back(Step{
+      "setSize: the window resizes, its surface relays out, 'resize' events",
+      [] { app.host->setWindowSize(a, 500, 360); },
+      [] {
+        return has_text(app.host->rootFor(a), "500 x 360") &&
+               has_text(app.root, "A resize 500x360");
+      }});
+  app.steps.push_back(Step{"setTitle, from inside the window (useWindow)",
+                           [] { click_in_window(a, "title-A"); },
+                           [] {
+                             return std::string(gtk_window_get_title(app.host->windowFor(a))) ==
+                                    "A (renamed)";
+                           }});
+  app.steps.push_back(Step{"  ...and the main window's (Windows.main)",
+                           [] { click("main-title"); },
+                           [] {
+                             return std::string(gtk_window_get_title(GTK_WINDOW(app.window))) ==
+                                    "Windows gallery";
+                           }});
+  app.steps.push_back(Step{
+      "a Modal in a window opens over that window",
+      [] { click_in_window(a, "modal-A"); },
+      [] {
+        auto tags = app.host->mountingManager().modalTags();
+        GtkWindow *m = tags.empty() ? nullptr : app.host->mountingManager().modalWindow(tags[0]);
+        return m && gtk_window_get_transient_for(m) == app.host->windowFor(a);
+      }});
+  app.steps.push_back(Step{"  ...and closes",
+                           [] { click_in_window(a, "modal-close-A"); },
+                           [] { return app.host->mountingManager().modalTags().empty(); }});
+  app.steps.push_back(Step{
+      "the close button: 'close-requested', then the window closes ('closed')",
+      [] { gtk_window_close(app.host->windowFor(a)); },
+      [] {
+        return !app.host->windowFor(a) && window_count() == 1 &&
+               has_text(app.root, "A close-requested | A closed") && has_text(app.root, "open []");
+      }});
+  app.steps.push_back(Step{
+      "interceptClose: the close button only asks",
+      [] { click("open-b"); },
+      [] {
+        GtkWindow *w = app.host->windowFor(b);
+        if (!w || !gtk_widget_get_mapped(GTK_WIDGET(w))) return false;
+        static bool asked = false;
+        if (!asked) {
+          asked = true;
+          gtk_window_close(w);
+          return false;
+        }
+        return has_text(app.root, "B close-requested") && app.host->windowFor(b) &&
+               window_count() == 2;
+      }});
+  app.steps.push_back(Step{"  ...and the app closes it (from inside: useWindow().close())",
+                           [] { click_in_window(b, "close-B"); },
+                           [] { return !app.host->windowFor(b) && has_text(app.root, "B closed"); }});
+  app.steps.push_back(Step{
+      "closing the main window while another is open hides it (the app keeps running)",
+      [] {
+        click("open-a");
+      },
+      [] {
+        static bool closed = false;
+        GtkWindow *w = app.host->windowFor(31);
+        if (!w || !gtk_widget_get_mapped(GTK_WIDGET(w))) return false;
+        if (!closed) {
+          closed = true;
+          gtk_window_close(GTK_WINDOW(app.window));
+          return false;
+        }
+        return !gtk_widget_get_visible(app.window) &&
+               has_text(app.root, "main close-requested | main closed") && window_count() == 2;
+      }});
+  app.steps.push_back(Step{
+      "closing the last window quits the app",
+      [] {
+        g_signal_connect(g_application_get_default(), "shutdown",
+                         G_CALLBACK(+[](GApplication *, gpointer) {
+                           check(true, "  ...the app quit");
+                         }),
+                         nullptr);
+        gtk_window_close(app.host->windowFor(31));
+      },
+      [] { return false; }});
 }
 
 gboolean on_timeout(gpointer);
@@ -3232,6 +3372,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_windows() && app.steps.empty()) {
+    add_windows_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_menus() && app.steps.empty()) {
     add_menus_steps();
     enter(Phase::Steps);
@@ -3282,7 +3425,7 @@ void check_app(bool first) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
-               is_dialogs() || is_menus()) {
+               is_dialogs() || is_menus() || is_windows()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -3296,17 +3439,29 @@ void check_app(bool first) {
 // callback could see a half-laid-out tree).
 void on_after_paint(GdkFrameClock *, gpointer);
 
+gint64 last_paint_us = 0;
+
 gboolean on_tick(GtkWidget *, GdkFrameClock *clock, gpointer) {
   // Keeps frames coming; the work happens in on_after_paint.
   static bool connected = false;
   if (!connected) {
     connected = true;
     g_signal_connect(clock, "after-paint", G_CALLBACK(on_after_paint), nullptr);
+    // Steps go on while the main window paints nothing (GalleryWindows
+    // hides it).
+    g_timeout_add(50, [](gpointer) -> gboolean {
+      if (app.phase == Phase::Done) return G_SOURCE_REMOVE;
+      if (app.phase == Phase::Steps && g_get_monotonic_time() - last_paint_us > 200000) {
+        on_after_paint(nullptr, nullptr);
+      }
+      return G_SOURCE_CONTINUE;
+    }, nullptr);
   }
   return app.phase == Phase::Done ? G_SOURCE_REMOVE : G_SOURCE_CONTINUE;
 }
 
 void on_after_paint(GdkFrameClock *, gpointer) {
+  last_paint_us = g_get_monotonic_time();
   auto &mm = app.host->mountingManager();
   switch (app.phase) {
     case Phase::Initial:

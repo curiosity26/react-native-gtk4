@@ -33,6 +33,7 @@
 #include <react/utils/ContextContainer.h>
 #include <react/utils/RunLoopObserverManager.h>
 
+#include <algorithm>
 #include <cstdio>
 
 using namespace facebook::react;
@@ -40,9 +41,6 @@ using namespace facebook::react;
 namespace rngtk {
 
 namespace {
-
-// LogBox runs as its own React surface (AppRegistry "LogBox").
-constexpr SurfaceId kLogBoxSurfaceId = 1001;
 
 // A GSource whose prepare() runs each time the main loop is about to poll:
 // GLib's equivalent of a CFRunLoop "before waiting" observer, which is when
@@ -341,6 +339,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         if (name == DeviceInfoModule::kModuleName) {
           return std::make_shared<DeviceInfoModule>(jsInvoker, *this);
         }
+        if (name == "LinuxWindows") return makeWindowsModule(jsInvoker);
         if (auto module = makePlatformModule(name, jsInvoker, platform_)) {
           return module;
         }
@@ -511,10 +510,19 @@ RNGtkHost::~RNGtkHost() {
     g_signal_handler_disconnect(gtk_widget_get_settings(GTK_WIDGET(overlay_)),
                                 fontDpiHandler_);
   }
+  closeAllWindows();
+  for (GtkWindow *w : trackedWindows_) {
+    g_signal_handlers_disconnect_by_data(w, this);
+    g_object_set_data(G_OBJECT(w), "rngtk-host", nullptr);
+    g_object_weak_unref(G_OBJECT(w), onTrackedWindowGone, this);
+  }
+  trackedWindows_.clear();
+  if (trackedApp_) {
+    g_signal_handlers_disconnect_by_data(trackedApp_, this);
+    g_object_remove_weak_pointer(G_OBJECT(trackedApp_), reinterpret_cast<gpointer *>(&trackedApp_));
+  }
   if (window_) g_signal_handlers_disconnect_by_data(window_, this);
-  if (windowSurface_) g_signal_handlers_disconnect_by_data(windowSurface_, this);
   g_clear_object(&window_);
-  g_clear_object(&windowSurface_);
   if (layoutHandler_) g_signal_handler_disconnect(layoutClock_, layoutHandler_);
   g_clear_object(&layoutClock_);
   g_signal_handlers_disconnect_by_data(overlay_, this);
@@ -672,6 +680,10 @@ void RNGtkHost::setSize(float width, float height) {
   if (width == width_ && height == height_) return;
   width_ = width;
   height_ = height;
+  storeMetrics(surfaceId_, width, height);
+  if (window_) {
+    emitWindowEvent(surfaceId_, "resize", folly::dynamic::object("width", width)("height", height));
+  }
   if (root_) rn_widget_set_frame(root_, 0, 0, width, height);
   if (logBoxRoot_) rn_widget_set_frame(logBoxRoot_, 0, 0, width, height);
   // startAppSurface() reads the new size before JS runs; after, the
@@ -709,36 +721,110 @@ void RNGtkHost::onLayout(GdkFrameClock *, gpointer self) {
   if (width > 0 && height > 0) host->setSize(width, height);
 }
 
-// AppState follows the window: active while it's the active window,
-// inactive when it isn't, background when minimized (X11) or suspended
-// (Wayland compositors that tell: not visible).
+// AppState follows the app's windows (all of the GtkApplication's: the
+// main one, those Windows opened, Modals', dialogs): active while one of
+// them is the active window, inactive when none is, background when every
+// visible one is minimized (X11) or suspended (Wayland compositors that
+// tell: not visible), or none is visible.
 void RNGtkHost::connectWindowState() {
   GtkRoot *root = gtk_widget_get_root(GTK_WIDGET(overlay_));
   if (!root || !GTK_IS_WINDOW(root) || GTK_WINDOW(root) == window_) return;
   if (window_) g_signal_handlers_disconnect_by_data(window_, this);
-  if (windowSurface_) g_signal_handlers_disconnect_by_data(windowSurface_, this);
   g_set_object(&window_, GTK_WINDOW(root));
-  g_signal_connect_swapped(window_, "notify::is-active",
-                           G_CALLBACK(+[](RNGtkHost *host) { host->updateAppState(); }),
-                           this);
-  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(window_));
-  g_set_object(&windowSurface_, surface);
-  if (surface && GDK_IS_TOPLEVEL(surface)) {
-    g_signal_connect_swapped(surface, "notify::state",
-                             G_CALLBACK(+[](RNGtkHost *host) { host->updateAppState(); }),
+  {
+    std::lock_guard<std::mutex> lock(windowsMutex_);
+    const char *title = gtk_window_get_title(window_);
+    windowInfo_[surfaceId_] = WindowInfo{title ? title : "", width_, height_};
+  }
+  // The close button (Windows: close-requested, closed, hiding while other
+  // windows are open).
+  g_signal_connect(window_, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer self) -> gboolean {
+                     return static_cast<RNGtkHost *>(self)->onMainCloseRequest();
+                   }),
+                   this);
+  g_signal_connect(window_, "notify::title", G_CALLBACK(+[](GtkWindow *w, GParamSpec *, gpointer self) {
+                     auto *host = static_cast<RNGtkHost *>(self);
+                     std::lock_guard<std::mutex> lock(host->windowsMutex_);
+                     const char *title = gtk_window_get_title(w);
+                     host->windowInfo_[host->surfaceId_].title = title ? title : "";
+                   }),
+                   this);
+  GtkApplication *app = gtk_window_get_application(window_);
+  if (app && app != trackedApp_) {
+    trackedApp_ = app;
+    g_object_add_weak_pointer(G_OBJECT(app), reinterpret_cast<gpointer *>(&trackedApp_));
+    for (GList *l = gtk_application_get_windows(app); l; l = l->next) {
+      trackWindow(GTK_WINDOW(l->data));
+    }
+    g_signal_connect_swapped(app, "window-added",
+                             G_CALLBACK(+[](RNGtkHost *host, GtkWindow *w) { host->trackWindow(w); }),
                              this);
+    g_signal_connect_swapped(app, "window-removed",
+                             G_CALLBACK(+[](RNGtkHost *host, GtkWindow *) { host->updateAppState(); }),
+                             this);
+  } else if (!app) {
+    trackWindow(window_);
   }
   updateAppState();
 }
 
-void RNGtkHost::updateAppState() {
-  if (!window_) return;
-  int state = gtk_window_is_active(window_) ? 0 : 1;
-  if (windowSurface_ && GDK_IS_TOPLEVEL(windowSurface_)) {
-    GdkToplevelState s = gdk_toplevel_get_state(GDK_TOPLEVEL(windowSurface_));
-    if (s & (GDK_TOPLEVEL_STATE_MINIMIZED | GDK_TOPLEVEL_STATE_SUSPENDED)) state = 2;
+void RNGtkHost::trackWindow(GtkWindow *window) {
+  if (std::find(trackedWindows_.begin(), trackedWindows_.end(), window) != trackedWindows_.end()) {
+    return;
   }
-  setAppState(state);
+  trackedWindows_.push_back(window);
+  g_object_weak_ref(G_OBJECT(window), onTrackedWindowGone, this);
+  g_object_set_data(G_OBJECT(window), "rngtk-host", this);
+  g_signal_connect(window, "notify::is-active",
+                   G_CALLBACK(+[](GtkWindow *w, GParamSpec *, gpointer self) {
+                     auto *host = static_cast<RNGtkHost *>(self);
+                     // Windows: focus and blur, for the app's own windows.
+                     if (SurfaceId id = host->idForWindow(w)) {
+                       host->emitWindowEvent(id, gtk_window_is_active(w) ? "focus" : "blur");
+                     }
+                     host->updateAppState();
+                   }),
+                   this);
+  g_signal_connect(window, "notify::visible", G_CALLBACK(+[](GtkWindow *, GParamSpec *, gpointer self) {
+                     static_cast<RNGtkHost *>(self)->updateAppState();
+                   }),
+                   this);
+  // Minimized or suspended: the toplevel surface's state, once there is one.
+  auto connectSurface = +[](GtkWidget *w, gpointer) {
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(w));
+    if (!surface || !GDK_IS_TOPLEVEL(surface)) return;
+    g_signal_connect_object(surface, "notify::state",
+                            G_CALLBACK(+[](GdkSurface *, GParamSpec *, gpointer window) {
+                              if (auto *host = static_cast<RNGtkHost *>(
+                                      g_object_get_data(G_OBJECT(window), "rngtk-host"))) {
+                                host->updateAppState();
+                              }
+                            }),
+                            G_OBJECT(w), GConnectFlags(0));
+  };
+  g_signal_connect(window, "realize", G_CALLBACK(connectSurface), this);
+  if (gtk_widget_get_realized(GTK_WIDGET(window))) connectSurface(GTK_WIDGET(window), this);
+}
+
+void RNGtkHost::onTrackedWindowGone(gpointer self, GObject *window) {
+  auto &list = static_cast<RNGtkHost *>(self)->trackedWindows_;
+  list.erase(std::remove(list.begin(), list.end(), reinterpret_cast<GtkWindow *>(window)),
+             list.end());
+}
+
+void RNGtkHost::updateAppState() {
+  bool active = false, shown = false;
+  for (GtkWindow *w : trackedWindows_) {
+    if (!gtk_widget_get_visible(GTK_WIDGET(w))) continue;
+    if (gtk_window_is_active(w)) active = true;
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(w));
+    bool hidden = surface && GDK_IS_TOPLEVEL(surface) &&
+                  (gdk_toplevel_get_state(GDK_TOPLEVEL(surface)) &
+                   (GDK_TOPLEVEL_STATE_MINIMIZED | GDK_TOPLEVEL_STATE_SUSPENDED));
+    if (!hidden) shown = true;
+  }
+  if (trackedWindows_.empty()) return;
+  setAppState(active ? 0 : shown ? 1 : 2);
 }
 
 void RNGtkHost::setAppState(int state) {

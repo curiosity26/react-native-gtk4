@@ -41,6 +41,10 @@ struct AppOptions {
 #endif
   std::string devServerHost = "localhost";
   int devServerPort = 8081;
+  // Quit when the app's last window closes (JS can change it:
+  // Windows.setQuitOnLastWindowClosed). Off, closing the main window hides
+  // it and the app keeps running.
+  bool quitOnLastWindowClosed = true;
 };
 
 // Runs the app until its window closes. Returns the process exit status.
