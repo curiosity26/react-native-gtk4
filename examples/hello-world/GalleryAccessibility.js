@@ -70,6 +70,7 @@ export default function GalleryAccessibility() {
           <Text>B</Text>
         </Pressable>
         <Pressable
+          nativeID="disabled-action"
           accessibilityRole="button"
           aria-disabled
           accessibilityLabel="Disabled action"
@@ -77,8 +78,8 @@ export default function GalleryAccessibility() {
           <Text>disabled</Text>
         </Pressable>
       </View>
-      <View accessible style={styles.box}>
-        <Text>Battery</Text>
+      <View nativeID="battery" accessible style={styles.box}>
+        <Text nativeID="battery-text">Battery</Text>
         <Text>80%</Text>
       </View>
       <View
@@ -97,11 +98,11 @@ export default function GalleryAccessibility() {
       <View accessibilityElementsHidden>
         <Text>Hidden from screen readers</Text>
       </View>
-      <Text>A plain paragraph</Text>
+      <Text nativeID="plain-text">A plain paragraph</Text>
       <View style={styles.row}>
-        <TextInput accessibilityLabel="Name field" style={styles.input} />
+        <TextInput nativeID="name-field" accessibilityLabel="Name field" style={styles.input} />
         <Text nativeID="email-label">Email address</Text>
-        <TextInput accessibilityLabelledBy="email-label" style={styles.input} />
+        <TextInput nativeID="email-field" accessibilityLabelledBy="email-label" style={styles.input} />
         <Switch accessibilityLabel="Dark mode" value={false} />
       </View>
       <View accessibilityLiveRegion="polite">

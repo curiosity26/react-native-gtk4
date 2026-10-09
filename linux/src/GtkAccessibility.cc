@@ -25,6 +25,10 @@
 //   presses also gets "a11y.activate", which presses it like Enter does.
 // - Live regions: when a Text's content changes inside a view with
 //   accessibilityLiveRegion, the new text is announced.
+// - Screen reader navigation: Orca reads what has keyboard focus, so while
+//   a screen reader runs, accessible elements that don't take focus (an
+//   `accessible` View, a Text outside one) do: Tab visits each, as
+//   VoiceOver and TalkBack swipes do. Off, the Tab order is unchanged.
 #include "GtkMountingManager.h"
 
 #include "rn_text.h"
@@ -531,6 +535,53 @@ void GtkMountingManager::refreshContentLabels(GtkWidget *from) {
     std::string label;
     collect_text(w, label);
     set_label(GTK_ACCESSIBLE(w), label);
+  }
+}
+
+}  // namespace rngtk
+
+namespace rngtk {
+
+void GtkMountingManager::setScreenReaderActive(bool active) {
+  if (active == screenReaderActive_) return;
+  screenReaderActive_ = active;
+  for (const auto &[tag, widget] : views_) updateScreenReaderFocus(widget);
+}
+
+// Whether the widget is an accessible element of its own that only takes
+// focus for the screen reader: accessible, not focusable already, not
+// hidden, and not inside an element that speaks for it (an `accessible`
+// View, a Pressable).
+void GtkMountingManager::updateScreenReaderFocus(GtkWidget *widget) {
+  static GQuark mine = g_quark_from_static_string("rngtk-a11y-reader-focus");
+  if (!RN_IS_VIEW(widget) && !RN_IS_TEXT(widget)) return;
+  auto t = targetForView(widget);
+  auto props = std::dynamic_pointer_cast<const ViewProps>(propsForTag(t.tag));
+  // A Text is an element as on iOS (Text.js only sends `accessible` off
+  // iOS and Android when the app sets it, so it can't say "default").
+  bool element = props && (props->accessible || RN_IS_TEXT(widget));
+  bool eligible = screenReaderActive_ && element &&
+                  !(RN_IS_VIEW(widget) && props->focusable) &&
+                  gtk_widget_get_parent(widget) != nullptr;
+  for (GtkWidget *w = gtk_widget_get_parent(widget); eligible && w;
+       w = gtk_widget_get_parent(w)) {
+    auto at = targetForView(w);
+    if (at.tag == 0) continue;
+    auto p = std::dynamic_pointer_cast<const ViewProps>(propsForTag(at.tag));
+    if (p && (p->accessible || p->focusable || p->accessibilityElementsHidden ||
+              p->importantForAccessibility == ImportantForAccessibility::NoHideDescendants)) {
+      eligible = false;
+    }
+  }
+  bool had = g_object_get_qdata(G_OBJECT(widget), mine);
+  // (A props update resets focusable to the props' value: set it again.)
+  if (eligible || had) gtk_widget_set_focusable(widget, eligible);
+  if (eligible == had) return;
+  g_object_set_qdata(G_OBJECT(widget), mine, GINT_TO_POINTER(eligible));
+  // Descendants may now be (or no longer be) inside an element.
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    updateScreenReaderFocus(c);
   }
 }
 

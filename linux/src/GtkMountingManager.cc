@@ -252,6 +252,14 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         break;
     }
   }
+  if (screenReaderActive_) {
+    // Where views landed decides which are elements of their own.
+    for (const auto &m : transaction.getMutations()) {
+      if (m.type == ShadowViewMutation::Insert || m.type == ShadowViewMutation::Update) {
+        if (GtkWidget *w = viewForTag(m.newChildShadowView.tag)) updateScreenReaderFocus(w);
+      }
+    }
+  }
   mountCount_++;
   if (onAfterMount_) onAfterMount_(surfaceId);
 }
