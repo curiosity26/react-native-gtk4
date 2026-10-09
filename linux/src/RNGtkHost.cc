@@ -3,6 +3,7 @@
 #include "Appearance.h"
 #include "DevUI.h"
 #include "GtkImageLoader.h"
+#include "GtkKeyboardHandler.h"
 #include "GtkMountingManager.h"
 #include "GtkPointerHandler.h"
 #include "JsMessageQueueThread.h"
@@ -322,6 +323,8 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     mountingManager_->registerSurface(kLogBoxSurfaceId, logBoxRoot);
     logBoxPointerHandler_ =
         std::make_unique<GtkPointerHandler>(*mountingManager_, logBoxRoot);
+    logBoxKeyboardHandler_ =
+        std::make_unique<GtkKeyboardHandler>(*mountingManager_, logBoxRoot);
     logBoxRoot_ = logBoxRoot;
     logBox_ = std::make_shared<LogBoxDelegate>(*this, logBoxRoot);
 
@@ -447,6 +450,8 @@ RNGtkHost::~RNGtkHost() {
   }
   pointerHandler_.reset();
   logBoxPointerHandler_.reset();
+  keyboardHandler_.reset();
+  logBoxKeyboardHandler_.reset();
   if (loader_.joinable()) loader_.join();
   if (observerSource_) {
     g_source_destroy(observerSource_);
@@ -475,6 +480,7 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
   rn_widget_set_frame(root, 0, 0, width, height);
   mountingManager_->registerSurface(surfaceId, root);
   pointerHandler_ = std::make_unique<GtkPointerHandler>(*mountingManager_, root);
+  keyboardHandler_ = std::make_unique<GtkKeyboardHandler>(*mountingManager_, root);
   mountingManager_->setOnUserScroll([this] {
     if (pointerHandler_) pointerHandler_->cancelTouches();
     if (logBoxPointerHandler_) logBoxPointerHandler_->cancelTouches();

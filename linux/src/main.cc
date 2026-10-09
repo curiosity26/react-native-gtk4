@@ -47,6 +47,7 @@
 #include "DevUI.h"
 #include "FeatureFlags.h"
 #include "GtkMountingManager.h"
+#include "GtkKeyboardHandler.h"
 #include "GtkPointerHandler.h"
 #include "PangoText.h"
 #include "rn_scroll_view.h"
@@ -1674,6 +1675,247 @@ void add_resize_steps() {
       }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryKeyboard checks
+
+bool is_keyboard() { return opts.module == "GalleryKeyboard"; }
+
+GtkWidget *focus_widget() {
+  return gtk_root_get_focus(GTK_ROOT(app.window));
+}
+
+// A key pressed and released through the keyboard handler; true if the
+// press was handled (GTK would skip it).
+bool key(guint keyval, guint keycode, GdkModifierType mods = GdkModifierType(0)) {
+  auto *keys = app.host->keyboardHandler();
+  bool handled = keys->keyPressed(keyval, keycode, mods);
+  keys->keyReleased(keyval, keycode, mods);
+  return handled;
+}
+
+// Tab or Shift+Tab: the key reaches the app, then (unless a view handled
+// it) GTK moves focus the way GtkWindow's Tab binding does.
+constexpr guint kTab = 23, kA = 38, kB = 56, kX = 53, kEnter = 36, kSpace = 65;
+bool tab(bool back = false) {
+  gtk_window_set_focus_visible(GTK_WINDOW(app.window), TRUE);
+  bool handled = key(back ? GDK_KEY_ISO_Left_Tab : GDK_KEY_Tab, kTab,
+                     back ? GDK_SHIFT_MASK : GdkModifierType(0));
+  if (handled) return true;
+  auto dir = back ? GTK_DIR_TAB_BACKWARD : GTK_DIR_TAB_FORWARD;
+  if (!gtk_widget_child_focus(app.window, dir)) {
+    gtk_window_set_focus(GTK_WINDOW(app.window), nullptr);
+    gtk_widget_child_focus(app.window, dir);
+  }
+  return false;
+}
+
+void focus_by_keyboard(const char *id) {
+  gtk_window_set_focus_visible(GTK_WINDOW(app.window), TRUE);
+  if (GtkWidget *v = by_id(id)) gtk_widget_grab_focus(v);
+}
+
+// A focus ring's tint just inside the view's left edge.
+bool has_ring(const char *id) {
+  GtkWidget *v = by_id(id);
+  GdkTexture *tex = v ? rngtk::render_widget(app.root) : nullptr;
+  if (!tex) return false;
+  graphene_rect_t b = bounds_in_root(v);
+  auto p = px(tex, b.origin.x + 1, b.origin.y + b.size.height / 2);
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  int hi = std::max({p.r, p.g, p.b}), lo = std::min({p.r, p.g, p.b});
+  return hi - lo > 25;
+}
+
+Step focus_step(std::string name, std::function<void()> start, const char *id,
+                const char *label = nullptr) {
+  return Step{std::move(name), std::move(start), [id, label] {
+                GtkWidget *want = std::string(id) == "t1" ? editor_of("t1") : by_id(id);
+                bool ok = want && focus_widget() == want;
+                if (label) ok = ok && has_text(app.root, std::string("focused: ") + label);
+                return ok;
+              }};
+}
+
+void add_keyboard_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(focus_step("autoFocus focuses a View (onFocus)", [] {}, "first", "first"));
+  app.steps.push_back(focus_step("Tab: the next focusable view, a Pressable (onBlur, onFocus)",
+                                 [] { tab(); }, "p1", "p1"));
+  app.steps.push_back(focus_step("Tab: into the TextInput", [] { tab(); }, "t1", "t1"));
+  app.steps.push_back(focus_step("Tab: a focusable View", [] { tab(); }, "v1", "v1"));
+  app.steps.push_back(focus_step("Tab: the Switch", [] { tab(); }, "sw"));
+  app.steps.push_back(focus_step("Tab: the Button", [] { tab(); }, "b1"));
+  app.steps.push_back(focus_step(
+      "Tab skips focusable={false} and plain views", [] { tab(); }, "vh", "vh"));
+  // (vh handles Tab itself, Shift+Tab included: back from the Button.)
+  app.steps.push_back(focus_step("Shift+Tab goes back", [] {
+    focus_by_keyboard("b1");
+    tab(true);
+  }, "sw"));
+  app.steps.push_back(focus_step("  ...and back again", [] { tab(true); }, "v1", "v1"));
+  app.steps.push_back(Step{"a keyboard-focused view draws the focus ring",
+                           [] { focus_by_keyboard("v1"); },
+                           [] { return focus_widget() == by_id("v1") && has_ring("v1"); }});
+  app.steps.push_back(Step{"  ...not with enableFocusRing={false}",
+                           [] { focus_by_keyboard("noring"); },
+                           [] {
+                             return focus_widget() == by_id("noring") &&
+                                    has_text(app.root, "focused: noring") &&
+                                    !has_ring("noring") && !has_ring("v1");
+                           }});
+  app.steps.push_back(Step{
+      "keys reach the focused view: onKeyDown / onKeyUp with key and code",
+      [] {
+        focus_by_keyboard("v1");
+        key(GDK_KEY_a, kA);
+      },
+      [] { return has_text(app.root, "keydown a KeyA · keyup a KeyA"); }});
+  app.steps.push_back(Step{"  ...with modifiers",
+                           [] { key(GDK_KEY_A, kA, GDK_SHIFT_MASK); },
+                           [] { return has_text(app.root, "keydown A KeyA shift"); }});
+  app.steps.push_back(Step{"Enter presses the focused Pressable",
+                           [] {
+                             focus_by_keyboard("p1");
+                             key(GDK_KEY_Return, kEnter);
+                           },
+                           [] { return has_text(app.root, "presses 1 "); }});
+  app.steps.push_back(Step{
+      "Space presses it on release",
+      [] {
+        auto *keys = app.host->keyboardHandler();
+        if (!keys->keyPressed(GDK_KEY_space, kSpace, GdkModifierType(0))) {
+          check(false, "  ...Space handled");
+        }
+        keys->keyReleased(GDK_KEY_space, kSpace, GdkModifierType(0));
+      },
+      [] { return has_text(app.root, "presses 2 "); }});
+  app.steps.push_back(Step{"Enter presses the focused Button",
+                           [] {
+                             focus_by_keyboard("b1");
+                             key(GDK_KEY_Return, kEnter);
+                           },
+                           [] { return has_text(app.root, "button 1"); }});
+  app.steps.push_back(Step{
+      "keyDownEvents: a view that handles Tab keeps the focus",
+      [] {
+        focus_by_keyboard("vh");
+        if (!tab()) check(false, "  ...Tab handled");
+      },
+      [] { return focus_widget() == by_id("vh") && has_text(app.root, "handled Tab Tab"); }});
+  app.steps.push_back(Step{
+      "  ...Ctrl+A matches {code: 'KeyA', ctrlKey: true}; A alone doesn't",
+      [] {
+        check(key(GDK_KEY_a, kA, GDK_CONTROL_MASK), "  ...Ctrl+A handled");
+        check(!key(GDK_KEY_a, kA), "  ...A not handled");
+      },
+      [] { return has_text(app.root, "handled a KeyA"); }});
+  app.steps.push_back(Step{
+      "a TextInput gets onKeyDown and still types its keys",
+      [] {
+        gtk_widget_grab_focus(editor_of("t1"));
+        check(!key(GDK_KEY_x, kX), "  ...x left to the TextInput");
+      },
+      [] { return has_text(app.root, "input x KeyX"); }});
+  app.steps.push_back(focus_step("ref.focus() on a View", [] { click("focus-v1"); }, "v1", "v1"));
+  app.steps.push_back(Step{"ref.blur() on a View (from its onKeyDown)",
+                           [] { key(GDK_KEY_b, kB); },
+                           [] {
+                             return focus_widget() != by_id("v1") &&
+                                    has_text(app.root, "focused: none");
+                           }});
+  app.steps.push_back(Step{"a click focuses a Pressable (and presses it)",
+                           [] { click("p1"); },
+                           [] {
+                             return focus_widget() == by_id("p1") &&
+                                    has_text(app.root, "focused: p1") &&
+                                    has_text(app.root, "presses 3 ");
+                           }});
+}
+
+// ---------------------------------------------------------------------------
+// GalleryMouse checks
+
+bool is_mouse() { return opts.module == "GalleryMouse"; }
+
+void move_to(const char *id, float fx = 0.5f, float fy = 0.5f) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_rect_t b = bounds_in_root(v);
+  send(rngtk::GtkPointerHandler::Phase::Move,
+       graphene_point_t{b.origin.x + b.size.width * fx, b.origin.y + b.size.height * fy});
+}
+
+void click_button(const char *id, int button) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_point_t c = center_of(v);
+  rngtk::GtkPointerHandler::Input input{};
+  input.x = c.x;
+  input.y = c.y;
+  input.button = button;
+  input.phase = rngtk::GtkPointerHandler::Phase::Down;
+  app.host->pointerHandler()->dispatch(input);
+  input.phase = rngtk::GtkPointerHandler::Phase::Up;
+  app.host->pointerHandler()->dispatch(input);
+  // Close the selectable-text menu or anything a right click opened.
+  for (GtkWidget *c = gtk_widget_get_first_child(app.root); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (GTK_IS_POPOVER(c)) gtk_popover_popdown(GTK_POPOVER(c));
+  }
+}
+
+void add_mouse_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{"onMouseEnter, with the point in the view",
+                           [] { move_to("outer", 0.05f, 0.5f); },
+                           [] { return has_text(app.root, "outer in at 15 · inner out"); }});
+  app.steps.push_back(Step{
+      "entering a child: the child's onMouseEnter; the parent stays entered",
+      [] { move_to("inner"); },
+      [] { return has_text(app.root, "outer in at 15 · inner in · enters 1"); }});
+  app.steps.push_back(Step{"leaving both: onMouseLeave on each",
+                           [] { move_to("away"); },
+                           [] { return has_text(app.root, "outer out · inner out · enters 1"); }});
+  app.steps.push_back(Step{
+      "tooltip: a GTK tooltip that GTK's own picking finds under the pointer",
+      [] {},
+      [] {
+        GtkWidget *tip = by_id("tip");
+        GtkWidget *text = by_id("tip-text");
+        if (!tip || !text) return false;
+        // What GTK's tooltip code does: the widget under the pointer, then
+        // up to the first one with a tooltip.
+        graphene_point_t c = center_of(text), in_window;
+        if (!gtk_widget_compute_point(app.root, app.window, &c, &in_window)) return false;
+        GtkWidget *w = gtk_widget_pick(app.window, in_window.x, in_window.y, GTK_PICK_DEFAULT);
+        while (w && !gtk_widget_get_has_tooltip(w)) w = gtk_widget_get_parent(w);
+        const char *t = w ? gtk_widget_get_tooltip_text(w) : nullptr;
+        return w == tip && t && std::string(t) == "Hello from a tooltip";
+      }});
+  app.steps.push_back(Step{"a middle click: onAuxClick (button 1), bubbling to the parent",
+                           [] { click_button("aux", 2); },
+                           [] { return has_text(app.root, "aux button 1 · parent aux 1 · presses 0"); }});
+  app.steps.push_back(Step{"a right click: onAuxClick (button 2)",
+                           [] { click_button("aux", 3); },
+                           [] { return has_text(app.root, "aux button 2 · parent aux 2 · presses 0"); }});
+  app.steps.push_back(Step{"a left click presses, with no auxclick",
+                           [] { click_button("aux", 1); },
+                           [] { return has_text(app.root, "aux button 2 · parent aux 2 · presses 1"); }});
+  app.steps.push_back(Step{"an auxclick reaches a listener Fabric flattened",
+                           [] { click_button("aux-text", 2); },
+                           [] { return has_text(app.root, "parent aux 103"); }});
+  app.steps.push_back(Step{"a View with only onMouseEnter still hears it",
+                           [] { move_to("bare"); },
+                           [] { return has_text(app.root, "bare onMouseEnter: in"); }});
+  app.steps.push_back(Step{"  ...and a View with only a tooltip has it", [] {},
+                           [] {
+                             GtkWidget *w = by_id("bare-tip");
+                             while (w && !gtk_widget_get_has_tooltip(w)) w = gtk_widget_get_parent(w);
+                             return w && std::string(gtk_widget_get_tooltip_text(w)) == "A bare tooltip";
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -1766,6 +2008,12 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_controls() && app.steps.empty()) {
     add_controls_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_mouse() && app.steps.empty()) {
+    add_mouse_steps();
+    enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_keyboard() && app.steps.empty()) {
+    add_keyboard_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_selection() && app.steps.empty()) {
     add_selection_steps();
     enter(Phase::Steps);
@@ -1799,7 +2047,8 @@ void check_app(bool first) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else if (is_images()) {
       verify_images(tex);
-    } else if (is_controls() || is_appearance() || is_selection()) {
+    } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
+               is_mouse()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);

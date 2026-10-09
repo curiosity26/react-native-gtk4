@@ -46,3 +46,14 @@ void rn_widget_set_css(GtkWidget *widget, const char *css) {
   }
   gtk_css_provider_load_from_string(scoped->provider, text.c_str());
 }
+
+GdkRGBA rn_theme_accent(GtkWidget *widget) {
+  GdkRGBA accent{0.21f, 0.52f, 0.89f, 1};  // #3584E4
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  GtkStyleContext *style = gtk_widget_get_style_context(widget);
+  if (!gtk_style_context_lookup_color(style, "accent_bg_color", &accent)) {
+    gtk_style_context_lookup_color(style, "theme_selected_bg_color", &accent);
+  }
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  return accent;
+}

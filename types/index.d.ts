@@ -51,3 +51,34 @@ export type LinuxPlatform = {
   readonly isDisableAnimations: boolean;
   select<T>(spec: {linux?: T; native?: T; default?: T; [os: string]: T | undefined}): T;
 };
+
+/**
+ * An entry of keyDownEvents / keyUpEvents: a key the view handles itself,
+ * so GTK doesn't act on it (Tab won't move focus, a TextInput won't type
+ * it). Matched by `key` (react-native-macos) or `code`
+ * (react-native-windows); a modifier left out matches either way.
+ */
+export type HandledKeyEvent = {
+  key?: string;
+  code?: string;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+};
+
+/** The View props the Linux host adds (docs/components.md). */
+export type ViewPropsLinux = {
+  keyDownEvents?: ReadonlyArray<HandledKeyEvent>;
+  keyUpEvents?: ReadonlyArray<HandledKeyEvent>;
+  /** Draw the keyboard focus ring (default true), as react-native-macos. */
+  enableFocusRing?: boolean;
+  /** Take keyboard focus once mounted. */
+  autoFocus?: boolean;
+  /** A GTK tooltip. */
+  tooltip?: string;
+  onMouseEnter?: (event: {nativeEvent: {clientX: number; clientY: number; offsetX: number; offsetY: number}}) => void;
+  onMouseLeave?: (event: {nativeEvent: {clientX: number; clientY: number; offsetX: number; offsetY: number}}) => void;
+  /** A middle (button 1) or right (button 2) click. */
+  onAuxClick?: (event: {nativeEvent: {button: number}}) => void;
+};

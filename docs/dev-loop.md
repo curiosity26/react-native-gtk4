@@ -127,9 +127,10 @@ App.js is restored when the script exits.
 
 ## Known gaps
 
-- **No keyboard input to React views yet** (Phase 2). Mouse and touch work
-  (see [components.md](components.md)), and LogBox's buttons can be
-  clicked: the dev-loop test clicks Dismiss.
+- **Keyboard in LogBox.** LogBox's surface gets keys and Tab focus like
+  the app's ([components.md](components.md#keyboard)), but nothing in it
+  is focused when it opens: click it first. Its buttons can be clicked;
+  the dev-loop test clicks Dismiss.
 - **Download progress.** `DevServerHelper` doesn't ask Metro for a
   multipart progress stream, so the banner can't show a percentage.
 - **Metro's `d` key.** ReactCxxPlatform ignores Metro's `showDevMenu`

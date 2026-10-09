@@ -3,11 +3,13 @@
 #include "GtkMountingManager.h"
 #include "rn_scroll_view.h"
 #include "rn_text.h"
+#include "rn_text_input.h"
 #include "rn_view.h"
 
 #include <react/renderer/components/view/PointerEvent.h>
 #include <react/renderer/components/view/TouchEvent.h>
 #include <react/renderer/components/view/TouchEventEmitter.h>
+#include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/components/view/primitives.h>
 
 #include <algorithm>
@@ -221,6 +223,11 @@ void GtkPointerHandler::dispatch(const Input &input) {
     case Phase::Down: {
       buttons_ |= input.device == Device::Mouse ? buttonBit(input.button) : 1;
       pressTarget_ = target;
+      if (primary) focusOnPress(target);
+      if (input.device == Device::Mouse && input.button != 1) {
+        auxPressTarget_ = target;
+        auxButton_ = input.button;
+      }
       dispatchPointer("pointerDown", target, input);
       if (primary) {
         touches_[id] = ActiveTouch{target, input.x, input.y, input.timeMs};
@@ -256,6 +263,15 @@ void GtkPointerHandler::dispatch(const Input &input) {
       }
       if (primary && target == pressTarget_) {
         dispatchPointer("click", target, input);
+      }
+      if (!primary && input.button == auxButton_ && target == auxPressTarget_) {
+        // auxclick bubbles through React, past ancestors Fabric flattened
+        // (and so can't be asked here), so it always goes; it's rare.
+        dispatchMouse("auxClick", target, input);
+      }
+      if (!primary) {
+        auxPressTarget_ = Target{};
+        auxButton_ = 0;
       }
       pressTarget_ = Target{};
       break;
@@ -394,6 +410,22 @@ void GtkPointerHandler::dispatchPointer(const char *type, const Target &target,
   }
   if (name == "click" && !wanted(Offset::Click, Offset::ClickCapture)) return;
 
+  PointerEvent event = pointerEvent(type, target, input);
+
+  if (name == "pointerDown") emitter->onPointerDown(std::move(event));
+  else if (name == "pointerMove") emitter->onPointerMove(std::move(event));
+  else if (name == "pointerUp") emitter->onPointerUp(std::move(event));
+  else if (name == "pointerCancel") emitter->onPointerCancel(std::move(event));
+  else if (name == "click") emitter->onClick(std::move(event));
+  else if (name == "pointerOver") emitter->onPointerOver(std::move(event));
+  else if (name == "pointerOut") emitter->onPointerOut(std::move(event));
+  else if (name == "pointerEnter") emitter->onPointerEnter(std::move(event));
+  else if (name == "pointerLeave") emitter->onPointerLeave(std::move(event));
+}
+
+PointerEvent GtkPointerHandler::pointerEvent(const char *type,
+                                             const Target &target,
+                                             const Input &input) const {
   PointerEvent event{};
   bool mouse = input.device == Device::Mouse;
   event.pointerId = mouse ? kMousePointerId : 2 + input.sequence;
@@ -408,7 +440,7 @@ void GtkPointerHandler::dispatchPointer(const char *type, const Target &target,
   }
   event.width = event.height = 1;
   event.buttons = buttons_;
-  event.button = name == "pointerMove" ? -1 : w3cButton(input.button);
+  event.button = std::string(type) == "pointerMove" ? -1 : w3cButton(input.button);
   event.ctrlKey = input.modifiers & GDK_CONTROL_MASK;
   event.shiftKey = input.modifiers & GDK_SHIFT_MASK;
   event.altKey = input.modifiers & GDK_ALT_MASK;
@@ -416,15 +448,25 @@ void GtkPointerHandler::dispatchPointer(const char *type, const Target &target,
   event.isPrimary = true;
   event.timeStamp = HighResTimeStamp::now();
 
-  if (name == "pointerDown") emitter->onPointerDown(std::move(event));
-  else if (name == "pointerMove") emitter->onPointerMove(std::move(event));
-  else if (name == "pointerUp") emitter->onPointerUp(std::move(event));
-  else if (name == "pointerCancel") emitter->onPointerCancel(std::move(event));
-  else if (name == "click") emitter->onClick(std::move(event));
-  else if (name == "pointerOver") emitter->onPointerOver(std::move(event));
-  else if (name == "pointerOut") emitter->onPointerOut(std::move(event));
-  else if (name == "pointerEnter") emitter->onPointerEnter(std::move(event));
-  else if (name == "pointerLeave") emitter->onPointerLeave(std::move(event));
+  return event;
+}
+
+bool GtkPointerHandler::listensForMouse(const Target &target,
+                                        const char *event) const {
+  auto props = std::dynamic_pointer_cast<const ViewProps>(
+      mountingManager_.propsForTag(target.tag));
+  if (!props) return false;
+  std::string name = event;
+  if (name == "mouseEnter") return props->onMouseEnter;
+  return props->onMouseLeave;
+}
+
+void GtkPointerHandler::dispatchMouse(const char *type, const Target &target,
+                                      const Input &input) {
+  if (!target.emitter) return;
+  target.emitter->dispatchEvent(
+      type, std::make_shared<PointerEvent>(pointerEvent(type, target, input)),
+      RawEvent::Category::Discrete);
 }
 
 void GtkPointerHandler::updateHover(const Input &input, const Target &target) {
@@ -463,6 +505,9 @@ void GtkPointerHandler::updateHover(const Input &input, const Target &target) {
     if (std::find(path.begin(), path.end(), hovered_[i]) == path.end()) {
       notify(hovered_, i, "pointerLeave", Offset::PointerLeave,
              Offset::PointerLeaveCapture);
+      if (listensForMouse(hovered_[i], "mouseLeave")) {
+        dispatchMouse("mouseLeave", hovered_[i], input);
+      }
     }
   }
   if (!path.empty() &&
@@ -475,9 +520,24 @@ void GtkPointerHandler::updateHover(const Input &input, const Target &target) {
         hovered_.end()) {
       notify(path, i, "pointerEnter", Offset::PointerEnter,
              Offset::PointerEnterCapture);
+      if (listensForMouse(path[i], "mouseEnter")) {
+        dispatchMouse("mouseEnter", path[i], input);
+      }
     }
   }
   hovered_ = std::move(path);
+}
+
+void GtkPointerHandler::focusOnPress(const Target &target) {
+  for (GtkWidget *w = target.widget.get(); w && w != root_;
+       w = gtk_widget_get_parent(w)) {
+    // Native controls focus themselves on their own clicks.
+    if (RN_IS_TEXT_INPUT(w) || GTK_IS_SWITCH(w) || GTK_IS_EDITABLE(w)) return;
+    if (RN_IS_VIEW(w) && gtk_widget_get_focusable(w)) {
+      if (!gtk_widget_has_focus(w)) gtk_widget_grab_focus(w);
+      return;
+    }
+  }
 }
 
 int GtkPointerHandler::clickCount(const Input &input) {

@@ -20,7 +20,10 @@ the pressables, hovers one, holds TouchableOpacity and copies selectable
 text. It passes on Wayland and X11. `--module GallerySelection
 --self-test` checks drag, double- and triple-click and Shift+click
 selection, Ctrl+C, the right-click menu, `selectionColor`, and that presses
-and wheel scrolling still work around selectable text.
+and wheel scrolling still work around selectable text. `--module
+GalleryMouse --self-test` checks `onMouseEnter`/`onMouseLeave` (nested and
+on otherwise plain views), `tooltip` through GTK's own picking, and
+`onAuxClick` for both buttons, bubbling past flattened views.
 
 **Supported** means it matches iOS/Android for the common cases.
 **Partial** means it works with the limits noted. **Not yet** means the
@@ -54,6 +57,7 @@ prop is accepted but has no effect.
 | `mixBlendMode`, `isolation` | Not yet | |
 | `pointerEvents` | Supported | `none`, `box-none`, `box-only` in hit-testing |
 | `hitSlop` | Not yet | |
+| `focusable`, `tabIndex`, `onFocus`, `onBlur`, `onKeyDown`, `onKeyUp`, `keyDownEvents`, `keyUpEvents`, `enableFocusRing`, `autoFocus`, `ref.focus()` / `blur()` | Supported | see [Keyboard](#keyboard) |
 | `zIndex` | Supported | Fabric orders the children; GTK paints and hit-tests in that order |
 | `cursor` | Supported | every RN cursor maps to a GTK/CSS cursor name |
 | `nativeID` | Supported | |
@@ -101,11 +105,14 @@ transforms, rounded overflow clips, `pointerEvents`, and nested Text spans.
 | TouchableOpacity fade | Supported | native-driver Animated through C++ Animated (`synchronouslyUpdateViewOnUIThread`) |
 | W3C pointer events: down/move/up/cancel, click | Supported | only sent to views (and ancestors) that listen |
 | Hover: pointerover/out, pointerenter/leave | Supported | `onHoverIn`/`onHoverOut` on Pressable (W3C hover flag on) |
+| `onMouseEnter`, `onMouseLeave` | Supported | react-native-windows / react-native-macos: the mouse entering and leaving the view (not bubbling, mouse only); `nativeEvent` has the pointer event's fields (`clientX`, `offsetX`, modifiers...) |
+| `onAuxClick` | Supported | a middle (`button` 1) or right (`button` 2) click, pressed and released on the same view; bubbles (W3C auxclick) |
+| `tooltip` | Supported | a GTK tooltip on any view (react-native-windows / react-native-macos) |
 | Modifier keys, buttons, pointerType | Supported | `ctrlKey`... `buttons`, `button`, `mouse`/`touch` |
-| Right/middle button | Partial | pointer events only; right-click opens Copy / Select All on selectable text |
+| Right/middle button | Supported | pointer events and `onAuxClick`; right-click opens Copy / Select All on selectable text |
 | Text selection by mouse | Supported | selectable Text only; a selection that becomes non-empty cancels the press it began (touchCancel), so a Pressable around selectable text presses on a click, not on a drag |
 | Scroll wheel, touchpad | Supported | handled by the ScrollView's GtkScrolledWindow (smooth and kinetic) |
-| Keyboard focus, `onKeyDown` | Not yet | Phase 2 |
+| Keyboard focus, `onKeyDown` | Supported | see [Keyboard](#keyboard) |
 | Pen pressure/tilt | Not yet | |
 
 ### Button
@@ -129,6 +136,34 @@ The title isn't uppercased (Android does). It follows light and dark
 own colors. The Gallery self-test checks its colors, corners, hover shade
 and that a disabled Button doesn't press; GalleryAppearance checks the
 dark variant.
+
+## Keyboard
+
+`linux/src/GtkKeyboardHandler.cc` gives React views GTK's keyboard focus
+and keys; the props are spelled as in react-native-windows and
+react-native-macos. The `GalleryKeyboard` page (`--module GalleryKeyboard
+--self-test`) checks the Tab order both ways, focus events, the focus
+ring, key events with modifiers, `keyDownEvents`, Enter/Space presses,
+TextInput keys, `autoFocus` and `ref.focus()`/`blur()`, on Wayland and
+X11. The self-test feeds key events to the handler and moves focus the
+way GtkWindow's Tab binding does: real key presses can't be synthesized
+on the test VM. TypeScript: `ViewPropsLinux` and `HandledKeyEvent` in
+`types/index.d.ts`.
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Tab / Shift+Tab | Supported | focusable views, TextInputs, Switches, in tree order (a view, then its children, as on the web), wrapping at the ends. Not GTK's geometric order. A multiline TextInput types a Tab; Ctrl+Tab leaves it (GTK) |
+| `focusable` (and `tabIndex` 0 / -1) | Supported | Pressable, the Touchables and Button are focusable unless `focusable={false}` or disabled, as on Android. A click focuses the focusable view it lands in. Focusable views are never flattened |
+| `onFocus`, `onBlur` | Supported | on a focused View/Pressable; TextInput sends its own |
+| Focus ring | Supported | 2px, the theme's accent at half opacity, inside the view's rounded box (Adwaita's button ring); only for keyboard focus (GTK's `:focus-visible`). `enableFocusRing={false}` turns it off (react-native-macos) |
+| Enter / Space | Supported | press the focused Pressable, Touchable or Button (Enter on press, Space on release): a `click` without `pointerType`, which Pressability turns into `onPress`, like Android's keyboard clicks |
+| `onKeyDown`, `onKeyUp` | Supported | on the focused view (TextInputs and Switches too), bubbling through React. `nativeEvent`: W3C `key` (`"a"`, `"A"`, `"Enter"`, `"ArrowLeft"`, `" "`), `code` (`"KeyA"`, physical, layout-independent), `altKey`, `ctrlKey`, `metaKey` (Super), `shiftKey`, `repeat` |
+| `keyDownEvents`, `keyUpEvents` | Supported | `[{key, code, altKey, ctrlKey, metaKey, shiftKey}]`: keys the view (or a descendant's focus) handles itself, so GTK doesn't act on them: Tab won't move focus, a TextInput won't type them, Enter won't press. Match `key` (react-native-macos) or `code` (react-native-windows); a modifier left out matches either way |
+| `autoFocus` (View) | Supported | focuses the view once mounted (TextInput's own `autoFocus` too) |
+| `ref.focus()`, `ref.blur()` on any view | Supported | ViewCommands `focus`/`blur` (the host turns on React Native's `enableImperativeFocus` flag) |
+| Arrow keys | Partial | move focus between views geometrically, as in other GTK apps, unless a view handles them with `keyDownEvents` |
+| Keys with nothing focused | Not yet | key events need a focused view, as on react-native-macos |
+| `nextFocus*`, `hasTVPreferredFocus` | Not yet | Android/TV only |
 
 ## ScrollView and lists
 

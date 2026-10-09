@@ -23,7 +23,10 @@ Native app: `init-linux` and `run-linux`.
 
 **Phase 2 (desktop) in progress:** dark mode (`Appearance`,
 `useColorScheme`, libadwaita `PlatformColor`s that follow the desktop's
-style): [docs/apis.md](docs/apis.md).
+style, [docs/apis.md](docs/apis.md)); text selection by mouse; keyboard
+focus, Tab order, focus rings and key events, `onMouseEnter`/`Leave`,
+`onAuxClick` and `tooltip`, with react-native-windows / react-native-macos
+props ([docs/components.md](docs/components.md#keyboard)).
 
 ## Quick start
 

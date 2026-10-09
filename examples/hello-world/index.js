@@ -4,7 +4,9 @@ import Gallery from './Gallery';
 import GalleryAppearance from './GalleryAppearance';
 import GalleryControls from './GalleryControls';
 import GalleryImages from './GalleryImages';
+import GalleryKeyboard from './GalleryKeyboard';
 import GalleryLists from './GalleryLists';
+import GalleryMouse from './GalleryMouse';
 import GallerySelection from './GallerySelection';
 import Showcase from './Showcase';
 
@@ -15,4 +17,6 @@ AppRegistry.registerComponent('GalleryImages', () => GalleryImages);
 AppRegistry.registerComponent('GalleryControls', () => GalleryControls);
 AppRegistry.registerComponent('GalleryAppearance', () => GalleryAppearance);
 AppRegistry.registerComponent('GallerySelection', () => GallerySelection);
+AppRegistry.registerComponent('GalleryKeyboard', () => GalleryKeyboard);
+AppRegistry.registerComponent('GalleryMouse', () => GalleryMouse);
 AppRegistry.registerComponent('Showcase', () => Showcase);

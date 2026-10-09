@@ -1,5 +1,7 @@
 #include "rn_text.h"
 
+#include "rn_css.h"
+
 #include <pango/pangocairo.h>
 
 #include <algorithm>
@@ -61,13 +63,7 @@ static GdkRGBA selection_color(RNText *self) {
   if (gtk_widget_get_state_flags(widget) & GTK_STATE_FLAG_BACKDROP) {
     return GdkRGBA{0.52f, 0.52f, 0.52f, 0.5f};
   }
-  GdkRGBA accent{0.21f, 0.52f, 0.89f, 1};  // Adwaita's #3584E4
-  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-  GtkStyleContext *style = gtk_widget_get_style_context(widget);
-  if (!gtk_style_context_lookup_color(style, "accent_bg_color", &accent)) {
-    gtk_style_context_lookup_color(style, "theme_selected_bg_color", &accent);
-  }
-  G_GNUC_END_IGNORE_DEPRECATIONS
+  GdkRGBA accent = rn_theme_accent(widget);
   accent.alpha = 0.3f;
   return accent;
 }

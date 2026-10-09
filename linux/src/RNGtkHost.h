@@ -28,6 +28,7 @@ class Appearance;
 class DevUI;
 class JsMessageQueueThread;
 class GtkImageLoader;
+class GtkKeyboardHandler;
 class GtkMountingManager;
 class GtkPointerHandler;
 
@@ -92,6 +93,8 @@ class RNGtkHost {
     return logBoxPointerHandler_.get();
   }
   GtkWidget *logBoxRoot() const { return logBoxRoot_; }
+  // Keys and focus for the app's surface (tests drive it directly).
+  GtkKeyboardHandler *keyboardHandler() { return keyboardHandler_.get(); }
   DevUI *devUI() { return devUI_.get(); }
   Appearance &appearance() { return *appearance_; }
   // True when no JS work is queued.
@@ -161,6 +164,8 @@ class RNGtkHost {
   std::string bundleURL_;  // file:// URL of a release bundle
   std::unique_ptr<GtkPointerHandler> pointerHandler_;
   std::unique_ptr<GtkPointerHandler> logBoxPointerHandler_;
+  std::unique_ptr<GtkKeyboardHandler> keyboardHandler_;
+  std::unique_ptr<GtkKeyboardHandler> logBoxKeyboardHandler_;
   GtkWidget *logBoxRoot_{nullptr};
   // Native Animated runs a frame callback while animations are active.
   std::mutex animationMutex_;

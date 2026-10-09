@@ -191,17 +191,26 @@ foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
                ${RNGTK_GRAPHICS_DIR} ${rngtk_dirs})
 endforeach()
 
-# Paragraph props: components/react/.../HostPlatformParagraphProps.h
-# replaces the cxx platform's (BaseParagraphProps alone) to add
-# selectionColor.
-set(RNGTK_TEXT_PROPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/components)
-foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
-  get_target_property(rngtk_dirs rrc_text ${prop})
-  set_property(TARGET rrc_text PROPERTY ${prop}
-               ${RNGTK_TEXT_PROPS_DIR} ${rngtk_dirs})
+# View and paragraph props: components/react/renderer/components/ holds
+# our HostPlatformViewProps (focus and keys), HostPlatformViewTraits-
+# Initializer and HostPlatformParagraphProps (selectionColor), which
+# replace the cxx platform's (the base props alone).
+set(RNGTK_PROPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/components)
+foreach(target rrc_view rrc_text)
+  foreach(prop INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(rngtk_dirs ${target} ${prop})
+    set_property(TARGET ${target} PROPERTY ${prop}
+                 ${RNGTK_PROPS_DIR} ${rngtk_dirs})
+  endforeach()
 endforeach()
+target_sources(rrc_view PRIVATE
+  ${RNGTK_PROPS_DIR}/react/renderer/components/view/HostPlatformViewProps.cpp)
+# A header that newly shadows another isn't in any object's depfile, so
+# Ninja wouldn't rebuild existing builds against it: bump this whenever
+# a header joins the replaced set, so every consumer's flags change too.
+target_compile_definitions(react_renderer_graphics PUBLIC RNGTK_HEADER_OVERRIDES=3)
 target_sources(rrc_text PRIVATE
-  ${RNGTK_TEXT_PROPS_DIR}/react/renderer/components/text/HostPlatformParagraphProps.cpp)
+  ${RNGTK_PROPS_DIR}/react/renderer/components/text/HostPlatformParagraphProps.cpp)
 
 # Our Pango text measurement replaces react/renderer/textlayoutmanager.
 add_subdirectory(textlayoutmanager)
@@ -308,6 +317,8 @@ add_library(rngtk_host_objs OBJECT
   src/GtkControls.cc
   components/GtkSwitchShadowNode.cpp
   src/GtkImageLoader.cc
+  src/GtkKeyboardHandler.cc
+  src/KeyNames.cc
   src/GtkImages.cc
   imagemanager/ImageManager.cpp
   src/GtkViewProps.cc
@@ -497,6 +508,12 @@ add_test(NAME gallery-lists-self-test
 add_test(NAME gallery-controls-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryControls --width 940 --height 680 --self-test)
+add_test(NAME gallery-mouse-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryMouse --width 940 --height 680 --self-test)
+add_test(NAME gallery-keyboard-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryKeyboard --width 940 --height 680 --self-test)
 add_test(NAME gallery-selection-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GallerySelection --width 940 --height 680 --self-test)

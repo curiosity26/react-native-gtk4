@@ -15,6 +15,7 @@ find_package(Threads REQUIRED)
 add_library(rngtk_spike STATIC
   ../linux/widgets/rn_view.cc
   ../linux/widgets/rn_text.cc
+  ../linux/widgets/rn_css.cc
   src/harness.cc)
 target_include_directories(rngtk_spike PUBLIC src ../linux/widgets)
 target_compile_options(rngtk_spike PRIVATE -Wall -Wextra)
