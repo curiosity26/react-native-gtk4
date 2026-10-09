@@ -1060,7 +1060,7 @@ export function ShowcaseWindow({n}) {
         <Btn title="Rename" onPress={() => window.setTitle(`Window ${n}, renamed`)} />
         <Btn title="600 x 400" onPress={() => window.setSize(600, 400)} />
         <Btn title="Main window" onPress={() => Windows.main.focus()} />
-        <Btn title="Close" color="#FF3B30" onPress={() => window.close()} />
+        <Btn title="Close" color="#FF3B30" onPress={() => window.requestClose()} />
       </View>
     </View>
   );

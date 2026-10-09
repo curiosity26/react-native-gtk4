@@ -442,7 +442,7 @@ TextInput takes text drops itself (GTK's).
 | --- | --- |
 | `draggedTypes` | `'fileUrl'`: files and links (a URI list); `'string'`: text; `'image'`: image data |
 | `onDragEnter`, `onDragLeave` | `{clientX, clientY, dataTransfer: {files: [], items, types}}`: the drag's MIME types (its data is read only on drop) |
-| `onDrop` | `dataTransfer.files`: local files, `{name, type, uri, size}`; image data (`'image'`) saved as a PNG in the user's cache, with `width` and `height`. Linux adds `dataTransfer.urls` (links that aren't files, for `'fileUrl'`) and `dataTransfer.text` (for `'string'`) |
+| `onDrop` | `dataTransfer.files`: local files, `{name, type, uri, size}`; image data (`'image'`) saved as a PNG in the user's cache, with `width` and `height`, unless the drag also offers the image as a file (a picture from Files, a draggable Image): then it is that file, once. Linux adds `dataTransfer.urls` (links that aren't files, for `'fileUrl'`) and `dataTransfer.text` (for `'string'`) |
 | Dragging out | the selected text of selectable Text (press inside the selection and drag; a click there puts the caret instead), and an Image with `draggable`: its picture, plus its file (a local image) or its URL |
 
 GTK: a GtkDropTargetAsync and a GtkDragSource on each window's (and

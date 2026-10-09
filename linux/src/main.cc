@@ -3244,6 +3244,12 @@ void add_windows_steps() {
         return has_text(app.root, "B close-requested") && app.host->windowFor(b) &&
                window_count() == 2;
       }});
+  app.steps.push_back(Step{"  ...requestClose() from inside asks the same way, and it stays",
+                           [] { click_in_window(b, "ask-B"); },
+                           [] {
+                             return has_text(app.root, "B close-requested | B close-requested") &&
+                                    app.host->windowFor(b);
+                           }});
   app.steps.push_back(Step{"  ...and the app closes it (from inside: useWindow().close())",
                            [] { click_in_window(b, "close-B"); },
                            [] { return !app.host->windowFor(b) && has_text(app.root, "B closed"); }});
@@ -3374,6 +3380,21 @@ void add_dragdrop_steps() {
         ptr->drop(p.x, p.y, data);
       },
       [] { return zone_says("zone-any", "files [drop-") && zone_says("zone-any", ".png:image/png:"); }});
+  app.steps.push_back(Step{
+      "an image offered both as a file and as image data arrives once, as the file",
+      [ptr] {
+        auto p = center_in_root("zone-any");
+        Data data;
+        gchar *uri = g_filename_to_uri((dnd_dir + "/pic.png").c_str(), nullptr, nullptr);
+        data.uris = {uri};
+        g_free(uri);
+        data.texture = picture;
+        ptr->drop(p.x, p.y, data);
+      },
+      [] {
+        return zone_says("zone-any", "files [pic.png:image/png:") &&
+               !zone_says("zone-any", ",drop-");
+      }});
   app.steps.push_back(Step{"a view without draggedTypes takes nothing",
                            [ptr] {
                              auto p = center_in_root("no-zone");

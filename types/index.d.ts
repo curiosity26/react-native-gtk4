@@ -200,7 +200,10 @@ export interface WindowHandle {
   /** The window's surface root tag. */
   readonly id: number;
   readonly rootTag: number;
+  /** Closes it, without asking. */
   close(): void;
+  /** As the close button: 'close-requested', then closes unless intercepted. */
+  requestClose(): void;
   setTitle(title: string): void;
   /** The content's size, in points. */
   setSize(width: number, height: number): void;
