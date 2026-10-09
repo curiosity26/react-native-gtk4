@@ -21,6 +21,10 @@ DevTools; `fetch`, `XMLHttpRequest` and `WebSocket` run on libsoup
 ([docs/dev-loop.md](docs/dev-loop.md)). The CLI adds Linux to any React
 Native app: `init-linux` and `run-linux`.
 
+**Phase 2 (desktop) in progress:** dark mode (`Appearance`,
+`useColorScheme`, libadwaita `PlatformColor`s that follow the desktop's
+style): [docs/apis.md](docs/apis.md).
+
 ## Quick start
 
 ```sh

@@ -68,6 +68,9 @@ class GtkMountingManager
   }
   // No transactions or commands waiting for the main thread.
   bool isIdle();
+  // Main thread: re-applies every mounted view's colors, after the light
+  // or dark palette PlatformColors resolve to changed.
+  void refreshColors();
 
   GtkWidget *viewForTag(facebook::react::Tag tag) const;
   struct EventTarget {

@@ -311,6 +311,27 @@ void GtkMountingManager::applyProps(GtkWidget *widget, const ShadowView &view) {
   }
 }
 
+void GtkMountingManager::refreshColors() {
+  // The mounted props are unchanged; only what their dynamic colors
+  // resolve to differs, so each view re-applies its own props.
+  const ShadowView none{};
+  for (const auto &[tag, view] : shadowViews_) {
+    GtkWidget *widget = viewForTag(tag);
+    if (!widget) continue;
+    applyProps(widget, view);
+    if (RN_IS_TEXT(widget)) applyParagraph(widget, view);
+    if (RN_IS_TEXT_INPUT(widget)) updateTextInput(widget, none, view);
+    if (GTK_IS_SWITCH(widget)) updateSwitch(widget, none, view);
+    if (GTK_IS_SPINNER(widget)) updateSpinner(widget, none, view);
+    if (std::strcmp(view.componentName, ImageComponentName) == 0 &&
+        RN_IS_VIEW(widget)) {
+      if (GdkTexture *texture = rn_view_get_image(RN_VIEW(widget))) {
+        applyImage(tag, texture);
+      }
+    }
+  }
+}
+
 void GtkMountingManager::synchronouslyUpdateViewOnUIThread(
     Tag tag, const folly::dynamic &props) {
   if (!onMainThread()) {
