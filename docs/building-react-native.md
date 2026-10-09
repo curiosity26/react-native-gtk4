@@ -26,11 +26,15 @@ npm test                           # unit tests for the Metro config and the CLI
 
 `cmake --build build/linux` builds two things from the same sources:
 `rn-gtk-host`, the test harness (self-tests, galleries, dev-loop checks),
-and `librngtk_host.so`, the library apps link (`ReactNativeGtk::host`,
-exporting only `rngtk::runApp`). `cmake --install build/linux --prefix DIR`
-installs the library with `libhermesvm.so`, `libjsi.so`, its header and
-`lib/cmake/ReactNativeGtk/ReactNativeGtkConfig.cmake`; run-linux does that
-into its cache with `-DRNGTK_BUILD_HARNESS=OFF`.
+and `librngtk_host.so`, the library apps link (`ReactNativeGtk::host`:
+`rngtk::runApp`, plus React Native's C++ for native libraries).
+`cmake --install build/linux --prefix DIR` installs the library with
+`libhermesvm.so`, `libjsi.so`, its headers,
+`lib/cmake/ReactNativeGtk/ReactNativeGtkConfig.cmake` and the native
+library SDK (`ReactNativeGtk::sdk`, [native-modules.md](native-modules.md));
+run-linux does that into its cache with `-DRNGTK_BUILD_HARNESS=OFF`.
+`rn-gtk-host` also builds the native library template (`template-library/`)
+in, as a package, for `GalleryNativeModule`.
 
 `libsoup-3.0-dev` is for networking (`fetch`, `XMLHttpRequest`, `WebSocket`)
 and the Metro dev loop: see [dev-loop.md](dev-loop.md) for running from

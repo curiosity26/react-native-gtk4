@@ -1,6 +1,7 @@
 // A TurboModule whose methods are plain C++ member functions, bridged the
-// way codegen's Cxx specs bridge theirs, for modules React Native has no
-// spec for (the Linux-only APIs):
+// way codegen's Cxx specs bridge theirs, for modules without a codegen spec
+// (the host's Linux-only APIs, and libraries' modules: see
+// rngtk/Extensions.h):
 //
 //   class Mine : public CxxModule<Mine> {
 //    public:

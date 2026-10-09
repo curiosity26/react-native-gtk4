@@ -13,4 +13,9 @@ config.resolver.resolveRequest = (context, moduleName, platform) =>
     ? {type: 'sourceFile', filePath: path.resolve(__dirname, '../../js/index.js')}
     : resolveRequest(context, moduleName, platform);
 
+// GalleryNativeModule uses the native library template's JS side
+// (template-library/src), whose own imports resolve from here.
+config.watchFolders = [...config.watchFolders, path.resolve(__dirname, '../../template-library')];
+config.resolver.nodeModulesPaths = [path.resolve(__dirname, 'node_modules')];
+
 module.exports = config;

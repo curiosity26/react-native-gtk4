@@ -35,6 +35,7 @@
     "react-native.config.js",
     "lib/",
     "template/",
+    "template-library/",
     "linux/",
     "!linux/src/main.cc",
     "!linux/tests/",

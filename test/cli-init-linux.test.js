@@ -209,7 +209,7 @@ describe('initLinux', () => {
 });
 
 describe('platform config', () => {
-  test('no linux/ project before init-linux; dependencies contribute nothing yet', () => {
+  test('no linux/ project before init-linux; a dependency without linux/ contributes nothing', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-cfg-'));
     try {
       assert.equal(projectConfig(dir), null);
@@ -223,7 +223,7 @@ describe('platform config', () => {
     const config = require('../react-native.config');
     assert.deepEqual(Object.keys(config.platforms), ['linux']);
     assert.deepEqual(Object.keys(config.platforms.linux).sort(), ['dependencyConfig', 'projectConfig']);
-    assert.deepEqual(config.commands.map(c => c.name), ['init-linux', 'run-linux']);
+    assert.deepEqual(config.commands.map(c => c.name), ['init-linux', 'run-linux', 'init-linux-library']);
     for (const c of config.commands) {
       assert.equal(typeof c.func, 'function');
       for (const o of c.options) assert.match(o.name, /^--[a-z-]+( <[a-z]+>)?$/);

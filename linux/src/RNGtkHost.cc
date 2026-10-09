@@ -6,6 +6,7 @@
 #include "Dialogs.h"
 #include "GtkMenus.h"
 #include "Notifications.h"
+#include "rngtk/Extensions.h"
 #include "GtkImageLoader.h"
 #include "GtkKeyboardHandler.h"
 #include "GtkMountingManager.h"
@@ -326,6 +327,13 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   // Providers are asked before ReactCxxPlatform's built-in modules, so
   // these replace its Android-shaped PlatformConstants.
   TurboModuleProviders turboModuleProviders = options_.extraTurboModules;
+  // Libraries' (rngtk/Extensions.h), then the host's own.
+  for (const auto &package : options_.packages) {
+    if (!package) continue;
+    turboModuleProviders.insert(turboModuleProviders.end(), package->turboModules.begin(),
+                                package->turboModules.end());
+    mountingManager_->addNativeComponents(package->components);
+  }
   turboModuleProviders.insert(turboModuleProviders.end(), {
       [constants = collectPlatformConstants(gdk_display_get_default(),
                                             options_.isTesting)](

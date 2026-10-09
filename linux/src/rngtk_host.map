@@ -1,9 +1,20 @@
-/* librngtk_host.so exports include/rngtk/App.h and nothing else. */
+/* librngtk_host.so exports include/rngtk/App.h, and React Native's C++
+   (with the folly, glog and fmt it is built with) for native modules and
+   components (include/rngtk/Extensions.h, ReactNativeGtk::sdk). */
 {
   global:
     extern "C++" {
       "rngtk::runApp(int, char**, rngtk::AppOptions const&)";
       "rngtk::reactNativeVersion()";
+      facebook::*;
+      folly::*;
+      google::*;
+      fmt::*;
     };
+    /* Their vtables, typeinfo (names), VTTs and guard variables. */
+    _ZTVN8facebook*; _ZTIN8facebook*; _ZTSN8facebook*; _ZTTN8facebook*; _ZGVN8facebook*;
+    _ZTVN5folly*; _ZTIN5folly*; _ZTSN5folly*; _ZTTN5folly*; _ZGVN5folly*;
+    _ZTVN6google*; _ZTIN6google*; _ZTSN6google*;
+    _ZTVN3fmt*; _ZTIN3fmt*; _ZTSN3fmt*;
   local: *;
 };

@@ -172,8 +172,11 @@ Phase 4.
   (or just `<version>/host/`) and run again.
 - **X11 instead of Wayland.** GTK picks the session's; `GDK_BACKEND=x11`
   forces X11.
-- **Native modules.** Libraries with native code for Android/iOS don't
-  have Linux implementations yet: autolinking and the native module
-  template are Phase 3. `react-native-safe-area-context` (in React
+- **Native modules.** A library with native code needs a `linux/` folder
+  of its own: `run-linux` autolinks the dependencies that have one, and
+  `npx react-native init-linux-library` starts one from a template (a
+  TurboModule and a native component); see
+  [native-modules.md](native-modules.md). Libraries with only Android and
+  iOS code have no Linux side. `react-native-safe-area-context` (in React
   Native's app template) works through its own pure-JS fallback, which the
   package's Metro config selects on Linux (zero insets).

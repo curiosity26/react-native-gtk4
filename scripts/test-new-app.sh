@@ -17,6 +17,8 @@
 #   METRO_PORT=8095
 #   SCREENSHOTS=DIR          where new-app-{debug,release}-<backend>.png go
 #                            (default WORK_DIR/screenshots)
+#   NATIVE_LIBRARY=0         skip the native library (init-linux-library,
+#                            autolinked into the first app)
 #   RNGTK_CACHE_DIR, RNGTK_DEPS_DIR   as for run-linux
 #
 # Needs Node >= 22.13, network access for npm, and a display.
@@ -75,6 +77,9 @@ create_app() {
 init_linux() {
   local app=$1 out
   echo "== $app: react-native init-linux"
+  # From this package's template each time (WORK_DIR may hold an app from
+  # an earlier version).
+  rm -rf "$work/$app/linux"
   (cd "$work/$app" && npx react-native init-linux)
   [[ -f "$work/$app/linux/CMakeLists.txt" && -f "$work/$app/linux/main.cc" ]] &&
     grep -q "withLinux(" "$work/$app/metro.config.js" &&
@@ -160,6 +165,73 @@ done
 # Release app attached with --smoke.
 GDK_BACKEND=${backends[0]} run_linux "$app" "release-run($app)" \
   --release --smoke --screenshot "$work/$app-run-linux.png"
+
+# A native library: `react-native init-linux-library` in a library of its
+# own, which the first app installs and run-linux autolinks; its module
+# and component must work from the installed host SDK.
+native_library() {
+  local app=${apps[0]} lib=$work/rngtk-calendar
+  echo "== a native library: react-native init-linux-library"
+  rm -rf "$lib"
+  mkdir -p "$lib"
+  cat >"$lib/package.json" <<'JSON'
+{
+  "name": "rngtk-calendar",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "peerDependencies": {"react-native": "*"},
+  "devDependencies": {"react-native": "*", "@curiosity26/react-native-gtk4": "*"}
+}
+JSON
+  # The library's CLI, from the app's node_modules.
+  ln -s "$work/$app/node_modules" "$lib/node_modules"
+  if (cd "$lib" && npx react-native init-linux-library) &&
+     [[ -f $lib/linux/CMakeLists.txt && -f $lib/linux/src/RngtkCalendarPackage.cc &&
+        -f $lib/src/RngtkCalendarViewNativeComponent.ts && -f $lib/react-native.config.js ]]; then
+    pass "init-linux-library set up linux/, the JS sides and react-native.config.js"
+  else
+    fail "init-linux-library"
+    return
+  fi
+  rm "$lib/node_modules"
+  (cd "$work/$app" && npm install --no-audit --no-fund --install-links "$lib")
+  cp "$work/$app/App.tsx" "$work/$app/App.tsx.orig"
+  cat >"$work/$app/App.tsx" <<'TSX'
+// The autolinked native library: a TurboModule call and a native component.
+import React from 'react';
+import {Text, View} from 'react-native';
+import {RngtkCalendar, RngtkCalendarView} from 'rngtk-calendar';
+
+const greeting = RngtkCalendar?.greet('e2e');
+if (greeting !== 'Hello, e2e, from C++!') {
+  throw new Error(`the native module answered ${String(greeting)}`);
+}
+
+export default function App() {
+  return (
+    <View style={{flex: 1, padding: 24, gap: 12, backgroundColor: 'white'}}>
+      <Text>{greeting}</Text>
+      <RngtkCalendarView date="2026-10-09" showWeekNumbers style={{width: 320, height: 300}} />
+    </View>
+  );
+}
+TSX
+  run_linux "$app" "release-build-with-library($app)" --release --build-only
+  if grep -q "rngtk_calendar_package" "$work/$app/linux/build/Release/autolinking/autolinking.cc"; then
+    pass "$app: run-linux autolinked rngtk-calendar"
+  else
+    fail "$app: run-linux didn't autolink rngtk-calendar"
+  fi
+  for backend in "${backends[@]}"; do
+    smoke "$app" Release "$backend"
+    cp "$shots/new-app-release-$backend.png" "$shots/native-library-release-$backend.png" 2>/dev/null || true
+  done
+  mv "$work/$app/App.tsx.orig" "$work/$app/App.tsx"
+  (cd "$work/$app" && npm uninstall --no-audit --no-fund rngtk-calendar)
+}
+if [[ "${NATIVE_LIBRARY:-1}" == 1 ]]; then
+  native_library
+fi
 
 for app in "${apps[@]:1}"; do
   create_app "$app"

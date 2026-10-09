@@ -3,6 +3,7 @@
 #pragma once
 
 #include <folly/dynamic.h>
+#include <rngtk/App.h>
 #include <gtk/gtk.h>
 #include <react/nativemodule/TurboModuleProvider.h>
 #include <react/renderer/core/LayoutConstraints.h>
@@ -60,6 +61,8 @@ struct RNGtkHostOptions {
   bool followSystemAccessibility = true;
   // More TurboModules, asked before the host's own.
   facebook::react::TurboModuleProviders extraTurboModules;
+  // Libraries' native modules and components (rngtk/Extensions.h).
+  PackageList packages;
   // Linking.getInitialURL(): the URL the app was started with.
   std::string initialURL;
   // Tests: called instead of launching a URL for Linking.openURL; true if

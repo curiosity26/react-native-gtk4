@@ -1,6 +1,6 @@
 #include "GtkMenus.h"
 
-#include "CxxModule.h"
+#include "rngtk/CxxModule.h"
 #include "GtkMountingManager.h"
 #include "PlatformModules.h"
 #include "rn_text_input.h"

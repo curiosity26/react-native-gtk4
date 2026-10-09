@@ -1,6 +1,6 @@
 #include "Dialogs.h"
 
-#include "CxxModule.h"
+#include "rngtk/CxxModule.h"
 #include "PlatformModules.h"
 
 #include <glog/logging.h>
