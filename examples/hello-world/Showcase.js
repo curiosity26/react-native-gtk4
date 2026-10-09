@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 const halves = require('./assets/halves.png');
@@ -70,11 +71,10 @@ function Btn({title, onPress, color = '#007AFF'}) {
 
 // ---- Home ----------------------------------------------------------------
 
-// Not shown yet: window size (ReactCxxPlatform's DeviceInfo reports a fixed
-// 1280x720, and the window doesn't resize) and the color scheme (no
-// Appearance module).
+// Not shown yet: the color scheme (no Appearance module).
 function Home() {
   const c = Platform.constants;
+  const window = useWindowDimensions();
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.hero}>
@@ -84,6 +84,10 @@ function Home() {
       <Section title="Platform" hint="Platform.OS and Platform.constants, from the GTK host.">
         <Text style={styles.mono}>Platform.OS = {Platform.OS}</Text>
         <Text style={styles.mono}>window system = {String(c.windowSystem)}</Text>
+        <Text style={styles.mono}>
+          window = {Math.round(window.width)} x {Math.round(window.height)} (resize
+          the window: useWindowDimensions follows it)
+        </Text>
         <Text style={styles.mono}>
           React Native {c.reactNativeVersion?.major}.{c.reactNativeVersion?.minor}.
           {c.reactNativeVersion?.patch}
@@ -223,7 +227,7 @@ function Buttons() {
           )}
         </Pressable>
       </Section>
-      <Section title="Touchables and Button">
+      <Section title="Touchables">
         <View style={styles.wrap}>
           <TouchableOpacity style={styles.touchable} onPress={() => log('TouchableOpacity')}>
             <Text style={styles.btnText}>TouchableOpacity</Text>
@@ -239,14 +243,15 @@ function Buttons() {
               <Text style={styles.btnText}>WithoutFeedback</Text>
             </View>
           </TouchableWithoutFeedback>
-          {/* Button's own styles are iOS/Android only: give it a color. */}
-          <Button title="Button" color="#D1D1D6" onPress={() => log('Button onPress')} />
-          <Button
-            title="Disabled"
-            color="#D1D1D6"
-            disabled
-            onPress={() => log('should not fire')}
-          />
+        </View>
+      </Section>
+      <Section
+        title="Button"
+        hint="Styled like a GTK button: hover and press it. color sets the background; disabled dims it.">
+        <View style={styles.wrap}>
+          <Button title="Button" onPress={() => log('Button onPress')} />
+          <Button title="color" color="#3584E4" onPress={() => log('colored Button onPress')} />
+          <Button title="Disabled" disabled onPress={() => log('should not fire')} />
         </View>
       </Section>
       <Section

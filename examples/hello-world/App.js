@@ -1,16 +1,18 @@
 import React from 'react';
-import {Platform, StyleSheet, Text, View} from 'react-native';
+import {Platform, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 
 export default function App() {
   return (
     <View style={styles.root}>
-      <View style={styles.card}>
+      {/* Pressing the card fades it with a native-driver animation (the
+          dev-loop test checks that this still runs after a reload). */}
+      <TouchableOpacity nativeID="card" style={styles.card}>
         <Text style={styles.title}>Hello, World!</Text>
         <Text style={styles.subtitle}>React Native on GTK4</Text>
         <Text style={styles.platform}>
           Running on {Platform.OS} ({Platform.constants.windowSystem})
         </Text>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }

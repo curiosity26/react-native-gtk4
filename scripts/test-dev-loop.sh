@@ -6,7 +6,9 @@
 #   3. rn-gtk-host --dev-server --self-test: the Hello World checks on a
 #      bundle from Metro, then four reloads, each re-checked with no leaked
 #      widgets or threads: three of the host's own (Ctrl+R) and one from
-#      Metro (POST /reload, what `r` in Metro's terminal sends),
+#      Metro (POST /reload, what `r` in Metro's terminal sends); before the
+#      first reload and after each one, a native-driver animation (holding
+#      the TouchableOpacity card) must run in the new JS instance,
 #   4. fast refresh: edits App.js and waits for the new text without a reload,
 #   5. LogBox: makes App throw, waits for LogBox to show, then clicks its
 #      Dismiss button (pointer input into LogBox's surface),
@@ -81,7 +83,7 @@ wait_ready() {
 }
 
 echo "== rn-gtk-host --dev-server (${GDK_BACKEND:-default backend})"
-"$build/rn-gtk-host" --dev-server "localhost:$port" --self-test --test-reload --reloads 3 --expect-reload --verbose \
+"$build/rn-gtk-host" --dev-server "localhost:$port" --self-test --test-reload --reloads 3 --expect-reload --test-animation --verbose \
   --expect-text "$refreshed_text" --expect-logbox --dismiss-logbox \
   ${LOGBOX_SCREENSHOT:+--logbox-screenshot "$LOGBOX_SCREENSHOT"} \
   >"$out/host.log" 2>&1 &

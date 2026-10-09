@@ -103,6 +103,26 @@ transforms, rounded overflow clips, `pointerEvents`, and nested Text spans.
 | Keyboard focus, `onKeyDown` | Not yet | Phase 2 |
 | Pen pressure/tilt | Not yet | |
 
+### Button
+
+React Native's `Button.js` styles itself only for `ios` and `android`, so
+the package replaces it on Linux (`overrides/Libraries/Components/Button.linux.js`,
+picked up by the Metro config like the other overrides) with one that
+looks like a GTK (Adwaita) button.
+
+| Prop | Linux |
+| --- | --- |
+| default | 34px tall, 6px corners, a light neutral background (`#E6E6E6`), dark bold label |
+| `color` | the background (like Android), with a white label; `#3584E4` is Adwaita's accent (suggested-action) |
+| `disabled` (or `accessibilityState.disabled`, `aria-disabled`) | half opacity, presses ignored, no hover or pressed shading |
+| hover / pressed | 5% darker on hover (10% lighter on a `color`), 20% darker while pressed |
+| `title`, `onPress`, `accessibilityLabel`, `testID`, `nativeID`, accessibility and `aria-*` props | as upstream |
+
+The title isn't uppercased (Android does). The look is fixed (light
+Adwaita); it doesn't follow the GTK theme or dark mode yet. The Gallery
+self-test checks its colors, corners, hover shade and that a disabled
+Button doesn't press.
+
 ## ScrollView and lists
 
 `<ScrollView>` mounts an `RNScrollView` (`linux/widgets/rn_scroll_view.cc`).
@@ -261,9 +281,6 @@ widget benchmark, run on the GNOME Wayland session with the NGL renderer,
 
 ## Known differences
 
-- **`Button` has no Linux look.** Its styles `Platform.select` only `ios`
-  and `android`, so on Linux it renders as plain text that responds to
-  presses.
 - **Shadows draw the view's box.** Like CSS, but unlike iOS's legacy
   `shadow*` props, which shade the content's alpha.
 - **3D transforms render in GSK**, but GTK hit-testing through strongly

@@ -20,6 +20,9 @@
 //   --logbox-screenshot F  save the window once LogBox shows
 //   --dismiss-logbox       then click LogBox's Dismiss button and wait for
 //                          LogBox to close
+//   --test-animation       before the first reload and after each one,
+//                          hold the card (a TouchableOpacity) and check
+//                          that its native-driver fade runs, then release
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
@@ -74,6 +77,7 @@ struct Options {
   bool expect_logbox = false;
   const char *logbox_screenshot = nullptr;
   bool dismiss_logbox = false;
+  bool test_animation = false;
   int timeout_ms = 20000;
   bool verbose = false;
 } opts;
@@ -92,6 +96,7 @@ struct App {
   rngtk::RNGtkHost *host = nullptr;
   GtkWidget *root = nullptr;
   GtkWidget *overlay = nullptr;
+  GtkWidget *window = nullptr;
   Phase phase = Phase::Initial;
   int frames = 0;
   int mounts_before = 0;
@@ -105,6 +110,10 @@ struct App {
   std::vector<Step> steps;
   size_t step = 0;
   bool step_started = false;
+  // What the current steps follow; next_check() continues from it.
+  Phase steps_after = Phase::Initial;
+  // The JS instance whose native animation --test-animation checked.
+  int animated_instance = 0;
 } app;
 
 int thread_count() {
@@ -341,6 +350,37 @@ void verify_gallery(GdkTexture *tex) {
     check(false, "borders view mounted");
   }
 
+  // Button (overrides/Libraries/Components/Button.linux.js): Adwaita's
+  // neutral button with dark text; `color` with white text; disabled at
+  // half opacity over the background, its text no longer dark.
+  {
+    GtkWidget *plain = by_id("button"), *color = by_id("button-color"),
+              *disabled = by_id("button-disabled");
+    if (check(plain && color && disabled, "Buttons mounted")) {
+      auto fill = [&](GtkWidget *v) {
+        graphene_rect_t b = bounds_in_root(v);
+        return px(tex, b.origin.x + 6, b.origin.y + b.size.height / 2);
+      };
+      auto has = [&](GtkWidget *v, auto pred) {
+        return any_pixel(tex, bounds_in_root(v), pred);
+      };
+      auto dark = [](rngtk::Rgba8 p) { return p.r < 0x70 && p.g < 0x70 && p.b < 0x70; };
+      auto white = [](rngtk::Rgba8 p) { return p.r > 0xF0 && p.g > 0xF0 && p.b > 0xF0; };
+      graphene_rect_t b = bounds_in_root(plain);
+      printf("  Button %.0fx%.0f\n", b.size.width, b.size.height);
+      check(near_color(fill(plain), 0xE6, 0xE6, 0xE6, 4) && has(plain, dark) &&
+                b.size.height >= 34,
+            "Button: neutral background, dark text, 34px tall");
+      check(near_color(fill(color), 0x35, 0x84, 0xE4, 4) && has(color, white),
+            "Button color: that background, white text");
+      check(near_color(fill(disabled), 0xEE, 0xEE, 0xEF, 4) && !has(disabled, dark),
+            "Button disabled: dimmed");
+      // Rounded: the corner pixel is the background, not the button.
+      check(near_color(px(tex, b.origin.x, b.origin.y), bg[0], bg[1], bg[2], 6),
+            "Button corners are rounded");
+    }
+  }
+
   if (GtkWidget *v = by_id("radii")) {
     graphene_rect_t b = bounds_in_root(v);
     float x = b.origin.x, y = b.origin.y, w = b.size.width, h = b.size.height;
@@ -505,6 +545,8 @@ rngtk::Rgba8 pixel_at_center(const char *id) {
   return p;
 }
 
+Step after_frames(std::string name, int frames, std::function<bool()> pred);
+
 void add_gallery_input_steps() {
   using Phase = rngtk::GtkPointerHandler::Phase;
   app.host->pointerHandler()->setRealInputEnabled(false);
@@ -535,6 +577,17 @@ void add_gallery_input_steps() {
       }});
   app.steps.push_back(click_step("highlight", "highlight 1"));
   app.steps.push_back(click_step("button", "button 1"));
+  app.steps.push_back(Step{
+      "a disabled Button doesn't press",
+      [] {
+        if (GtkWidget *v = by_id("button-disabled")) {
+          send(Phase::Down, center_of(v));
+          send(Phase::Up, center_of(v));
+        }
+      },
+      [] { return true; }});
+  app.steps.push_back(after_frames("  ...the press count stays 1", 15,
+                                   [] { return has_text(app.root, "button 1"); }));
   // Right-click on selectable text: a Copy menu that copies its text.
   static std::string clipboard;
   app.steps.push_back(Step{
@@ -581,6 +634,17 @@ void add_gallery_input_steps() {
       "hover out -> #007AFF",
       [] { send(Phase::Move, graphene_point_t{2, 2}); },
       [] { return near_color(pixel_at_center("pressable"), 0x00, 0x7A, 0xFF, 12); }});
+  // Button shades 5% darker on hover, like a GTK button.
+  app.steps.push_back(Step{
+      "Button hover in -> #DBDBDB",
+      [] {
+        if (GtkWidget *v = by_id("button")) send(Phase::Move, center_of(v));
+      },
+      [] { return near_color(pixel_at_center("button"), 0xDB, 0xDB, 0xDB, 3); }});
+  app.steps.push_back(Step{
+      "Button hover out -> #E6E6E6",
+      [] { send(Phase::Move, graphene_point_t{2, 2}); },
+      [] { return near_color(pixel_at_center("button"), 0xE6, 0xE6, 0xE6, 3); }});
 }
 
 
@@ -913,6 +977,8 @@ void add_images_steps() {
 // ---------------------------------------------------------------------------
 // GalleryControls checks
 
+void add_resize_steps();
+
 bool is_controls() { return opts.module == "GalleryControls"; }
 
 GtkWidget *editor_of(const char *id) {
@@ -1097,6 +1163,57 @@ void add_controls_steps() {
         GtkWidget *s = by_id("stopped");
         return s && gtk_widget_get_visible(s) && gtk_spinner_get_spinning(GTK_SPINNER(s));
       }});
+  add_resize_steps();
+}
+
+// Dimensions: the window size reaches JS (GalleryControls shows it with
+// useWindowDimensions), first as given, then after the window resizes:
+// the surface follows the window and JS gets didUpdateDimensions.
+void add_resize_steps() {
+  app.steps.push_back(Step{
+      "useWindowDimensions reports the surface size", [] {},
+      [] {
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", opts.width, opts.height);
+        return has_text(app.root, text);
+      }});
+  app.steps.push_back(Step{
+      "resizing the window resizes the surface and reaches JS",
+      [] {
+        gtk_window_set_resizable(GTK_WINDOW(app.window), TRUE);
+        app.host->setFollowsWindowSize(true);
+        gtk_window_set_default_size(GTK_WINDOW(app.window), opts.width + 120,
+                                    opts.height + 60);
+      },
+      [] {
+        int w = gtk_widget_get_width(app.overlay);
+        int h = gtk_widget_get_height(app.overlay);
+        if (w <= opts.width || h <= opts.height) return false;
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", w, h);
+        graphene_rect_t f = rn_widget_get_frame(app.root);
+        if (!has_text(app.root, text) || f.size.width != w ||
+            f.size.height != h) {
+          return false;
+        }
+        printf("  window %dx%d -> %dx%d\n", opts.width, opts.height, w, h);
+        return true;
+      }});
+  app.steps.push_back(Step{
+      "  ...and shrinking it again",
+      [] {
+        gtk_window_set_default_size(GTK_WINDOW(app.window), opts.width - 100,
+                                    opts.height - 80);
+      },
+      [] {
+        int w = gtk_widget_get_width(app.overlay);
+        int h = gtk_widget_get_height(app.overlay);
+        if (w >= opts.width || h >= opts.height) return false;
+        char text[64];
+        snprintf(text, sizeof(text), "window %d x %d", w, h);
+        return has_text(app.root, text) &&
+               rn_widget_get_frame(app.root).size.width == w;
+      }});
 }
 
 gboolean on_timeout(gpointer);
@@ -1114,6 +1231,7 @@ void quit() {
 }
 
 void enter(Phase phase) {
+  if (phase == Phase::Steps) app.steps_after = app.phase;
   app.phase = phase;
   app.frames = 0;
   restart_timeout();
@@ -1128,10 +1246,44 @@ void enter(Phase phase) {
   }
 }
 
+// --test-animation: TouchableOpacity's fade is a native-driver
+// Animated.timing that C++ Animated runs on GTK's frame clock. Each JS
+// instance needs its own Animated provider; one kept from before a reload
+// would drive the destroyed instance and the card would never fade.
+void add_animation_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  int instance = app.host->instanceCount();
+  app.steps.push_back(Step{
+      "JS instance " + std::to_string(instance) +
+          ": holding the card fades it (native Animated)",
+      [] {
+        if (GtkWidget *v = by_id("card")) send(Phase::Down, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("card");
+        return v && gtk_widget_get_opacity(v) < 0.5;
+      }});
+  app.steps.push_back(Step{
+      "  ...and it fades back after release",
+      [] {
+        if (GtkWidget *v = by_id("card")) send(Phase::Up, center_of(v));
+      },
+      [] {
+        GtkWidget *v = by_id("card");
+        return v && gtk_widget_get_opacity(v) > 0.99;
+      }});
+}
+
 // The dev-loop check after `done`, or quit.
 void next_check(Phase done) {
   if (!opts.self_test) {
     quit();
+  } else if (opts.test_animation && done <= Phase::Reloading &&
+             app.animated_instance != app.host->instanceCount()) {
+    app.animated_instance = app.host->instanceCount();
+    add_animation_steps();
+    enter(Phase::Steps);
   } else if (done <= Phase::Reloading && opts.dev &&
              app.reloads_done <
                  (opts.test_reload ? opts.reloads : 0) + int(opts.expect_reload)) {
@@ -1298,7 +1450,7 @@ void on_after_paint(GdkFrameClock *, gpointer) {
       break;
     case Phase::Steps: {
       if (app.step >= app.steps.size()) {
-        quit();
+        next_check(app.steps_after);
         break;
       }
       Step &step = app.steps[app.step];
@@ -1340,12 +1492,14 @@ gboolean on_timeout(gpointer) {
 void activate(GtkApplication *gtk_app, gpointer) {
   GtkWidget *window = gtk_application_window_new(gtk_app);
   gtk_window_set_title(GTK_WINDOW(window), opts.module.c_str());
-  gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
+  // Interactive runs resize with the window. Self-tests keep the size they
+  // were given, even when the window manager makes the window bigger
+  // (mutter maximizes near-screen-size windows); a step can turn resizing
+  // on (see add_resize_steps).
+  gtk_window_set_resizable(GTK_WINDOW(window), !opts.self_test);
+  app.window = window;
   app.overlay = gtk_overlay_new();
   app.root = rn_view_new();
-  // The surface has a fixed size: keep the root at it even when the window
-  // manager makes the window bigger (mutter maximizes near-screen-size
-  // windows).
   gtk_widget_set_halign(app.root, GTK_ALIGN_START);
   gtk_widget_set_valign(app.root, GTK_ALIGN_START);
   gtk_overlay_set_child(GTK_OVERLAY(app.overlay), app.root);
@@ -1357,6 +1511,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
       .devServerHost = opts.dev_host,
       .devServerPort = opts.dev_port,
       .inspector = opts.inspector,
+      .followsWindowSize = !opts.self_test,
   };
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
@@ -1396,7 +1551,8 @@ int usage() {
           "         [--screenshot PNG] [--timeout MS] [--test-reload]\n"
           "         [--expect-reload]\n"
           "         [--expect-text TEXT] [--expect-logbox]\n"
-          "         [--logbox-screenshot PNG] [--dismiss-logbox] [--verbose]\n");
+          "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
+          "         [--test-animation] [--verbose]\n");
   return 2;
 }
 
@@ -1425,6 +1581,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--expect-reload")) opts.expect_reload = true;
     else if (!strcmp(argv[i], "--expect-logbox")) opts.expect_logbox = true;
     else if (!strcmp(argv[i], "--dismiss-logbox")) opts.dismiss_logbox = true;
+    else if (!strcmp(argv[i], "--test-animation")) opts.test_animation = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {

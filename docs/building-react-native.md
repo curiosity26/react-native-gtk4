@@ -121,6 +121,20 @@ returns placeholder Android values.
 
 `isTV` and `isVision` are always false.
 
+### Dimensions
+
+ReactCxxPlatform's `DeviceInfo` module reports a fixed 1280x720. The host
+registers its own (in `linux/src/RNGtkHost.cc`): `window` is the app's
+surface, `screen` the geometry of the monitor the window is on, both in
+GTK's logical pixels (React Native's points), with the monitor's scale as
+`scale` and a `fontScale` of 1. The surface follows the window
+(`RNGtkHostOptions::followsWindowSize`): after each GTK layout the host
+resizes the surface, re-lays it out with `setSurfaceConstraints`, and emits
+`didUpdateDimensions`, so `Dimensions.addEventListener('change')` and
+`useWindowDimensions()` update as the window is resized. `rn-gtk-host
+--self-test` keeps the size it was given; the GalleryControls self-test
+turns resizing on and checks that a resize reaches JS.
+
 ### TypeScript
 
 React Native declares `PlatformOSType` and its Platform types as type

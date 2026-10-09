@@ -15,6 +15,7 @@
 #include <thread>
 
 namespace facebook::react {
+class NativeAnimatedNodesManagerProvider;
 class ReactHost;
 class RunLoopObserverManager;
 class SurfaceDelegate;
@@ -39,6 +40,9 @@ struct RNGtkHostOptions {
   uint32_t devServerPort = 8081;
   // Connect to Metro's inspector proxy so React Native DevTools can attach.
   bool inspector = false;
+  // Resize the app's surface to the overlay's size whenever the window
+  // resizes (see setFollowsWindowSize).
+  bool followsWindowSize = false;
 };
 
 class RNGtkHost {
@@ -62,6 +66,12 @@ class RNGtkHost {
            const std::string &moduleName, GtkWidget *root, float width,
            float height,
            folly::dynamic initialProps = folly::dynamic::object());
+
+  // Resizes the surface (and LogBox's) to `width` x `height` and tells JS:
+  // Dimensions' window changes and emits a `change`.
+  void setSize(float width, float height);
+  // When on, setSize() follows the overlay's allocation after each layout.
+  void setFollowsWindowSize(bool follows);
 
   // Dev mode: reloads the JS (like `r` in Metro's terminal).
   void reload();
@@ -88,7 +98,23 @@ class RNGtkHost {
 
  private:
   class LogBoxDelegate;
+  class DeviceInfoModule;
+  // Dimensions' window (the surface) and screen (the window's monitor),
+  // in GTK's logical pixels (React Native's points).
+  struct Metrics {
+    double width, height, scale, fontScale;
+  };
+  struct Dimensions {
+    Metrics window, screen;
+  };
+  Dimensions dimensions() const;
+  void updateDimensions();
+  static void onLayout(GdkFrameClock *, gpointer self);
+  static void onOverlayRealize(GtkWidget *, gpointer self);
   static gboolean onAnimationFrame(GtkWidget *, GdkFrameClock *, gpointer self);
+  std::shared_ptr<facebook::react::NativeAnimatedNodesManagerProvider>
+  makeAnimatedProvider();
+  void updateAnimationTick();
   void startAppSurface();
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
@@ -96,7 +122,14 @@ class RNGtkHost {
 
   RNGtkHostOptions options_;
   GtkOverlay *overlay_;
-  float width_{0}, height_{0};
+  // Read on the loader thread when the surface starts.
+  std::atomic<float> width_{0}, height_{0};
+  GtkWidget *root_{nullptr};
+  bool followsWindowSize_{false};
+  GdkFrameClock *layoutClock_{nullptr};
+  gulong layoutHandler_{0};
+  mutable std::mutex dimensionsMutex_;
+  Dimensions dimensions_{{0, 0, 1, 1}, {0, 0, 1, 1}};
   std::string script_;
   facebook::react::SurfaceId surfaceId_{0};
   std::string moduleName_;
@@ -120,6 +153,10 @@ class RNGtkHost {
   // Native Animated runs a frame callback while animations are active.
   std::mutex animationMutex_;
   std::shared_ptr<std::function<void()>> onAnimationRender_;
+  // The JS instance whose manager owns onAnimationRender_ (1, 2... per
+  // reload), and the latest one created.
+  int animationOwner_{0};
+  std::atomic<int> animationGeneration_{0};
   guint animationTick_{0};
   GSource *observerSource_{nullptr};
   std::atomic<int> jsErrors_{0};

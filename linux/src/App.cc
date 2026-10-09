@@ -180,8 +180,6 @@ void activate(GtkApplication *gtkApp, gpointer data) {
   GtkWidget *window = gtk_application_window_new(gtkApp);
   gtk_window_set_title(GTK_WINDOW(window),
                        (o.title.empty() ? o.moduleName : o.title).c_str());
-  // The surface has a fixed size for now.
-  gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
   GtkWidget *overlay = gtk_overlay_new();
   run->root = rn_view_new();
   gtk_widget_set_halign(run->root, GTK_ALIGN_START);
@@ -196,6 +194,8 @@ void activate(GtkApplication *gtkApp, gpointer data) {
       .devServerHost = o.devServerHost,
       .devServerPort = static_cast<uint32_t>(o.devServerPort),
       .inspector = run->inspector,
+      // The surface follows the window: Dimensions' window is its size.
+      .followsWindowSize = true,
   };
   run->host = new RNGtkHost(hostOptions, GTK_OVERLAY(overlay));
   if (run->dev) addDevControls(window, run->host, run->verbose);
