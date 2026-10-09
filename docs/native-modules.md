@@ -86,6 +86,7 @@ whose views are GTK widgets:
 | `create(view)` | a new widget. The host owns it, places it at its Yoga frame inside its parent, and gives it the view's opacity, transform, tooltip, pointer events, and accessibility label, hint and hidden state (it keeps GTK's own role and keyboard focus) |
 | `update(widget, oldView, newView)` | props, state or the event emitter changed (`oldView` is empty the first time). Keep `newView.eventEmitter` to send events from GTK signals |
 | `command(widget, name, args)` | a command from JS (`codegenNativeCommands`) |
+| `insertChild(parent, child, index)`, `removeChild(parent, child)` | a container: React's children of the component are handed to it in order instead of the host placing them. The host still creates, updates and destroys each child. packages/svg uses them for an `<Svg>`'s elements |
 
 They run on the main thread. A native component has no measure function:
 give it a size in JS (`style={{width: 320, height: 300}}`).

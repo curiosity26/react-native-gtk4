@@ -1,6 +1,7 @@
 // rngtk::runApp: the window and command line around RNGtkHost for apps.
 #include "rngtk/App.h"
 
+#include <folly/json.h>
 #include <glog/logging.h>
 
 #include <climits>
@@ -33,6 +34,8 @@ struct Run {
   std::string screenshot;
   int timeoutMs = 120000;
   bool verbose = false;
+  // --initial-props: the root component's props (JSON).
+  folly::dynamic initialProps = folly::dynamic::object();
   // URLs on the command line (a .desktop file's %u): the first is the
   // initial URL (Linking.getInitialURL).
   std::vector<std::string> urls;
@@ -208,7 +211,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
   run->host = new RNGtkHost(hostOptions, GTK_OVERLAY(overlay));
   if (run->dev) addDevControls(window, run->host, run->verbose);
   if (!run->host->run(run->dev ? o.entry : run->bundle, kSurfaceId,
-                      o.moduleName, run->root, o.width, o.height)) {
+                      o.moduleName, run->root, o.width, o.height, run->initialProps)) {
     fprintf(stderr, "could not load %s\n", run->bundle.c_str());
     run->exitCode = 1;
     g_application_quit(G_APPLICATION(gtkApp));
@@ -249,7 +252,7 @@ int usage(const char *argv0) {
   fprintf(stderr,
           "usage: %s [--dev-server [HOST:PORT] | --bundle FILE]\n"
           "          [--smoke [--screenshot PNG] [--timeout MS]]\n"
-          "          [--no-inspector] [--verbose] [URL...]\n",
+          "          [--initial-props JSON] [--no-inspector] [--verbose] [URL...]\n",
           argv0);
   return 2;
 }
@@ -281,6 +284,13 @@ int runApp(int argc, char **argv, const AppOptions &options) {
       run.inspector = false;
     } else if (!strcmp(argv[i], "--verbose")) {
       run.verbose = true;
+    } else if (arg("--initial-props")) {
+      try {
+        run.initialProps = folly::parseJson(argv[++i]);
+      } catch (const std::exception &e) {
+        fprintf(stderr, "--initial-props: %s\n", e.what());
+        return 2;
+      }
     } else if (!strcmp(argv[i], "--dev-server")) {
       run.dev = true;
       // Optional HOST:PORT (or :PORT).

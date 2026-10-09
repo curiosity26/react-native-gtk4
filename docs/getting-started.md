@@ -157,6 +157,7 @@ and icons: see [packaging.md](packaging.md).
 | `--smoke` | Wait for the first mount, check there were no JS errors, print `SMOKE OK` and exit 0 (1 on an error or timeout) |
 | `--screenshot FILE` | With `--smoke`, save the window as a PNG |
 | `--timeout MS` | With `--smoke` (default 120000) |
+| `--initial-props JSON` | The root component's props (`'{"initialPage": "Lists"}'`) |
 | `--no-inspector` | Debug: don't connect to React Native DevTools |
 | `--verbose` | Log at info level |
 

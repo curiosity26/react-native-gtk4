@@ -236,6 +236,12 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
           mountModal(m.parentTag, m.newChildShadowView.tag);
           break;
         }
+        // A library's container component mounts its children itself.
+        if (const NativeComponent *native = nativeComponentForTag(m.parentTag);
+            parent && child && native && native->insertChild) {
+          native->insertChild(parent, child, m.index);
+          break;
+        }
         if (!parent || !child || !RN_IS_VIEW(parent)) {
           LOG(ERROR) << "Insert: can't mount " << m.newChildShadowView.tag
                      << " into " << m.parentTag;
@@ -251,6 +257,11 @@ void GtkMountingManager::apply(SurfaceId surfaceId,
         GtkWidget *child = viewForTag(m.oldChildShadowView.tag);
         if (isModalHost(m.oldChildShadowView)) {
           unmountModal(m.oldChildShadowView.tag);
+          break;
+        }
+        if (const NativeComponent *native = nativeComponentForTag(m.parentTag);
+            parent && child && native && native->removeChild) {
+          native->removeChild(parent, child);
           break;
         }
         if (parent && child && gtk_widget_get_parent(child) == parent) {
@@ -358,6 +369,11 @@ const NativeComponent *GtkMountingManager::nativeComponentFor(const ShadowView &
   if (nativeComponents_.empty() || !view.componentName) return nullptr;
   auto it = nativeComponents_.find(view.componentName);
   return it == nativeComponents_.end() ? nullptr : it->second.get();
+}
+
+const NativeComponent *GtkMountingManager::nativeComponentForTag(facebook::react::Tag tag) const {
+  auto it = shadowViews_.find(tag);
+  return it == shadowViews_.end() ? nullptr : nativeComponentFor(it->second);
 }
 
 void GtkMountingManager::updateFocus(GtkWidget *widget, const ShadowView &view) {
