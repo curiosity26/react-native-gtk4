@@ -188,6 +188,14 @@ void GtkPointerHandler::dispatch(const Input &input) {
   int id = input.device == Device::Mouse ? 0 : input.sequence;
   bool primary = input.device == Device::Touch || input.button == 1;
 
+  // A GtkSwitch handles its own clicks and drags, like a UISwitch: no React
+  // touches or pointer presses that could start a parent's press.
+  if (target.widget && GTK_IS_SWITCH(target.widget.get()) &&
+      (input.phase == Phase::Down || input.phase == Phase::Up)) {
+    if (input.device == Device::Mouse) updateHover(input, target);
+    return;
+  }
+
   // Hover (pointerover/out, pointerenter/leave) follows the mouse.
   if (input.device == Device::Mouse && input.phase != Phase::Scroll) {
     updateHover(input, target);
