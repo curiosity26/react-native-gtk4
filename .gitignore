@@ -6,3 +6,4 @@ third-party/deps/
 
 # CMake build trees
 /build/
+prebuilt-hosts.json

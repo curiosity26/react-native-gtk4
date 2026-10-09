@@ -99,7 +99,17 @@ with the template's; `--app-id org.example.MyApp` sets the application id.
   0.87.1/deps/                         React Native sources, C++ libraries, Hermes (~1 GB)
   0.87.1/host/<id>/build/              the host library's build (~750 MB)
   0.87.1/host/<id>/install/            librngtk_host.so, libhermesvm.so, libjsi.so, headers, CMake config
+  0.87.1/host/<id>-release/            the host's Release build, for package-linux
 ```
+
+**Prebuilt hosts.** On Ubuntu 24.04 and distributions based on it (Linux
+Mint 22), a released package downloads the host library prebuilt (from
+the GitHub release, checked against the checksums the package lists)
+instead of fetching React Native and building Hermes and the host: the
+first app takes seconds. Apps with native libraries also fetch React
+Native's sources for their headers (about 20 seconds), without building
+Hermes. Elsewhere, with a modified package, or with `RNGTK_NO_PREBUILT=1`,
+the host builds from source as below.
 
 `<id>` is a hash of the package's native sources, so updating the package
 builds a new host once; delete old ones whenever you like. `RNGTK_DEPS_DIR`
