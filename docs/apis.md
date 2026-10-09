@@ -5,7 +5,7 @@ PlatformColor, AccessibilityInfo, Linking, AppState, Clipboard,
 PixelRatio, I18nManager, Share, Vibration, Alert. Then the Linux APIs
 React Native has none for, which `@curiosity26/react-native-gtk4` exports:
 [Dialogs](#dialogs), [MenuBar](#menubar) (and `ContextMenu`, in
-[components.md](components.md#context-menus)).
+[components.md](components.md#context-menus)), [Windows](#windows).
 
 Components are in [components.md](components.md).
 
@@ -255,6 +255,67 @@ Desktops that show app menus themselves (`gtk-shell-shows-menubar`) take it
 from GTK. `GalleryMenus` checks the bar's menus, that the accelerators are
 registered, that Ctrl+N reaches New through the window's shortcuts with
 the menus closed, and a checkbox's state.
+
+## Windows
+
+More top-level windows, from `@curiosity26/react-native-gtk4`. Each shows a
+component registered with `AppRegistry`, as a surface of its own in the
+app's one JS runtime: modules, stores and state are shared (render your
+providers in each window's component). This is react-native-macos'
+multi-window model, and what Electron apps expect from a window API.
+
+```js
+import {AppRegistry, useWindowDimensions} from 'react-native';
+import {Windows, useWindow} from '@curiosity26/react-native-gtk4';
+
+AppRegistry.registerComponent('Inspector', () => Inspector);
+
+const inspector = Windows.open({
+  component: 'Inspector',
+  initialProps: {documentId: 42},
+  title: 'Inspector',
+  width: 360,
+  height: 600,
+  minWidth: 280,
+  minHeight: 300,
+  resizable: true,
+});
+inspector.addListener('closed', () => setInspectorOpen(false));
+
+function Inspector({documentId}) {
+  const window = useWindow();               // this component's window
+  const {width} = useWindowDimensions();    // ...and its size
+  return <Button title="Done" onPress={() => window.close()} />;
+}
+
+Windows.main.setTitle(`${name} — My App`);
+```
+
+| | Notes |
+| --- | --- |
+| `Windows.open(options)` | a handle, at once (the window opens on the main loop). `component` is required; `width`/`height` are the content's size under the title bar (default 800 x 600) |
+| `handle.close()`, `setTitle(title)`, `setSize(w, h)`, `setMinimumSize(w, h)`, `focus()` | `focus()` raises the window (and shows the main window again after it was closed). On Wayland the desktop may only flash it, without an activation from the user |
+| `handle.addListener(type, fn)` | `focus`, `blur`, `resize` (`{width, height}`), `close-requested` (the close button), `closed` |
+| `interceptClose: true` / `handle.setInterceptClose(true)` | the close button only sends `close-requested`; call `close()` to close (after asking, say) |
+| `Windows.main` | the main window: the same controls and events |
+| `useWindow()` | the handle of the window the calling component is in (from its root tag) |
+| `Windows.getAll()` | `[{id, title, width, height, main}]`, main first |
+| `Windows.setQuitOnLastWindowClosed(quit)` | default true. Closing the main window while others are open hides it (its surface and the app keep running); the app quits when the last window closes. Off, the app keeps running with no window. C++: `AppOptions::quitOnLastWindowClosed` |
+
+A window's id is its surface's root tag (11, 21, 31...; the main window's
+is 1). Inside a window, `useWindowDimensions()` reports that window's size
+and follows it; `Dimensions.get('window')`, which has no idea who calls it,
+is the main window's. A Modal, an Alert or a file dialog opens over the
+window that is active. `AppState` is `active` while any of the app's
+windows is. After a reload (Ctrl+R) the windows stay open and their
+components start again with the props they were opened with.
+
+`GalleryWindows` (`--module GalleryWindows --self-test`) opens windows and
+checks their surfaces, `useWindowDimensions` in each, state shared between
+them, `setSize` (and the `resize` event), `setTitle` from inside one and on
+the main window, a Modal opened in one, the close button (with and without
+`interceptClose`), the main window hiding while another is open, and the
+app quitting when the last one closes.
 
 ## Testing
 

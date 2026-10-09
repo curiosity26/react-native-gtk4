@@ -45,6 +45,9 @@ std::string accelerator_for(const std::string &shortcut);
 GtkWidget *popup_menu(GtkWidget *parent, double x, double y, const graphene_rect_t *around,
                       const folly::dynamic &items, MenuSelect onSelect);
 
+// Whether the app's menu bar has menus now (new windows show it then).
+bool menubar_has_items();
+
 // The MenuBar module (LinuxMenuBar), or null.
 std::shared_ptr<facebook::react::TurboModule> makeMenuModule(
     const std::string &name, const std::shared_ptr<facebook::react::CallInvoker> &jsInvoker,

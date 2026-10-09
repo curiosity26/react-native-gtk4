@@ -69,6 +69,9 @@ class GtkMountingManager
   }
   // No transactions or commands waiting for the main thread.
   bool isIdle();
+  // Main thread: runs `fn` once the transactions queued so far are applied
+  // (now, if none are).
+  void afterPendingMounts(std::function<void()> fn) { runOnMainInOrder(std::move(fn)); }
   // Main thread: has screen readers speak `text` (an AccessibilityInfo
   // announcement or a live region's change); the last one, for tests.
   void announce(GtkWidget *from, const std::string &text,

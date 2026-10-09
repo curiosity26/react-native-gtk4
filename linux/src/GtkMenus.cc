@@ -324,8 +324,18 @@ std::atomic<int> nextOwner{1};
 // GtkApplicationWindow takes the app's menu bar when it is realized (or
 // gtk-shell-shows-menubar changes), not when the app's changes later. So
 // the app keeps one GMenu, whose items change, and windows show or hide it.
-GMenu *menubar_root(GtkApplication *app) {
+GMenu *&menubar_root_menu() {
   static GMenu *root = nullptr;
+  return root;
+}
+
+bool menubar_has_items_impl() {
+  GMenu *root = menubar_root_menu();
+  return root && g_menu_model_get_n_items(G_MENU_MODEL(root)) > 0;
+}
+
+GMenu *menubar_root(GtkApplication *app) {
+  GMenu *&root = menubar_root_menu();
   if (!root) root = g_menu_new();
   if (gtk_application_get_menubar(app) != G_MENU_MODEL(root)) {
     gtk_application_set_menubar(app, G_MENU_MODEL(root));
@@ -430,6 +440,8 @@ class MenuBarModule : public CxxModule<MenuBarModule> {
 };
 
 }  // namespace
+
+bool menubar_has_items() { return menubar_has_items_impl(); }
 
 std::shared_ptr<TurboModule> makeMenuModule(const std::string &name,
                                             const std::shared_ptr<CallInvoker> &jsInvoker,

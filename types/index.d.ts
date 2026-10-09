@@ -159,3 +159,61 @@ export declare const Menu: {
   setMenuBar: typeof MenuBar.setMenu;
   clearMenuBar: typeof MenuBar.clear;
 };
+
+export type WindowEvent =
+  | 'focus'
+  | 'blur'
+  | 'resize'
+  | 'close-requested'
+  | 'closed'
+  | 'open';
+
+/** One of the app's windows (Windows.open, Windows.main, useWindow). */
+export interface WindowHandle {
+  /** The window's surface root tag. */
+  readonly id: number;
+  readonly rootTag: number;
+  close(): void;
+  setTitle(title: string): void;
+  /** The content's size, in points. */
+  setSize(width: number, height: number): void;
+  setMinimumSize(width: number, height: number): void;
+  /** Raises it (and shows the main window again after it was closed). */
+  focus(): void;
+  /** The close button only sends 'close-requested'; close() closes. */
+  setInterceptClose(intercept: boolean): void;
+  addListener(
+    type: WindowEvent,
+    listener: (event: {id: number; type: WindowEvent; width?: number; height?: number}) => void,
+  ): {remove(): void};
+}
+
+export type WindowOptions = {
+  /** A component registered with AppRegistry. */
+  component: string;
+  initialProps?: object;
+  title?: string;
+  width?: number;
+  height?: number;
+  minWidth?: number;
+  minHeight?: number;
+  resizable?: boolean;
+  /** The close button only asks ('close-requested'). */
+  interceptClose?: boolean;
+};
+
+/**
+ * More windows, each a surface of a registered component in the app's one
+ * JS runtime; and the main window's title, size and focus.
+ */
+export declare const Windows: {
+  open(options: WindowOptions): WindowHandle;
+  readonly main: WindowHandle;
+  get(id: number): WindowHandle;
+  getAll(): Array<{id: number; title: string; width: number; height: number; main: boolean}>;
+  /** Default true: the app quits once its last window closes. */
+  setQuitOnLastWindowClosed(quit: boolean): void;
+};
+
+/** The window the calling component is in. */
+export declare function useWindow(): WindowHandle;

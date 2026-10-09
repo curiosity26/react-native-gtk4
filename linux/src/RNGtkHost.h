@@ -10,12 +10,15 @@
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <atomic>
+#include <map>
+#include <set>
 #include <cstdint>
 #include <functional>
 #include <mutex>
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace facebook::react {
 class NativeAnimatedNodesManagerProvider;
@@ -62,6 +65,23 @@ struct RNGtkHostOptions {
   // Tests: called instead of launching a URL for Linking.openURL; true if
   // it took it.
   std::function<bool(const std::string &)> openURLOverride;
+  // When the last of the app's windows closes, quit (Windows module). Off,
+  // the main window hides instead and the app keeps running.
+  bool quitOnLastWindowClosed = true;
+};
+
+// A window of the app's own (the Windows module, AppWindows.cc): another
+// surface of a registered component, in the same JS runtime.
+struct WindowOptions {
+  std::string moduleName;
+  folly::dynamic initialProps = folly::dynamic::object();
+  std::string title;
+  int width = 800, height = 600;
+  int minWidth = 0, minHeight = 0;
+  bool resizable = true;
+  // The close button only asks (a 'close-requested' event); the app
+  // closes the window itself.
+  bool interceptClose = false;
 };
 
 class RNGtkHost {
@@ -99,6 +119,31 @@ class RNGtkHost {
   // 2 background).
   void setAppStateForTesting(int state) { setAppState(state); }
 
+  // Windows (AppWindows.cc), main thread unless noted. A window's id is its
+  // surface's id (a root tag): the main window's is the one run() got.
+  // Ids for new windows; any thread.
+  facebook::react::SurfaceId allocateWindowId();
+  void openWindow(facebook::react::SurfaceId id, WindowOptions options);
+  // Closes it (the main window hides if others are open, or the app stays
+  // up without windows: setQuitOnLastWindowClosed(false)).
+  void closeWindow(facebook::react::SurfaceId id);
+  void setWindowTitle(facebook::react::SurfaceId id, const std::string &title);
+  void setWindowSize(facebook::react::SurfaceId id, int width, int height);
+  void setWindowMinSize(facebook::react::SurfaceId id, int width, int height);
+  void focusWindow(facebook::react::SurfaceId id);
+  void setInterceptClose(facebook::react::SurfaceId id, bool intercept);
+  void setQuitOnLastWindowClosed(bool quit) { options_.quitOnLastWindowClosed = quit; }
+  // The open windows, main first: {id, title, width, height, focused}; and
+  // one window's metrics for useWindowDimensions ({width, height, scale,
+  // fontScale}, or null). Any thread.
+  folly::dynamic windowList() const;
+  folly::dynamic windowMetrics(facebook::react::SurfaceId id) const;
+  facebook::react::SurfaceId mainWindowId() const { return surfaceId_; }
+  // Tests.
+  GtkWindow *windowFor(facebook::react::SurfaceId id) const;
+  GtkWidget *rootFor(facebook::react::SurfaceId id) const;
+  GtkPointerHandler *pointerHandlerFor(facebook::react::SurfaceId id);
+
   // Dev mode: reloads the JS (like `r` in Metro's terminal).
   void reload();
   void openDebugger();
@@ -130,6 +175,14 @@ class RNGtkHost {
   class LogBoxDelegate;
   class DeviceInfoModule;
   class AppearanceModule;
+  class WindowsModule;
+  struct AppWindow;
+  // LogBox runs as its own React surface (AppRegistry "LogBox").
+  static constexpr facebook::react::SurfaceId kLogBoxSurfaceId = 1001;
+  std::shared_ptr<facebook::react::TurboModule> makeWindowsModule(
+      const std::shared_ptr<facebook::react::CallInvoker> &jsInvoker);
+  // Shutting down: the windows opened from JS go, without events.
+  void closeAllWindows();
   // Dimensions' window (the surface) and screen (the window's monitor),
   // in GTK's logical pixels (React Native's points).
   struct Metrics {
@@ -150,9 +203,22 @@ class RNGtkHost {
   void loadFromDevServer();
   void showErrorBanner(const std::string &message);
   void onAppearanceChanged();
-  // AppState from the window: active, inactive or minimized/suspended.
+  // AppState from the app's windows: active while one is, inactive, or
+  // background when they're all minimized/suspended or hidden.
   void connectWindowState();
+  void trackWindow(GtkWindow *window);
+  static void onTrackedWindowGone(gpointer self, GObject *window);
   void updateAppState();
+  // Windows (AppWindows.cc).
+  void emitWindowEvent(facebook::react::SurfaceId id, const char *type,
+                       folly::dynamic extra = folly::dynamic::object());
+  facebook::react::SurfaceId idForWindow(GtkWindow *window) const;
+  bool onMainCloseRequest();
+  void onWindowLayout(facebook::react::SurfaceId id);
+  void destroyWindow(facebook::react::SurfaceId id);
+  void quitIfNoWindows();
+  void storeMetrics(facebook::react::SurfaceId id, float width, float height);
+  facebook::react::LayoutConstraints constraintsFor(float width, float height) const;
   void setAppState(int state);
   // The surfaces' layout: size, RTL direction, font scale.
   facebook::react::LayoutConstraints layoutConstraints() const;
@@ -191,7 +257,24 @@ class RNGtkHost {
   std::shared_ptr<AccessibilityStatus> accessibilityStatus_;
   std::shared_ptr<PlatformState> platform_;
   GtkWindow *window_{nullptr};
-  GdkSurface *windowSurface_{nullptr};
+  // The app's windows AppState follows (all of the GtkApplication's).
+  GtkApplication *trackedApp_{nullptr};
+  std::vector<GtkWindow *> trackedWindows_;  // weak
+  // Windows opened from JS (AppWindows.cc), by surface id.
+  // (shared_ptr: AppWindow is complete only in AppWindows.cc.)
+  std::map<facebook::react::SurfaceId, std::shared_ptr<AppWindow>> windows_;
+  std::atomic<int> nextWindowId_{11};
+  std::set<facebook::react::SurfaceId> interceptClose_;
+  bool mainHidden_{false};
+  // Each window's size and title for JS (any thread).
+  mutable std::mutex windowsMutex_;
+  struct WindowInfo {
+    std::string title;
+    float width, height;
+  };
+  std::map<facebook::react::SurfaceId, WindowInfo> windowInfo_;
+  // Lets callbacks posted to the main loop tell the host is gone.
+  std::shared_ptr<int> alive_ = std::make_shared<int>(0);
   gulong fontDpiHandler_{0};
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;

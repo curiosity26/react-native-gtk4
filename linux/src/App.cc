@@ -202,6 +202,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
       // The surface follows the window: Dimensions' window is its size.
       .followsWindowSize = true,
       .initialURL = run->initialURL,
+      .quitOnLastWindowClosed = o.quitOnLastWindowClosed,
   };
   run->host = new RNGtkHost(hostOptions, GTK_OVERLAY(overlay));
   if (run->dev) addDevControls(window, run->host, run->verbose);
