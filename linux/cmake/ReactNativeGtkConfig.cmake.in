@@ -62,6 +62,13 @@ endif()
 # without run-linux). Debug builds run the host from this install (RPATH).
 # Other builds are self-contained: the host libraries are copied next to
 # the executable (debug info stripped) and found through RPATH $ORIGIN.
+#
+# They also install (cmake --install, which package-linux runs):
+#   bin/<target>
+#   lib/<target>/        the host libraries (RPATH $ORIGIN/../lib/<target>)
+#   share/<target>/      index.bundle.js and assets/, where the app looks
+#   share/...            <build>/packaging/share: the .desktop file,
+#                        MetaInfo, icons and licenses package-linux writes
 function(rngtk_app target)
   if(DEFINED RNGTK_AUTOLINKING_DIR AND EXISTS "${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
     include("${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
@@ -78,22 +85,33 @@ function(rngtk_app target)
       BUILD_RPATH "${ReactNativeGtk_LIBRARY_DIR}")
     return()
   endif()
-  # Only $ORIGIN: not the cache, which CMake would add for the imported
-  # library.
+  # $ORIGIN for the build directory, $ORIGIN/../lib/<target> installed;
+  # not the cache, which CMake would add for the imported library.
   set_target_properties(${target} PROPERTIES
-    BUILD_WITH_INSTALL_RPATH ON INSTALL_RPATH "$ORIGIN")
+    BUILD_WITH_INSTALL_RPATH ON
+    INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib/${target}")
   set(dir $<TARGET_FILE_DIR:${target}>)
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${ReactNativeGtk_LIBRARIES} ${dir}
     VERBATIM)
-  if(CMAKE_STRIP)
-    foreach(lib ${ReactNativeGtk_LIBRARIES})
-      get_filename_component(name ${lib} NAME)
+  set(libs "")
+  foreach(lib ${ReactNativeGtk_LIBRARIES})
+    get_filename_component(name ${lib} NAME)
+    list(APPEND libs "${dir}/${name}")
+    if(CMAKE_STRIP)
       add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_STRIP} --strip-debug ${dir}/${name}
         VERBATIM)
-    endforeach()
-  endif()
+    endif()
+  endforeach()
+
+  # Fixed directories (not GNUInstallDirs' lib/<multiarch>): the RPATH and
+  # the app's ../share/<target> lookup depend on them.
+  install(TARGETS ${target} RUNTIME DESTINATION bin)
+  install(FILES ${libs} DESTINATION lib/${target})
+  install(FILES ${dir}/index.bundle.js DESTINATION share/${target} OPTIONAL)
+  install(DIRECTORY ${dir}/assets DESTINATION share/${target} OPTIONAL)
+  install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/packaging/share/ DESTINATION share OPTIONAL)
 endfunction()
 
 unset(_rngtk_prefix)

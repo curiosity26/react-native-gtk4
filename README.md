@@ -148,4 +148,7 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
 3. Desktop parity: modals, windows, menus, drag and drop, dialogs,
    notifications; native module template and autolinking. (No system
    tray: stock GNOME has none.) **Done.**
-4. Packaging (Flatpak first) and community library ports.
+4. Packaging and community library ports: `package-linux` with the app's
+   identity in app.json, an installable tree with a `.desktop` file,
+   AppStream MetaInfo and icons ([docs/packaging.md](docs/packaging.md));
+   Flatpak, .deb and .rpm next. **In progress.**

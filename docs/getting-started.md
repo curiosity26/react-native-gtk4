@@ -56,6 +56,9 @@ The package is published on GitHub Packages; tell npm where to find the
   Edit them freely: `main.cc` is the app's own entry point.
 - Adds `@curiosity26/react-native-gtk4` to `dependencies` if it isn't there.
 - Adds the `"linux": "react-native run-linux"` script.
+- Adds a `linux` block to `app.json`: the app's id, name, summary,
+  categories and icon (`linux/icon.svg`, a placeholder) for
+  `package-linux` ([packaging.md](packaging.md)).
 - Wraps `metro.config.js`'s export with `withLinux(...)`, which adds the
   `linux` platform to Metro. If the file is unusual, it prints the edit to
   make instead.
@@ -127,8 +130,9 @@ MyApp  index.bundle.js  assets/  librngtk_host.so  libhermesvm.so  libjsi.so
 ```
 
 The app finds `index.bundle.js` next to its executable, or in
-`../share/MyApp/` for an installed layout. Packaging (Flatpak first) is
-Phase 4.
+`../share/MyApp/` for an installed layout. `npx react-native package-linux`
+installs it into that layout, with a `.desktop` file, AppStream MetaInfo
+and icons: see [packaging.md](packaging.md).
 
 ## The app's command line
 
