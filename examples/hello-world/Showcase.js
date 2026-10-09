@@ -22,8 +22,6 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  useColorScheme,
-  useWindowDimensions,
 } from 'react-native';
 
 const halves = require('./assets/halves.png');
@@ -72,9 +70,10 @@ function Btn({title, onPress, color = '#007AFF'}) {
 
 // ---- Home ----------------------------------------------------------------
 
+// Not shown yet: window size (ReactCxxPlatform's DeviceInfo reports a fixed
+// 1280x720, and the window doesn't resize) and the color scheme (no
+// Appearance module).
 function Home() {
-  const {width, height} = useWindowDimensions();
-  const scheme = useColorScheme();
   const c = Platform.constants;
   return (
     <ScrollView contentContainerStyle={styles.page}>
@@ -82,7 +81,7 @@ function Home() {
         <Text style={styles.heroTitle}>Hello, World!</Text>
         <Text style={styles.heroSub}>React Native on GTK4</Text>
       </View>
-      <Section title="Platform" hint="Resize the window: the size updates live.">
+      <Section title="Platform" hint="Platform.OS and Platform.constants, from the GTK host.">
         <Text style={styles.mono}>Platform.OS = {Platform.OS}</Text>
         <Text style={styles.mono}>window system = {String(c.windowSystem)}</Text>
         <Text style={styles.mono}>
@@ -90,9 +89,8 @@ function Home() {
           {c.reactNativeVersion?.patch}
         </Text>
         <Text style={styles.mono}>
-          window = {Math.round(width)} x {Math.round(height)}
+          {String(c.Release)} · GTK {String(c.gtkVersion)} · desktop {String(c.desktop || '-')}
         </Text>
-        <Text style={styles.mono}>color scheme = {String(scheme)}</Text>
       </Section>
       <Section title="How to use this app">
         <Text style={styles.body}>
@@ -227,8 +225,14 @@ function Buttons() {
               <Text style={styles.btnText}>WithoutFeedback</Text>
             </View>
           </TouchableWithoutFeedback>
-          <Button title="Button" onPress={() => log('Button onPress')} />
-          <Button title="Disabled" disabled onPress={() => log('should not fire')} />
+          {/* Button's own styles are iOS/Android only: give it a color. */}
+          <Button title="Button" color="#D1D1D6" onPress={() => log('Button onPress')} />
+          <Button
+            title="Disabled"
+            color="#D1D1D6"
+            disabled
+            onPress={() => log('should not fire')}
+          />
         </View>
       </Section>
       <Section
@@ -620,8 +624,13 @@ const PAGES = [
   ['Network', Network],
 ];
 
-export default function Showcase() {
-  const [page, setPage] = useState(0);
+// initialPage (a page name or index) opens that page first, e.g.
+// rn-gtk-host --module Showcase --initial-props '{"initialPage":"Lists"}'.
+export default function Showcase({initialPage = 0}) {
+  const [page, setPage] = useState(() => {
+    const i = PAGES.findIndex(([name]) => name === initialPage);
+    return i >= 0 ? i : Number(initialPage) || 0;
+  });
   const [events, setEvents] = useState([]);
   const log = useCallback(msg => {
     const t = new Date().toLocaleTimeString();
