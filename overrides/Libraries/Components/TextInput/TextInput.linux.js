@@ -6,7 +6,8 @@
  * path (RCTSinglelineTextInputView / RCTMultilineTextInputView, which
  * Fabric names "TextInput"; the host builds React Native's iOS C++
  * TextInput component). The only changes: three `Platform.OS === 'ios'`
- * checks read `isIOSLike`.
+ * checks read `isIOSLike`, and a `contextMenu` prop (as on View.linux.js)
+ * that replaces GTK's own menu.
  */
 /**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
@@ -18,6 +19,7 @@
  * @format
  */
 
+import {contextMenuProps} from '../../../../js/menuItems';
 import type {HostInstance} from 'react-native-upstream/src/private/types/HostInstance';
 import type {____TextStyle_Internal as TextStyleInternal} from 'react-native-upstream/Libraries/StyleSheet/StyleSheetTypes';
 import type {
@@ -272,6 +274,8 @@ function InternalTextInput(props: TextInputProps): React.Node {
     selectionColor,
     selectionHandleColor,
     cursorColor,
+    // $FlowFixMe[prop-missing] Linux: a context menu (js/menuItems.js).
+    contextMenu,
     ...otherProps
   } = props;
 
@@ -599,6 +603,8 @@ function InternalTextInput(props: TextInputProps): React.Node {
         // Figure out imperative + forward refs.
         ref={ref as $FlowFixMe}
         {...otherProps}
+        // $FlowFixMe[prop-missing]
+        {...contextMenuProps(contextMenu, otherProps.onContextMenuSelect)}
         {...eventHandlers}
         acceptDragAndDropTypes={props.experimental_acceptDragAndDropTypes}
         accessibilityLabel={_accessibilityLabel}

@@ -368,6 +368,56 @@ content is a root for pointer and keyboard input of its own, so presses,
 hover, keys and selectable text work in it as in the main window.
 `useWindowDimensions()` inside a modal still reports the app's window.
 
+## Context menus
+
+Any View (Pressable and the Touchables too) and TextInput take a
+`contextMenu` prop: items the host pops up as a GtkPopoverMenu on
+right-click (at the pointer), and on the Menu key or Shift+F10 (pointing
+at the focused view). `ContextMenu` from `@curiosity26/react-native-gtk4`
+is a View with an `onSelect` for all its items. The nearest view with a
+menu shows it: a click on a child without one shows its parent's.
+
+```js
+import {ContextMenu} from '@curiosity26/react-native-gtk4';
+
+<View
+  contextMenu={[
+    {title: 'Open', shortcut: 'Ctrl+O', onSelect: open},
+    {title: 'Rename…', shortcut: 'F2', onSelect: rename},
+    {type: 'separator'},
+    {title: 'Show hidden files', checked: showHidden, onSelect: toggleHidden},
+    {title: 'Sort by', items: [
+      {title: 'Name', type: 'radio', checked: sort === 'name', onSelect: () => setSort('name')},
+      {title: 'Date', type: 'radio', checked: sort === 'date', onSelect: () => setSort('date')},
+    ]},
+    {title: 'Delete', disabled: !selected, onSelect: remove},
+  ]}>
+```
+
+| Item | Notes |
+| --- | --- |
+| `title`, `onSelect(item)` | `onSelect` runs when the item is chosen; the view's `onContextMenuSelect({nativeEvent: {id}})` after it |
+| `disabled` (or `enabled: false`) | greyed out |
+| `checked`, `type: 'checkbox'` | `checked` alone makes a checkbox. JS owns the state: flip it in `onSelect` and the next menu shows it |
+| `type: 'radio'` | radio items between separators are one group; the `checked` one is marked |
+| `items` | a submenu |
+| `shortcut` | `'Ctrl+Shift+S'`, `'Alt+F4'`, `'F2'`, `'Delete'`, or GTK's `'<Control>s'`: shown next to the item (in the menu bar it also works as an accelerator) |
+| `{type: 'separator'}` or `'-'` | a line between sections |
+
+React Native core has no menu API, and react-native-windows'
+ContextFlyout and react-native-macos' menus differ; this shape is the
+common part, with GTK's model (sections, checkbox and radio items,
+accelerators). A TextInput keeps GTK's own menu (Cut, Copy, Paste, Emoji…),
+and selectable Text its Copy / Select All, unless they have a
+`contextMenu` themselves; an ancestor's menu doesn't replace theirs.
+Screen readers see a menu with menu items (check and radio items with
+their state); the popover takes keyboard focus, and Escape closes it.
+
+`GalleryMenus` (`--module GalleryMenus --self-test`) right-clicks, presses
+Menu and Shift+F10, checks what each menu holds (labels, sections,
+submenus, shortcuts, disabled and checked items), chooses items, and checks
+the TextInput rules; the Showcase's Menus page has both kinds.
+
 ## Performance
 
 The richer styling keeps plain views cheap: the rarely used styles

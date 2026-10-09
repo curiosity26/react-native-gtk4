@@ -37,7 +37,10 @@ transparent, nested, a modal dialog to Orca
 ([docs/components.md](docs/components.md#modal)). `Alert.alert` and
 `Alert.prompt` on a GTK alert dialog, and file dialogs (`Dialogs` from
 `@curiosity26/react-native-gtk4`) on the desktop's file chooser
-([docs/apis.md](docs/apis.md#alert)).
+([docs/apis.md](docs/apis.md#alert)). Context menus on any view
+(`contextMenu`, `ContextMenu`) and the app's menu bar (`MenuBar`), with
+submenus, checkbox and radio items and shortcuts
+([docs/components.md](docs/components.md#context-menus)).
 
 ## Quick start
 

@@ -13,6 +13,7 @@
 #include <react/renderer/components/view/primitives.h>
 
 #include <algorithm>
+#include <utility>
 #include <cmath>
 #include <cstring>
 
@@ -148,8 +149,11 @@ bool GtkPointerHandler::handleEvent(GdkEvent *event) {
   }
   input.x = in_root.x;
   input.y = in_root.y;
+  contextMenuShown_ = false;
   dispatch(input);
-  return false;  // let GTK carry on (cursors, the dev menu button...)
+  // Let GTK carry on (cursors, the dev menu button...), except after our
+  // context menu opened: a TextInput's own mustn't open too.
+  return std::exchange(contextMenuShown_, false);
 }
 
 GtkPointerHandler::Target GtkPointerHandler::targetAt(double x, double y,
@@ -232,7 +236,9 @@ void GtkPointerHandler::dispatch(const Input &input) {
       if (primary) {
         touches_[id] = ActiveTouch{target, input.x, input.y, input.timeMs};
         dispatchTouch("touchStart", id, input);
-      } else if (input.button == 3 &&
+      } else if (input.button == 3 && target.widget &&
+                 !(contextMenuShown_ = mountingManager_.showContextMenu(
+                       root_, target.widget.get(), input.x, input.y)) &&
                  mountingManager_.isSelectableText(
                      mountingManager_.targetForView(target.widget.get()).tag)) {
         showCopyMenu(target, input.x, input.y);

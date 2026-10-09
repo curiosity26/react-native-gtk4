@@ -37,6 +37,10 @@ void fromRawValue(const PropsParserContext & /*context*/, const RawValue &value,
   flag("shiftKey", result.shiftKey);
 }
 
+void fromRawValue(const PropsParserContext & /*context*/, const RawValue &value, ContextMenuItems &result) {
+  result.items = (folly::dynamic)value;
+}
+
 HostPlatformViewProps::HostPlatformViewProps(
     const PropsParserContext &context,
     const HostPlatformViewProps &sourceProps,
@@ -82,7 +86,8 @@ HostPlatformViewProps::HostPlatformViewProps(
           rawProps,
           "onAuxClickCapture",
           sourceProps.onAuxClickCapture,
-          false)) {}
+          false)),
+      contextMenu(convertRawProp(context, rawProps, "contextMenu", sourceProps.contextMenu, {})) {}
 
 void HostPlatformViewProps::setProp(
     const PropsParserContext &context,
@@ -103,6 +108,7 @@ void HostPlatformViewProps::setProp(
     RAW_SET_PROP_SWITCH_CASE_BASIC(onMouseLeave);
     RAW_SET_PROP_SWITCH_CASE_BASIC(onAuxClick);
     RAW_SET_PROP_SWITCH_CASE_BASIC(onAuxClickCapture);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(contextMenu);
   }
 }
 

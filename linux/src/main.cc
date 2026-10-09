@@ -2818,6 +2818,322 @@ void add_dialogs_steps() {
       GTK_RESPONSE_ACCEPT, "#12 folder: [\"DIR/sub\"]"));
 }
 
+// ---------------------------------------------------------------------------
+// GalleryMenus checks
+
+bool is_menus() { return opts.module == "GalleryMenus"; }
+
+GtkWidget *context_menu() { return app.host->mountingManager().contextMenuPopover(); }
+
+// A right-click (press and release of button 3) on view `id`.
+void right_click(const char *id) {
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_point_t c = center_of(v);
+  rngtk::GtkPointerHandler::Input input{};
+  input.x = c.x;
+  input.y = c.y;
+  input.button = 3;
+  input.timeMs = uint32_t(g_get_monotonic_time() / 1000);
+  input.phase = rngtk::GtkPointerHandler::Phase::Down;
+  app.host->pointerHandler()->dispatch(input);
+  input.phase = rngtk::GtkPointerHandler::Phase::Up;
+  app.host->pointerHandler()->dispatch(input);
+}
+
+// The labels of a menu model's items, sections flattened, "-" between
+// sections, ">" before a submenu's label.
+std::string menu_labels(GMenuModel *model) {
+  std::string out;
+  for (int i = 0; i < g_menu_model_get_n_items(model); i++) {
+    if (GMenuModel *section = g_menu_model_get_item_link(model, i, G_MENU_LINK_SECTION)) {
+      if (!out.empty()) out += " - ";
+      out += menu_labels(section);
+      g_object_unref(section);
+      continue;
+    }
+    char *label = nullptr;
+    g_menu_model_get_item_attribute(model, i, G_MENU_ATTRIBUTE_LABEL, "s", &label);
+    if (!out.empty() && out.back() != ' ') out += ", ";
+    if (GMenuModel *sub = g_menu_model_get_item_link(model, i, G_MENU_LINK_SUBMENU)) {
+      out += std::string(">") + (label ? label : "") + "(" + menu_labels(sub) + ")";
+      g_object_unref(sub);
+    } else {
+      out += label ? label : "";
+    }
+    g_free(label);
+  }
+  return out;
+}
+
+// Finds the item labelled `label` (sections and submenus too): its action,
+// target and accel.
+bool menu_item(GMenuModel *model, const std::string &label, std::string *action,
+               GVariant **target, std::string *accel) {
+  for (int i = 0; i < g_menu_model_get_n_items(model); i++) {
+    for (const char *link : {G_MENU_LINK_SECTION, G_MENU_LINK_SUBMENU}) {
+      if (GMenuModel *sub = g_menu_model_get_item_link(model, i, link)) {
+        bool found = menu_item(sub, label, action, target, accel);
+        g_object_unref(sub);
+        if (found) return true;
+      }
+    }
+    char *l = nullptr;
+    g_menu_model_get_item_attribute(model, i, G_MENU_ATTRIBUTE_LABEL, "s", &l);
+    bool match = l && label == l;
+    g_free(l);
+    if (!match) continue;
+    char *a = nullptr, *k = nullptr;
+    g_menu_model_get_item_attribute(model, i, G_MENU_ATTRIBUTE_ACTION, "s", &a);
+    g_menu_model_get_item_attribute(model, i, "accel", "s", &k);
+    if (action) *action = a ? a : "";
+    if (accel) *accel = k ? k : "";
+    if (target) *target = g_menu_model_get_item_attribute_value(model, i, G_MENU_ATTRIBUTE_TARGET, nullptr);
+    g_free(a);
+    g_free(k);
+    return true;
+  }
+  return false;
+}
+
+GMenuModel *popover_model(GtkWidget *popover) {
+  return popover ? gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover)) : nullptr;
+}
+
+// Picks `label` in the context menu showing, as its menu button does.
+bool choose(const std::string &label) {
+  GtkWidget *popover = context_menu();
+  std::string action;
+  GVariant *target = nullptr;
+  if (!popover || !menu_item(popover_model(popover), label, &action, &target, nullptr)) {
+    return false;
+  }
+  gtk_popover_popdown(GTK_POPOVER(popover));
+  bool ok = gtk_widget_activate_action_variant(popover, action.c_str(), target);
+  if (target) g_variant_unref(target);
+  return ok;
+}
+
+// The state of `label`'s action in the context menu showing (a checkbox's
+// boolean, a radio group's checked id), or null.
+GVariant *item_state(const std::string &label) {
+  GtkWidget *popover = context_menu();
+  std::string action;
+  if (!popover || !menu_item(popover_model(popover), label, &action, nullptr, nullptr)) {
+    return nullptr;
+  }
+  auto *actions = G_ACTION_GROUP(g_object_get_data(G_OBJECT(popover), "rngtk-menu-actions"));
+  std::string name = action.substr(action.find('.') + 1);
+  return actions ? g_action_group_get_action_state(actions, name.c_str()) : nullptr;
+}
+
+bool item_enabled(const std::string &label) {
+  GtkWidget *popover = context_menu();
+  std::string action;
+  if (!popover || !menu_item(popover_model(popover), label, &action, nullptr, nullptr)) return false;
+  auto *actions = G_ACTION_GROUP(g_object_get_data(G_OBJECT(popover), "rngtk-menu-actions"));
+  std::string name = action.substr(action.find('.') + 1);
+  return actions && g_action_group_get_action_enabled(actions, name.c_str());
+}
+
+void close_menu() {
+  if (GtkWidget *p = context_menu()) gtk_popover_popdown(GTK_POPOVER(p));
+}
+
+GtkApplication *gtk_app() { return gtk_window_get_application(GTK_WINDOW(app.window)); }
+
+void add_menus_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "right-click: the view's contextMenu pops up (GtkPopoverMenu) at the pointer",
+      [] { right_click("menu-box"); },
+      [] {
+        GtkWidget *p = context_menu();
+        if (!p || !gtk_widget_get_visible(p)) return false;
+        std::string labels = menu_labels(popover_model(p));
+        printf("  menu: %s\n", labels.c_str());
+        return labels ==
+               "Open, Rename… - Show hidden files, >Sort by(Name, Date) - Delete";
+      }});
+  app.steps.push_back(Step{
+      "  ...shortcut labels, disabled items, a checkbox's state", [] {},
+      [] {
+        std::string accel;
+        bool ok = menu_item(popover_model(context_menu()), "Open", nullptr, nullptr, &accel) &&
+                  accel == "<Control>o";
+        GVariant *hidden = item_state("Show hidden files");
+        ok = ok && hidden && g_variant_is_of_type(hidden, G_VARIANT_TYPE_BOOLEAN) &&
+             !g_variant_get_boolean(hidden) && !item_enabled("Delete") && item_enabled("Open");
+        if (hidden) g_variant_unref(hidden);
+        return ok;
+      }});
+  app.steps.push_back(Step{"choosing an item runs its onSelect (and ContextMenu's)",
+                           [] { choose("Open"); },
+                           [] { return !context_menu() && has_text(app.root, "#1 via Open ·"); }});
+  app.steps.push_back(Step{"a checkbox item: JS flips its state, the next menu shows it",
+                           [] {
+                             right_click("menu-box");
+                             choose("Show hidden files");
+                           },
+                           [] {
+                             if (!has_text(app.root, "hidden true")) return false;
+                             if (!context_menu()) right_click("menu-box");
+                             GVariant *v = item_state("Show hidden files");
+                             bool on = v && g_variant_get_boolean(v);
+                             if (v) g_variant_unref(v);
+                             return on;
+                           }});
+  app.steps.push_back(Step{"radio items in a submenu: one group, the checked one shown",
+                           [] { choose("Date"); },
+                           [] {
+                             if (!has_text(app.root, "sort date")) return false;
+                             if (!context_menu()) right_click("menu-box");
+                             GVariant *v = item_state("Date");
+                             bool on = v && g_variant_is_of_type(v, G_VARIANT_TYPE_STRING) &&
+                                       std::string(g_variant_get_string(v, nullptr)) == "4/1";
+                             if (v) g_variant_unref(v);
+                             close_menu();
+                             return on;
+                           }});
+  app.steps.push_back(Step{"a view without a menu shows its nearest ancestor's",
+                           [] { right_click("plain-inner"); },
+                           [] {
+                             GtkWidget *p = context_menu();
+                             bool ok = p && menu_labels(popover_model(p)).rfind("Open,", 0) == 0;
+                             if (ok) close_menu();
+                             return ok;
+                           }});
+  app.steps.push_back(Step{"a view with a menu of its own shows its own",
+                           [] { right_click("own-inner"); },
+                           [] {
+                             GtkWidget *p = context_menu();
+                             return p && menu_labels(popover_model(p)) == "Inner action" &&
+                                    choose("Inner action");
+                           }});
+  app.steps.push_back(Step{"  ...and its onSelect runs", [] {},
+                           [] { return has_text(app.root, "Inner action ·"); }});
+  static int frames = 0;
+  app.steps.push_back(Step{"a TextInput keeps GTK's own menu (not the box's)",
+                           [] {
+                             frames = 0;
+                             right_click("plain-input");
+                           },
+                           [] { return ++frames > 5 && !context_menu(); }});
+  app.steps.push_back(Step{"  ...unless it has a contextMenu itself",
+                           [] { right_click("menu-input"); },
+                           [] {
+                             GtkWidget *p = context_menu();
+                             return p && menu_labels(popover_model(p)) == "Insert date" &&
+                                    choose("Insert date");
+                           }});
+  app.steps.push_back(Step{"  ...whose onSelect runs", [] {},
+                           [] { return has_text(app.root, "Insert date ·"); }});
+  app.steps.push_back(Step{"the Menu key opens the focused view's menu, pointing at it",
+                           [] {
+                             gtk_widget_grab_focus(by_id("focus-me"));
+                             app.host->keyboardHandler()->keyPressed(GDK_KEY_Menu, 135,
+                                                                     GdkModifierType(0));
+                             app.host->keyboardHandler()->keyReleased(GDK_KEY_Menu, 135,
+                                                                      GdkModifierType(0));
+                           },
+                           [] {
+                             GtkWidget *p = context_menu();
+                             bool ok = p && menu_labels(popover_model(p)).rfind("Open,", 0) == 0 &&
+                                       gtk_popover_get_has_arrow(GTK_POPOVER(p));
+                             if (ok) close_menu();
+                             return ok;
+                           }});
+  app.steps.push_back(Step{"  ...and so does Shift+F10",
+                           [] {
+                             app.host->keyboardHandler()->keyPressed(GDK_KEY_F10, 76,
+                                                                     GDK_SHIFT_MASK);
+                             app.host->keyboardHandler()->keyReleased(GDK_KEY_F10, 76,
+                                                                      GDK_SHIFT_MASK);
+                           },
+                           [] {
+                             GtkWidget *p = context_menu();
+                             bool ok = p != nullptr;
+                             if (ok) close_menu();
+                             return ok;
+                           }});
+  app.steps.push_back(Step{
+      "MenuBar.setMenu: the app's menu bar, shown in its window",
+      [] {},
+      [] {
+        GMenuModel *bar = gtk_application_get_menubar(gtk_app());
+        if (!bar) return false;
+        std::string labels = menu_labels(bar);
+        printf("  menu bar: %s\n", labels.c_str());
+        return labels == ">File(New, Open… - Close), >View(Sidebar)" &&
+               gtk_application_window_get_show_menubar(GTK_APPLICATION_WINDOW(app.window)) &&
+               first_of_type(app.window, GTK_TYPE_POPOVER_MENU_BAR) != nullptr;
+      }});
+  app.steps.push_back(Step{
+      "  ...its shortcuts are the app's accelerators",
+      [] {},
+      [] {
+        gchar **actions = gtk_application_get_actions_for_accel(gtk_app(), "<Control>n");
+        bool ok = actions && actions[0];
+        g_strfreev(actions);
+        actions = gtk_application_get_actions_for_accel(gtk_app(), "<Control>w");
+        // Close is disabled, but its accelerator is still registered.
+        ok = ok && actions && actions[0];
+        g_strfreev(actions);
+        return ok;
+      }});
+  app.steps.push_back(Step{
+      "  ...Ctrl+N fires New with the menu closed (the window's shortcut)",
+      [] {
+        // What a real Ctrl+N press reaches: the window's application
+        // shortcuts.
+        GListModel *controllers = gtk_widget_observe_controllers(app.window);
+        guint keyval = GDK_KEY_n;
+        for (guint i = 0; i < g_list_model_get_n_items(controllers); i++) {
+          auto *c = G_OBJECT(g_list_model_get_item(controllers, i));
+          if (GTK_IS_SHORTCUT_CONTROLLER(c)) {
+            GListModel *shortcuts = G_LIST_MODEL(c);
+            for (guint j = 0; j < g_list_model_get_n_items(shortcuts); j++) {
+              auto *sc = GTK_SHORTCUT(g_list_model_get_item(shortcuts, j));
+              GtkShortcutTrigger *trigger = gtk_shortcut_get_trigger(sc);
+              GtkShortcutTrigger *want = gtk_keyval_trigger_new(keyval, GDK_CONTROL_MASK);
+              if (gtk_shortcut_trigger_equal(trigger, want)) {
+                gtk_shortcut_action_activate(gtk_shortcut_get_action(sc),
+                                             GTK_SHORTCUT_ACTION_EXCLUSIVE, app.window,
+                                             gtk_shortcut_get_arguments(sc));
+                keyval = 0;
+              }
+              g_object_unref(want);
+              g_object_unref(sc);
+            }
+          }
+          g_object_unref(c);
+        }
+        g_object_unref(controllers);
+      },
+      [] { return has_text(app.root, "menubar New ·"); }});
+  app.steps.push_back(Step{
+      "  ...a checkbox in the bar: chosen from the app's actions, its state follows JS",
+      [] {
+        std::string action;
+        menu_item(gtk_application_get_menubar(gtk_app()), "Sidebar", &action, nullptr, nullptr);
+        g_action_group_activate_action(G_ACTION_GROUP(gtk_app()), action.substr(4).c_str(),
+                                       nullptr);
+      },
+      [] {
+        if (!has_text(app.root, "sidebar false")) return false;
+        std::string action;
+        if (!menu_item(gtk_application_get_menubar(gtk_app()), "Sidebar", &action, nullptr,
+                       nullptr)) {
+          return false;
+        }
+        GVariant *v = g_action_group_get_action_state(G_ACTION_GROUP(gtk_app()),
+                                                      action.substr(4).c_str());
+        bool off = v && !g_variant_get_boolean(v);
+        if (v) g_variant_unref(v);
+        return off;
+      }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -2916,6 +3232,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_menus() && app.steps.empty()) {
+    add_menus_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_dialogs() && app.steps.empty()) {
     add_dialogs_steps();
     enter(Phase::Steps);
@@ -2963,7 +3282,7 @@ void check_app(bool first) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
-               is_dialogs()) {
+               is_dialogs() || is_menus()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
