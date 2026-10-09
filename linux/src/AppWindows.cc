@@ -15,6 +15,7 @@
 #include "RNGtkHost.h"
 
 #include "rngtk/CxxModule.h"
+#include "DevControls.h"
 #include "GtkKeyboardHandler.h"
 #include "GtkMenus.h"
 #include "GtkMountingManager.h"
@@ -291,6 +292,8 @@ void RNGtkHost::openWindow(SurfaceId id, WindowOptions options) {
                    }),
                    this);
   trackWindow(w->window);
+  // Dev mode: Ctrl+R and the dev menu from this window too.
+  if (options_.devMode) addDevControls(GTK_WIDGET(w->window), this, false);
 
   AppWindow &window = *w;
   windows_[id] = std::move(w);
