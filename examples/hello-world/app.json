@@ -29,9 +29,13 @@
         "caption": "The component gallery"
       }
     ],
+    "network": true,
     "maintainer": "Alex Boyce <4050934+curiosity26@users.noreply.github.com>",
     "deb": {
       "package": "rngtk4-showcase"
+    },
+    "rpm": {
+      "name": "rngtk4-showcase"
     }
   }
 }

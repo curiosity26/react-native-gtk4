@@ -79,3 +79,26 @@ describe('deb', () => {
     }
   });
 });
+
+describe('rpm', () => {
+  const {rpmName, rpmVersion, rpmSpec, changelogDate} = require('../lib/cli/rpm');
+
+  test('name, version and changelog date', () => {
+    assert.equal(rpmName(info), 'myapp');
+    assert.equal(rpmName({...info, rpm: {name: 'my-app'}}), 'my-app');
+    assert.equal(rpmVersion('1.0.0-beta.1'), '1.0.0~beta.1');
+    assert.equal(changelogDate('2026-10-09'), 'Fri Oct 09 2026');
+  });
+
+  test('the spec keeps the host libraries private and lists the tree', () => {
+    const spec = rpmSpec(info, {maintainer: 'A <a@b.c>', date: '2026-10-09'});
+    assert.match(spec, /^%global __provides_exclude_from \^%\{_prefix\}\/lib\/MyApp\/\.\*\$$/m);
+    assert.match(spec, /^%global __requires_exclude \^\(librngtk_host\|libhermesvm\|libjsi\)\\\\\.so\.\*\$$/m);
+    assert.match(spec, /^Name: +myapp$/m);
+    assert.match(spec, /^Version: +1\.2\.0$/m);
+    assert.match(spec, /^License: +MIT$/m);
+    assert.match(spec, /^%\{_datadir\}\/applications\/com\.example\.MyApp\.desktop$/m);
+    assert.match(spec, /^%license %\{_datadir\}\/licenses\/com\.example\.MyApp\/$/m);
+    assert.match(spec, /^\* Fri Oct 09 2026 A <a@b\.c> - 1\.2\.0-1$/m);
+  });
+});
