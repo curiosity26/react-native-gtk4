@@ -151,5 +151,6 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
 4. Packaging and community library ports: `package-linux` with the app's
    identity in app.json, an installable tree with a `.desktop` file,
    AppStream MetaInfo and icons, and .deb
-   ([docs/packaging.md](docs/packaging.md)); Flatpak and .rpm next.
-   **In progress.**
+   ([docs/packaging.md](docs/packaging.md)); prebuilt hosts and the npm
+   release ([docs/releasing.md](docs/releasing.md)); Flatpak and .rpm
+   next. **In progress.**

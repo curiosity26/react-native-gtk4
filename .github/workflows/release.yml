@@ -1,0 +1,101 @@
+name: Release
+
+# On a version tag (v0.1.0): prebuilt host libraries for x86_64 and aarch64
+# (Debug for run-linux, Release for package-linux), a GitHub release with
+# them attached, and the npm package on GitHub Packages, which lists them
+# with their checksums (prebuilt-hosts.json).
+#
+# Run by hand (workflow_dispatch) it's a dry run: it builds the prebuilt
+# hosts, packs the package and runs `npm publish --dry-run`, and publishes
+# nothing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install the build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang cmake ninja-build \
+            pkg-config python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev
+      - name: Build the hosts (Debug and Release)
+        run: |
+          scripts/prebuilt-host.js build dist
+          scripts/prebuilt-host.js build dist --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: host
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@curiosity26'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: host-*
+          path: dist
+          merge-multiple: true
+      - name: The tag is the package's version
+        if: github.event_name == 'push'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [[ "$GITHUB_REF_NAME" == "v$version" ]] || {
+            echo "tag $GITHUB_REF_NAME, but package.json has $version"
+            exit 1
+          }
+      - name: List the prebuilt hosts in the package
+        run: |
+          version=$(node -p "require('./package.json').version")
+          scripts/prebuilt-host.js manifest dist \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$version"
+      - name: Test
+        run: npm test
+      - name: Pack
+        run: npm pack --dry-run
+      - name: Release notes
+        run: |
+          version=$(node -p "require('./package.json').version")
+          awk -v v="$version" '$0 ~ "^## " {p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md
+          cat notes.md
+      - name: Publish (dry run)
+        if: github.event_name != 'push'
+        run: npm publish --dry-run
+      - name: GitHub release with the prebuilt hosts
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --title "$GITHUB_REF_NAME" --notes-file notes.md
+      - name: Publish to GitHub Packages
+        if: github.event_name == 'push'
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: npm publish
