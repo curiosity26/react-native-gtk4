@@ -79,6 +79,11 @@ function(rngtk_app target)
     include("${RNGTK_AUTOLINKING_DIR}/autolinking.cmake")
     target_sources(${target} PRIVATE "${RNGTK_AUTOLINKING_DIR}/autolinking.cc")
     target_link_libraries(${target} PRIVATE ${RNGTK_AUTOLINKED_TARGETS})
+    # Linked into a PIE: position-independent too (not every compiler's
+    # default, Fedora's clang's for one).
+    foreach(lib ${RNGTK_AUTOLINKED_TARGETS})
+      set_target_properties(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endforeach()
   else()
     set(none "${CMAKE_CURRENT_BINARY_DIR}/rngtk-no-autolinking.cc")
     file(WRITE "${none}"
