@@ -174,6 +174,17 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   reactperflogger
   runtimeexecutor
   yoga)
+# Newer React Native versions' additions (0.88: the stable C++ API guard,
+# ResizeObserver), when the sources have them.
+set(RNGTK_REACT_COMMON_OPTIONAL_SUBDIRS
+  react/cxxstableapi
+  react/nativemodule/resizeobserver
+  react/renderer/observers/resize)
+foreach(dir ${RNGTK_REACT_COMMON_OPTIONAL_SUBDIRS})
+  if(EXISTS ${REACT_COMMON_DIR}/${dir}/CMakeLists.txt)
+    list(APPEND RNGTK_REACT_COMMON_SUBDIRS ${dir})
+  endif()
+endforeach()
 foreach(dir ${RNGTK_REACT_COMMON_SUBDIRS})
   add_react_common_subdir(${dir})
 endforeach()
@@ -399,6 +410,7 @@ set(RNGTK_REACT_NATIVE_LIBS
     react_nativemodule_featureflags
     react_nativemodule_idlecallbacks
     react_nativemodule_intersectionobserver
+    $<$<TARGET_EXISTS:react_nativemodule_resizeobserver>:react_nativemodule_resizeobserver>
     react_nativemodule_microtasks
     react_nativemodule_mutationobserver
     react_nativemodule_viewtransition
@@ -419,6 +431,7 @@ set(RNGTK_REACT_NATIVE_LIBS
     react_renderer_mounting
     react_renderer_observers_events
     react_renderer_observers_intersection
+    $<$<TARGET_EXISTS:react_renderer_observers_resize>:react_renderer_observers_resize>
     react_renderer_observers_mutation
     react_renderer_runtimescheduler
     react_renderer_scheduler
