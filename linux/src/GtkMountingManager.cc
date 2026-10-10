@@ -473,8 +473,15 @@ void GtkMountingManager::synchronouslyUpdateViewOnUIThread(
   ShadowView &view = it->second;
   const ComponentDescriptor &descriptor = registry->at(view.componentHandle);
   PropsParserContext context{view.surfaceId, *contextContainer_};
+  ShadowView oldView = view;
   view.props = descriptor.cloneProps(context, view.props, RawProps(props));
   applyProps(widget, view);
+  // A library's component (react-native-svg's elements, say) draws its own
+  // props: it gets the animated ones too, each frame, not at the next
+  // commit.
+  if (const NativeComponent *native = nativeComponentFor(view); native && native->update) {
+    native->update(widget, oldView, view);
+  }
 }
 
 void GtkMountingManager::applyLayout(GtkWidget *widget,

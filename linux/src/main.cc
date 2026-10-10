@@ -34,6 +34,10 @@
 //   --step-delay MS        wait before each self-test step (to watch it, or
 //                          to screenshot the desktop)
 #include <ReactCommon/TurboModule.h>
+#include <react/renderer/components/view/ConcreteViewShadowNode.h>
+#include <react/renderer/core/ConcreteComponentDescriptor.h>
+#include <react/renderer/core/propsConversions.h>
+#include <rngtk/Extensions.h>
 #include <glib/gstdio.h>
 #include <glog/logging.h>
 #include <folly/json.h>
@@ -44,6 +48,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <unistd.h>
 #include <functional>
@@ -3693,6 +3698,40 @@ std::string calendar_day() {
   return buffer;
 }
 
+// RNGtkAnimatedProbe: a library component (registered as a package, like
+// the template's) whose update() records the distinct `value`s it gets.
+// GalleryNativeModule animates `value` on the native driver: they must
+// arrive frame by frame (synchronouslyUpdateViewOnUIThread), not only with
+// the next commit.
+namespace animated_probe {
+extern const char ComponentName[] = "RNGtkAnimatedProbe";
+class Props final : public facebook::react::ViewProps {
+ public:
+  Props() = default;
+  Props(const facebook::react::PropsParserContext &context, const Props &source,
+        const facebook::react::RawProps &raw)
+      : ViewProps(context, source, raw),
+        value(facebook::react::convertRawProp(context, raw, "value", source.value, 0.0f)) {}
+  float value = 0;
+};
+using ShadowNode = facebook::react::ConcreteViewShadowNode<ComponentName, Props>;
+using Descriptor = facebook::react::ConcreteComponentDescriptor<ShadowNode>;
+std::set<float> values;
+
+std::shared_ptr<const rngtk::Package> package() {
+  auto p = std::make_shared<rngtk::Package>();
+  p->name = "animated-probe";
+  rngtk::NativeComponent c;
+  c.descriptor = facebook::react::concreteComponentDescriptorProvider<Descriptor>();
+  c.create = [](const facebook::react::ShadowView &) { return gtk_drawing_area_new(); };
+  c.update = [](GtkWidget *, const facebook::react::ShadowView &, const facebook::react::ShadowView &view) {
+    if (auto props = std::dynamic_pointer_cast<const Props>(view.props)) values.insert(props->value);
+  };
+  p->components.push_back(c);
+  return p;
+}
+}  // namespace animated_probe
+
 void add_native_module_steps() {
   app.host->pointerHandler()->setRealInputEnabled(false);
   app.steps.push_back(Step{
@@ -3732,6 +3771,18 @@ void add_native_module_steps() {
         g_date_time_unref(d);
       },
       [] { return has_text(app.root, "picked 2027-01-20"); }});
+  app.steps.push_back(Step{
+      "  ...its own prop on the native driver reaches update() each frame, not at the next commit",
+      [] {
+        animated_probe::values.clear();
+        click("probe-animate");
+      },
+      [] {
+        // 1.5 s at 60 fps: about 90 values; with them only at commits, 2.
+        if (!has_text(app.root, "probe idle") || animated_probe::values.size() < 20) return false;
+        printf("  (%zu distinct values)\n", animated_probe::values.size());
+        return true;
+      }});
   app.steps.push_back(Step{
       "  ...a command from JS (Commands.showToday)",
       [] { click("today"); },
@@ -4126,7 +4177,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
   };
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
-  host_options.packages = {example_package()};
+  host_options.packages = {example_package(), animated_probe::package()};
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
   folly::dynamic props = folly::dynamic::object();
