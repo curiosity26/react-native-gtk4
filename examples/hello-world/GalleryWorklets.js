@@ -115,7 +115,7 @@ export function WorkletsDemo() {
 // bindings on the UI runtime when worklets is there.
 function TapBox() {
   const [taps, setTaps] = useState(0);
-  const tap = useTapGesture({onActivate: () => setTaps(t => t + 1)});
+  const tap = useTapGesture({runOnJS: true, onActivate: () => setTaps(t => t + 1)});
   return (
     <GestureDetector gesture={tap}>
       <View nativeID="wk-tap" style={styles.box}>

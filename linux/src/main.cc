@@ -81,6 +81,7 @@ using namespace facebook::react;
 std::shared_ptr<const rngtk::Package> example_package();
 std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package();
 std::shared_ptr<const rngtk::Package> rngtk_worklets_package();
+std::shared_ptr<const rngtk::Package> rngtk_reanimated_package();
 #ifdef RNGTK_HARNESS_SCREENS
 std::shared_ptr<const rngtk::Package> rngtk_screens_package();
 #endif
@@ -4804,6 +4805,190 @@ void add_worklets_steps() {
                            }});
 }
 
+// GalleryReanimated: Reanimated's animations run on the UI runtime, frame by
+// frame on the frame clock (each step sees the box at several positions
+// on its way), and keep running while JS is busy; a pan moves a box with
+// worklets only; frame times with 60 animated views.
+bool is_reanimated() { return opts.module == "GalleryReanimated"; }
+
+namespace reanimated_test {
+struct Track {
+  double start = 0;
+  std::set<long> seen;  // positions (px) seen on the way
+  int frames = 0;
+};
+double left_of(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v ? bounds_in_root(v).origin.x : 0;
+}
+double width_of(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v ? bounds_in_root(v).size.width : 0;
+}
+}  // namespace reanimated_test
+
+void add_reanimated_steps() {
+  using namespace reanimated_test;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  auto says = [](std::string text) { return shown_text(app.root, text, false) != nullptr; };
+  auto track = std::make_shared<Track>();
+
+  // An animation moving `id` by `distance` px until the page says `done`.
+  auto moves = [&, track, says](const char *button, const char *id, double distance, std::string done) {
+    app.steps.push_back(Step{
+        std::string(button) + ": the box moves " + std::to_string(int(distance)) + " px, frame by frame",
+        [track, button, id] {
+          *track = Track{};
+          track->start = left_of(id);
+          click(button);
+        },
+        [track, id, distance, done, says] {
+          double x = left_of(id);
+          track->seen.insert(lround(x));
+          track->frames++;
+          if (!says(done)) return false;
+          printf("  %zu positions over %d frames, moved %.1f px\n", track->seen.size(), track->frames,
+                 x - track->start);
+          check(std::abs(x - track->start - distance) < 1.5, "  ends where the animation does");
+          check(track->seen.size() >= 5, "  seen on the way (UI-thread frames)");
+          return true;
+        }});
+  };
+  moves("re-timing-go", "re-timing", 200, "timing done true");
+  app.steps.push_back(Step{"withSpring: the box scales to 1.5",
+                           [track] {
+                             *track = Track{};
+                             track->start = width_of("re-spring");
+                             click("re-spring-go");
+                           },
+                           [track, says] {
+                             double w = width_of("re-spring");
+                             track->seen.insert(lround(w));
+                             if (!says("spring done true")) return false;
+                             printf("  width %.1f -> %.1f, %zu sizes on the way\n", track->start, w,
+                                    track->seen.size());
+                             check(std::abs(w - track->start * 1.5) < 1.5, "  scaled 1.5x");
+                             check(track->seen.size() >= 5, "  sizes on the way");
+                             return true;
+                           }});
+  moves("re-decay-go", "re-decay", 200, "decay done at 200");
+  // The press starts the animation, then blocks JS for 900 ms: the 300 ms
+  // animation ends on the UI runtime before JS can render again (JS can't
+  // have moved the box).
+  app.steps.push_back(Step{"an animation keeps running while the JS thread is blocked",
+                           [track] {
+                             *track = Track{};
+                             track->start = left_of("re-blocked");
+                             click("re-block-go");
+                             // Steps wait for JS to be idle: the box's
+                             // positions come from a frame callback.
+                             gtk_widget_add_tick_callback(
+                                 app.root,
+                                 [](GtkWidget *, GdkFrameClock *, gpointer data) -> gboolean {
+                                   auto *t = static_cast<std::shared_ptr<Track> *>(data);
+                                   double x = left_of("re-blocked");
+                                   (*t)->seen.insert(lround(x));
+                                   return x - (*t)->start < 199.5 ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+                                 },
+                                 new std::shared_ptr<Track>(track),
+                                 [](gpointer data) { delete static_cast<std::shared_ptr<Track> *>(data); });
+                           },
+                           [track, says] {
+                             double x = left_of("re-blocked");
+                             if (!says("JS unblocked")) return false;
+                             // (How many frames it got depends on the CPU the
+                             // busy JS thread leaves.)
+                             printf("  %zu positions while JS was busy\n", track->seen.size());
+                             check(std::abs(x - track->start - 200) < 1.5, "  it had finished before JS rendered");
+                             return true;
+                           }});
+
+  app.steps.push_back(Step{"useAnimatedScrollHandler: wheel scrolling drives a shared value",
+                           [] {},
+                           [says] {
+                             if (says("scrolled past 100")) {
+                               printf("  bar width %.0f\n", width_of("re-scroll-bar"));
+                               check(width_of("re-scroll-bar") > 30, "  the bar follows");
+                               return true;
+                             }
+                             wheel("re-scroll", 0, 0.5);
+                             return false;
+                           }});
+  app.steps.push_back(Step{"measure and scrollTo on the UI runtime",
+                           [] { click("re-measure-go"); },
+                           [says] {
+                             if (!says("measured 100x44")) return false;
+                             double y = offset_of("re-scroll");
+                             if (std::abs(y - 300) > 1) return false;
+                             return true;
+                           }});
+
+  // A pan: the box follows on the UI runtime, then springs back.
+  auto held = std::make_shared<double>(0);
+  app.steps.push_back(Step{"a pan moves the box with worklets (gesture-handler + Reanimated)",
+                           [track] {
+                             *track = Track{};
+                             track->start = left_of("re-drag");
+                             gh_drag("re-drag", 0.5, 0.5, 90, 0, 9, 16, false);
+                           },
+                           [track, held] {
+                             *held = left_of("re-drag") - track->start;
+                             if (*held < 60) return false;
+                             printf("  held %.0f px from the start\n", *held);
+                             return true;
+                           }});
+  app.steps.push_back(Step{"  ...and springs back on release",
+                           [track] {
+                             using Phase = rngtk::GtkPointerHandler::Phase;
+                             graphene_point_t c = center_of(by_id("re-drag"));
+                             mouse_ms += 16;
+                             mouse(Phase::Up, c);
+                           },
+                           [track, held, says] {
+                             if (!says("sprang back")) return false;
+                             check(std::abs(left_of("re-drag") - track->start) < 1.5, "  back at the start");
+                             check(says("dragged to " + std::to_string(lround(*held))),
+                                   "  the worklet saw the same translation");
+                             return true;
+                           }});
+
+  // Frame times: the frame clock's intervals, with nothing animating and
+  // with 60 animated views (as the Phase 0 benchmark measures).
+  for (bool animate : {false, true}) {
+    app.steps.push_back(Step{
+        animate ? "frame timing, 60 views animating (Reanimated)" : "frame timing, idle (baseline)",
+        [animate] {
+          timing = ScrollTiming{};
+          if (animate) click("re-bench-go");
+          timing.cpuStartMs = thread_cpu_ms();
+        },
+        [animate] {
+          GdkFrameClock *clock = gtk_widget_get_frame_clock(app.root);
+          gint64 now = gdk_frame_clock_get_frame_time(clock);
+          if (timing.last && now != timing.last) timing.frames.push_back((now - timing.last) / 1000.0);
+          if (now != timing.last) timing.last = now;
+          gtk_widget_queue_draw(app.root);
+          if (timing.frames.size() < 240) return false;
+          double cpu = thread_cpu_ms() - timing.cpuStartMs;
+          std::vector<double> sorted = timing.frames;
+          std::sort(sorted.begin(), sorted.end());
+          double p50 = sorted[sorted.size() / 2], p95 = sorted[sorted.size() * 95 / 100];
+          printf("  %zu frames: p50 %.1f ms, p95 %.1f ms, main thread CPU %.1f ms/frame\n", timing.frames.size(),
+                 p50, p95, cpu / timing.frames.size());
+          if (!animate) return true;
+          check(p95 < 50, "  p95 under 50 ms");
+          return true;
+        }});
+  }
+  app.steps.push_back(Step{"  ...the UI runtime's useFrameCallback counted them", [] {},
+                           [says] { return says("60 boxes: 240 frames"); }});
+  app.steps.push_back(Step{"  ...and the animation stops", [] { click("re-bench-stop"); },
+                           [says] { return says("bench stopped"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -4905,6 +5090,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_worklets() && app.steps.empty()) {
     add_worklets_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_reanimated() && app.steps.empty()) {
+    add_reanimated_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_host_sdk() && app.steps.empty()) {
     add_host_sdk_steps();
     enter(Phase::Steps);
@@ -4982,7 +5170,7 @@ void check_app(bool first) {
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
                is_notifications() || is_native_module() || is_navigation() || is_gestures() ||
-               is_host_sdk() || is_worklets()) {
+               is_host_sdk() || is_worklets() || is_reanimated()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -5211,7 +5399,8 @@ void activate(GtkApplication *gtk_app, gpointer) {
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
   host_options.packages = {example_package(), animated_probe::package(), sdk_probe::package(),
-                           rngtk_gesture_handler_package(), rngtk_worklets_package()};
+                           rngtk_gesture_handler_package(), rngtk_worklets_package(),
+                           rngtk_reanimated_package()};
 #ifdef RNGTK_HARNESS_SCREENS
   host_options.packages.push_back(rngtk_screens_package());
 #endif

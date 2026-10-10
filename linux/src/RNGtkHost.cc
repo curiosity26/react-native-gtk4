@@ -302,6 +302,7 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
   void setNativePropsForTag(int tag, folly::dynamic props) override {
     host_.mountingManager_->synchronouslyUpdateViewOnUIThread(tag, props);
   }
+  Props::Shared mountedProps(int tag) override { return host_.mountingManager_->propsForTag(tag); }
   void provideService(const std::string &name, std::shared_ptr<void> service) override {
     std::lock_guard<std::mutex> lock(servicesMutex_);
     services_[name] = std::move(service);

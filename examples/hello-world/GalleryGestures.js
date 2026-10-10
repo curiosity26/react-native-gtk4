@@ -4,6 +4,9 @@
 // relations (pinch and rotation together, a pan that waits for a double
 // tap to fail), a manual gesture, the buttons (RectButton, Touchable) and
 // the library's ScrollView (in GesturesRelations, the second row).
+// The callbacks set React state, so they run on JS (runOnJS: with
+// react-native-reanimated installed, gesture callbacks are worklets on the
+// UI runtime otherwise; GalleryReanimated has those).
 // The pan box holds a Pressable: a drag cancels its press (the JS
 // responder loses the touch when the pan activates), a click presses it.
 // rn-gtk-host --module GalleryGestures --self-test drives each with the
@@ -57,12 +60,14 @@ export function GesturesDemo({onLog}) {
   const [hover, setHover] = useState('out');
 
   const tapGesture = useTapGesture({
+    runOnJS: true,
     onActivate: () => {
       tap();
       log('tap');
     },
   });
   const doubleTapGesture = useTapGesture({
+    runOnJS: true,
     numberOfTaps: 2,
     onActivate: () => {
       double();
@@ -70,6 +75,7 @@ export function GesturesDemo({onLog}) {
     },
   });
   const longPressGesture = useLongPressGesture({
+    runOnJS: true,
     minDuration: 300,
     onActivate: () => {
       long();
@@ -77,11 +83,13 @@ export function GesturesDemo({onLog}) {
     },
   });
   const panGesture = usePanGesture({
+    runOnJS: true,
     onActivate: () => setPan(p => ({...p, state: 'active'})),
     onUpdate: e => setPan({x: Math.round(e.translationX), y: Math.round(e.translationY), state: 'active'}),
     onDeactivate: () => setPan(p => ({...p, state: 'ended'})),
   });
   const flingGesture = useFlingGesture({
+    runOnJS: true,
     direction: Directions.RIGHT,
     onActivate: () => {
       fling();
@@ -89,6 +97,7 @@ export function GesturesDemo({onLog}) {
     },
   });
   const hoverGesture = useHoverGesture({
+    runOnJS: true,
     onActivate: () => setHover('in'),
     onDeactivate: () => setHover('out'),
   });
@@ -167,11 +176,13 @@ export function GesturesRelations({onLog}) {
   const [scrolled, setScrolled] = useState('no');
 
   const pinch = usePinchGesture({
+    runOnJS: true,
     onActivate: () => setTransform(t => ({...t, pinching: true})),
     onUpdate: e => setTransform(t => ({...t, scale: e.scale})),
     onDeactivate: () => setTransform(t => ({...t, pinching: false})),
   });
   const rotation = useRotationGesture({
+    runOnJS: true,
     onActivate: () => setTransform(t => ({...t, rotating: true})),
     onUpdate: e => setTransform(t => ({...t, rotation: e.rotation})),
     onDeactivate: () => setTransform(t => ({...t, rotating: false})),
@@ -179,17 +190,20 @@ export function GesturesRelations({onLog}) {
   const pinchRotate = useSimultaneousGestures(pinch, rotation);
 
   const doubleTap = useTapGesture({
+    runOnJS: true,
     numberOfTaps: 2,
     maxDistance: 10,
     onActivate: () => setBox(b => ({...b, doubles: b.doubles + 1})),
   });
   const waitingPan = usePanGesture({
+    runOnJS: true,
     requireToFail: doubleTap,
     onUpdate: e => setBox(b => ({...b, x: Math.round(e.translationX), y: Math.round(e.translationY)})),
   });
   const tapOrPan = useSimultaneousGestures(doubleTap, waitingPan);
 
   const manualGesture = useManualGesture({
+    runOnJS: true,
     onTouchesDown: e => {
       setManual('down');
       GestureStateManager.activate(e.handlerTag);
