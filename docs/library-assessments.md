@@ -4,7 +4,8 @@ The three libraries most React Native apps add after the basics, and what
 it would take to have them on GTK4. Checked against
 react-native-gesture-handler 3.3.0, react-native-reanimated 4.7.1 (with
 react-native-worklets 0.13.0) and react-native-screens 4.29.0, in October
-2026. None of them has a Linux port yet: they're the roadmap's Phase 6.
+2026, before the roadmap's Phase 6, which ported all three
+([libraries.md](libraries.md)). Kept for the reasoning behind the ports.
 
 ## react-native-screens: use its web JS now; a native port is optional
 
@@ -36,6 +37,11 @@ it for apps that want to feel native on GNOME, not for parity. Estimate:
 2 to 3 weeks.
 
 ## react-native-gesture-handler: a port on GTK's gesture controllers
+
+**Done (Phase 6):** `packages/gesture-handler`, with the recognizers
+ported from the library's web implementation on the host's pointer input
+rather than GTK's gesture controllers, so they behave as the library's own
+([libraries.md](libraries.md#gestures-and-animations-gesture-handler-worklets-and-reanimated)).
 
 **Today.** It doesn't load. Its native side is the `RNGestureHandlerModule`
 TurboModule, a root view component (`RNGestureHandlerRootView`), a button
@@ -77,6 +83,13 @@ Rotation and Native, and `GestureDetector` with Reanimated.
 
 ## react-native-reanimated (with react-native-worklets): the most work, but mostly shared C++
 
+**Done (Phase 6):** `packages/worklets` and `packages/reanimated`, the
+shared C++ on the host SDK's `rngtk::Host` (threads, Fabric's scheduler,
+frames, props by tag). Reanimated commits each frame's props from the main
+thread rather than applying them to widgets directly; that holds 60 fps
+with 60 animated views
+([libraries.md](libraries.md#gestures-and-animations-gesture-handler-worklets-and-reanimated)).
+
 **Today.** It doesn't load. Reanimated 4 needs react-native-worklets:
 another JS runtime (a Hermes runtime for worklets, on the UI thread) and
 their shared values. Its JS checks for both native modules at import.
@@ -114,6 +127,8 @@ the direct-prop fast path. Until then, React Native's `Animated` with
 `useNativeDriver: false` works (the Showcase's Animation page).
 
 ## Summary
+
+As assessed (all three are ported now):
 
 | Library | Linux today | Next step | Estimate |
 | --- | --- | --- | --- |

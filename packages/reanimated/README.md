@@ -29,6 +29,15 @@ port).
   worklet gesture callbacks, and `GestureStateManager` in worklets changes
   gesture states. With Reanimated installed, gesture callbacks that set
   React state need `runOnJS: true`, as on iOS and Android.
+- Layout animations: entering and exiting animations (the presets,
+  keyframes, custom ones) and layout transitions, with exiting views kept
+  mounted until they finish. As on the other platforms, a view with an
+  entering animation must not set `nativeID` (Reanimated finds the
+  animation by its own); put an ID on a child.
+- CSS animations (`animationName` with keyframes, durations, delays,
+  iteration counts, directions, fill modes, timing functions) and CSS
+  transitions (`transitionProperty`, ...), with their `onCSSAnimation*`
+  and `onCSSTransition*` callbacks, on the engine's own C++ loop.
 - Reduced motion follows GNOME's "Reduce animation" setting
   (`ReduceMotion.System`).
 - Not on Linux: sensors (`useAnimatedSensor` gets no data), keyboard

@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   track: {height: 50, width: 320},
   box: {width: 100, height: 44, borderRadius: 8, backgroundColor: '#3584E4', alignItems: 'center', justifyContent: 'center'},
   boxText: {color: '#FFFFFF', fontWeight: '600'},
-  scroll: {width: 160, height: 120, borderWidth: 1, borderColor: '#C7C7CC', borderRadius: 8},
+  scroll: {width: 160, height: 120, flexGrow: 0, borderWidth: 1, borderColor: '#C7C7CC', borderRadius: 8},
   item: {paddingVertical: 6, paddingHorizontal: 10, color: '#6E6E73'},
   bar: {height: 8, borderRadius: 4, backgroundColor: '#26A269'},
   dragArea: {width: 300, height: 120, borderRadius: 12, borderWidth: 1, borderColor: '#C7C7CC', padding: 20},

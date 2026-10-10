@@ -87,7 +87,10 @@ out-of-tree platform like react-native-windows and react-native-macos.
   the library's C++ engine and `ReanimatedModule` on worklets' UI runtime:
   shared values, animated styles and animations on the frame clock,
   animated scroll handlers and events, `measure`/`scrollTo`, frame
-  callbacks, gesture-handler gestures driving animations with worklets.
+  callbacks, gesture-handler gestures driving animations with worklets,
+  layout animations (entering, exiting, layout transitions), CSS
+  animations and transitions; gesture-handler's `ReanimatedSwipeable` and
+  `ReanimatedDrawerLayout`.
 - Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers
   (with touchpad pinches and scrolling), cancelling the JS responder's
   touches, views, components and event emitters by tag, `setNativeProps`

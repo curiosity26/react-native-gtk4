@@ -4825,6 +4825,20 @@ double width_of(const char *id) {
   GtkWidget *v = by_id(id);
   return v ? bounds_in_root(v).size.width : 0;
 }
+// A layout animation test item: the animated view around the child with
+// the id (Reanimated needs the animated view's nativeID).
+GtkWidget *item(const char *id) {
+  GtkWidget *v = by_id(id);
+  return v ? gtk_widget_get_parent(v) : nullptr;
+}
+double item_left(const char *id) {
+  GtkWidget *v = item(id);
+  return v ? bounds_in_root(v).origin.x : 0.0;
+}
+double item_opacity(const char *id) {
+  GtkWidget *v = item(id);
+  return v ? gtk_widget_get_opacity(v) : -1.0;
+}
 }  // namespace reanimated_test
 
 void add_reanimated_steps() {
@@ -4989,6 +5003,149 @@ void add_reanimated_steps() {
                            }});
 }
 
+// GalleryReanimatedLayout: layout animations (items fade, slide and zoom
+// in and out, the others move to make room), a CSS animation and CSS
+// transitions, and gesture-handler's ReanimatedSwipeable and
+// ReanimatedDrawerLayout.
+bool is_reanimated_layout() { return opts.module == "GalleryReanimatedLayout"; }
+
+void add_reanimated_layout_steps() {
+  using namespace reanimated_test;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  auto says = [](std::string text) { return shown_text(app.root, text, false) != nullptr; };
+  auto opacity_of = [](const char *id) {
+    GtkWidget *v = by_id(id);
+    return v ? gtk_widget_get_opacity(v) : -1.0;
+  };
+  struct Seen {
+    std::set<long> values, others;  // (x100 for opacities)
+    double start = 0, otherStart = 0;
+    bool appeared = false, gone = false;
+  };
+  auto seen = std::make_shared<Seen>();
+
+  app.steps.push_back(Step{"entering (FadeIn): the new item fades in, the others move over (LinearTransition)",
+                           [seen] {
+                             *seen = Seen{};
+                             seen->otherStart = item_left("rl-item-1");
+                             click("rl-add");
+                           },
+                           [seen, says] {
+                             double o = item_opacity("rl-item-3");
+                             if (o < 0) return false;
+                             seen->values.insert(lround(o * 100));
+                             seen->others.insert(lround(item_left("rl-item-1")));
+                             if (o < 0.999 || item_left("rl-item-1") - seen->otherStart < 97.5) return false;
+                             printf("  %zu opacities, the next item at %zu positions\n", seen->values.size(),
+                                    seen->others.size());
+                             check(seen->values.size() >= 4, "  it faded in frame by frame");
+                             check(seen->others.size() >= 4, "  the next one moved frame by frame");
+                             return says("items 3");
+                           }});
+  app.steps.push_back(Step{"entering (SlideInLeft): the item slides in from the left",
+                           [seen] {
+                             *seen = Seen{};
+                             click("rl-add-slide");
+                           },
+                           [seen] {
+                             if (!item("rl-item-4")) return false;
+                             double x = item_left("rl-item-4");
+                             if (!seen->appeared) seen->start = x;
+                             seen->appeared = true;
+                             seen->values.insert(lround(x));
+                             double final_x = item_left("rl-item-2") + 98;
+                             if (std::abs(x - final_x) > 0.5) return false;
+                             printf("  from %.0f to %.0f over %zu positions\n", seen->start, x, seen->values.size());
+                             check(seen->start < x - 50, "  it started to the left");
+                             check(seen->values.size() >= 4, "  it moved frame by frame");
+                             return true;
+                           }});
+  app.steps.push_back(Step{"exiting (FadeOut): the removed item fades out, then unmounts; the others move back",
+                           [seen] {
+                             *seen = Seen{};
+                             seen->otherStart = item_left("rl-item-1");
+                             click("rl-remove");
+                           },
+                           [seen, says] {
+                             double o = item_opacity("rl-item-3");
+                             seen->others.insert(lround(item_left("rl-item-1")));
+                             if (o >= 0) {
+                               seen->values.insert(lround(o * 100));
+                               return false;
+                             }
+                             if (!says("items 3") || seen->otherStart - item_left("rl-item-1") < 97.5) return false;
+                             printf("  %zu opacities before it unmounted; the next item at %zu positions\n",
+                                    seen->values.size(), seen->others.size());
+                             check(seen->values.size() >= 4, "  it faded out frame by frame");
+                             check(seen->others.size() >= 4, "  the next one moved frame by frame");
+                             return true;
+                           }});
+  app.steps.push_back(Step{"exiting (ZoomOut): the last item shrinks, then unmounts",
+                           [seen] {
+                             *seen = Seen{};
+                             click("rl-remove-last");
+                           },
+                           [seen] {
+                             if (item("rl-item-4")) {
+                               seen->values.insert(lround((item("rl-item-4") ? bounds_in_root(item("rl-item-4")).size.width : 0)));
+                               return false;
+                             }
+                             printf("  %zu sizes before it unmounted\n", seen->values.size());
+                             check(seen->values.size() >= 4, "  it shrank frame by frame");
+                             return true;
+                           }});
+
+  app.steps.push_back(Step{"a CSS animation (keyframes, 2 iterations, alternate)",
+                           [seen] {
+                             *seen = Seen{};
+                             click("rl-css-run");
+                           },
+                           [seen, says] {
+                             if (by_id("rl-css-anim")) seen->values.insert(lround(width_of("rl-css-anim")));
+                             if (!says("css animation 1 ended")) return false;
+                             long widest = seen->values.empty() ? 0 : *seen->values.rbegin();
+                             printf("  %zu widths, widest %ld, now %.0f\n", seen->values.size(), widest,
+                                    width_of("rl-css-anim"));
+                             check(widest >= 195, "  it reached the last keyframe");
+                             check(seen->values.size() >= 8, "  frame by frame");
+                             check(std::abs(width_of("rl-css-anim") - 60) < 1, "  and came back (alternate)");
+                             return true;
+                           }});
+  app.steps.push_back(Step{"CSS transitions: width and opacity follow the style",
+                           [seen] {
+                             *seen = Seen{};
+                             click("rl-css-toggle");
+                           },
+                           [seen, opacity_of] {
+                             double w = width_of("rl-css-transition"), o = opacity_of("rl-css-transition");
+                             seen->values.insert(lround(w));
+                             seen->others.insert(lround(o * 100));
+                             if (std::abs(w - 240) > 0.5 || std::abs(o - 0.5) > 0.01) return false;
+                             printf("  %zu widths, %zu opacities\n", seen->values.size(), seen->others.size());
+                             check(seen->values.size() >= 4 && seen->others.size() >= 4, "  frame by frame");
+                             return true;
+                           }});
+  app.steps.push_back(Step{"  ...with onCSSTransitionEnd", [] {},
+                           [says] { return says("transition wide") && !says(", 0 ended"); }});
+
+  app.steps.push_back(Step{"ReanimatedSwipeable: a swipe opens the row's actions",
+                           [] { gh_drag("rl-swipe-row", 0.8, 0.5, -160, 0, 12, 16); },
+                           [says] { return says("swipeable open"); }});
+  app.steps.push_back(Step{"  ...an action is pressed, and the row closes",
+                           [] { click("rl-swipe-delete"); },
+                           [says] { return says("swipeable closed · drawer closed · deleted 1"); }});
+  app.steps.push_back(Step{"ReanimatedDrawerLayout: openDrawer() slides the drawer in",
+                           [] { click("rl-drawer-open"); },
+                           [says] {
+                             return says("drawer open") && targetable("rl-drawer");
+                           }});
+  app.steps.push_back(Step{"  ...and closes", [] { click("rl-drawer-close"); },
+                           [says] { return says("drawer closed"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -5093,6 +5250,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_reanimated() && app.steps.empty()) {
     add_reanimated_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_reanimated_layout() && app.steps.empty()) {
+    add_reanimated_layout_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_host_sdk() && app.steps.empty()) {
     add_host_sdk_steps();
     enter(Phase::Steps);
@@ -5170,7 +5330,7 @@ void check_app(bool first) {
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
                is_notifications() || is_native_module() || is_navigation() || is_gestures() ||
-               is_host_sdk() || is_worklets() || is_reanimated()) {
+               is_host_sdk() || is_worklets() || is_reanimated() || is_reanimated_layout()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
