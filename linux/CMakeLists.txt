@@ -131,7 +131,6 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   react/nativemodule/intersectionobserver
   react/nativemodule/microtasks
   react/nativemodule/mutationobserver
-  react/nativemodule/viewtransition
   react/nativemodule/webperformance
   react/performance/cdpmetrics
   react/performance/timeline
@@ -165,7 +164,6 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   react/renderer/scheduler
   react/renderer/telemetry
   react/renderer/uimanager
-  react/renderer/viewtransition
   react/renderer/uimanager/consistency
   react/runtime
   react/runtime/hermes
@@ -174,9 +172,12 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   reactperflogger
   runtimeexecutor
   yoga)
-# Newer React Native versions' additions (0.88: the stable C++ API guard,
-# ResizeObserver), when the sources have them.
+# Modules some React Native versions don't have, when the sources have
+# them: view transitions (not in 0.83), and 0.88's stable C++ API guard and
+# ResizeObserver.
 set(RNGTK_REACT_COMMON_OPTIONAL_SUBDIRS
+  react/nativemodule/viewtransition
+  react/renderer/viewtransition
   react/cxxstableapi
   react/nativemodule/resizeobserver
   react/renderer/observers/resize)
@@ -414,7 +415,7 @@ set(RNGTK_REACT_NATIVE_LIBS
     $<$<TARGET_EXISTS:react_nativemodule_resizeobserver>:react_nativemodule_resizeobserver>
     react_nativemodule_microtasks
     react_nativemodule_mutationobserver
-    react_nativemodule_viewtransition
+    $<$<TARGET_EXISTS:react_nativemodule_viewtransition>:react_nativemodule_viewtransition>
     react_nativemodule_webperformance
     react_performance_cdpmetrics
     react_performance_timeline

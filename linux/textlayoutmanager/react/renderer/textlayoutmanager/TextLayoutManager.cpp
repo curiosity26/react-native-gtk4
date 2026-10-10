@@ -5,6 +5,16 @@
 
 namespace facebook::react {
 
+namespace {
+// The cache key has the scale factor from React Native 0.84 on.
+template <class Key>
+void setPointScaleFactor(Key& key, Float pointScaleFactor) {
+  if constexpr (requires { key.pointScaleFactor; }) {
+    key.pointScaleFactor = pointScaleFactor;
+  }
+}
+}  // namespace
+
 TextLayoutManager::TextLayoutManager(
     const std::shared_ptr<const ContextContainer>& contextContainer)
     : contextContainer_(contextContainer),
@@ -42,12 +52,12 @@ TextMeasurement TextLayoutManager::measure(
         .attachments = attachments};
   };
 
-  auto measurement = textMeasureCache_.get(
-      {.attributedString = attributedString,
-       .paragraphAttributes = paragraphAttributes,
-       .layoutConstraints = layoutConstraints,
-       .pointScaleFactor = layoutContext.pointScaleFactor},
-      std::move(measureText));
+  TextMeasureCacheKey key{
+      .attributedString = attributedString,
+      .paragraphAttributes = paragraphAttributes,
+      .layoutConstraints = layoutConstraints};
+  setPointScaleFactor(key, layoutContext.pointScaleFactor);
+  auto measurement = textMeasureCache_.get(key, std::move(measureText));
   measurement.size = layoutConstraints.clamp(measurement.size);
   return measurement;
 }

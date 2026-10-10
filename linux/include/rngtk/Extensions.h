@@ -24,7 +24,7 @@
 
 #include <folly/dynamic.h>
 #include <gtk/gtk.h>
-#include <react/nativemodule/TurboModuleProvider.h>
+#include <rngtk/TurboModuleProviders.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/scheduler/Scheduler.h>

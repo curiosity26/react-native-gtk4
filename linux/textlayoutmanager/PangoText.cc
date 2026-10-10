@@ -133,7 +133,7 @@ void apply_fragment(PangoAttrList *list, const TextAttributes &a, guint start,
     PangoUnderline underline = PANGO_UNDERLINE_SINGLE;
     if (a.textDecorationStyle == TextDecorationStyle::Double) {
       underline = PANGO_UNDERLINE_DOUBLE;
-    } else if (a.textDecorationStyle == TextDecorationStyle::Wavy) {
+    } else if (a.textDecorationStyle && is_decoration_wavy(*a.textDecorationStyle)) {
       underline = PANGO_UNDERLINE_ERROR;
     }
     std::optional<ColorComponents> color;
@@ -185,13 +185,14 @@ void apply_fragment(PangoAttrList *list, const TextAttributes &a, guint start,
 void apply_alignment(PangoLayout *layout, std::optional<TextAlignment> align) {
   PangoAlignment a = PANGO_ALIGN_LEFT;
   bool justify = false;
-  if (align) {
+  if (align && is_alignment_end(*align)) {
+    a = PANGO_ALIGN_RIGHT;
+  } else if (align) {
     switch (*align) {
       case TextAlignment::Center:
         a = PANGO_ALIGN_CENTER;
         break;
       case TextAlignment::Right:
-      case TextAlignment::End:
         a = PANGO_ALIGN_RIGHT;
         break;
       case TextAlignment::Justified:
