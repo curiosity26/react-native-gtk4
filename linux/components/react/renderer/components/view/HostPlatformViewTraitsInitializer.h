@@ -1,7 +1,7 @@
 // The GTK host's view traits (see HostPlatformViewProps.h): views that
 // take keyboard focus, handle keys, have a tooltip, listen for the mouse
-// entering and leaving, or carry an accessible role, name or live region
-// stay real widgets, never flattened.
+// entering and leaving, drag the window, or carry an accessible role, name
+// or live region stay real widgets, never flattened.
 #pragma once
 
 #include <react/renderer/components/view/ViewProps.h>
@@ -16,7 +16,7 @@ namespace facebook::react::HostPlatformViewTraitsInitializer {
 inline bool formsStackingContext(const ViewProps &props)
 {
   return props.focusable || props.autoFocus || !props.keyDownEvents.empty() || !props.keyUpEvents.empty() ||
-      !props.tooltip.empty() || props.onMouseEnter || props.onMouseLeave || !props.accessibilityRole.empty() ||
+      !props.tooltip.empty() || props.onMouseEnter || props.onMouseLeave || props.windowDragRegion || !props.accessibilityRole.empty() ||
       props.role != Role::None || !props.accessibilityLabel.empty() || !props.accessibilityHint.empty() ||
       props.accessibilityLiveRegion != AccessibilityLiveRegion::None || !props.accessibilityActions.empty();
 }

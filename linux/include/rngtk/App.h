@@ -27,6 +27,20 @@ namespace rngtk {
 struct Package;
 using PackageList = std::vector<std::shared_ptr<const Package>>;
 
+// A window's title bar (AppOptions::titleBar; Windows.open's titleBar).
+enum class TitleBar {
+  // The desktop's: GTK's on GNOME, the window manager's themed one on X11
+  // desktops like Cinnamon.
+  Default,
+  // None: the content fills the window, which keeps its frame (rounded
+  // corners, shadow, resize edges). The app draws its own title bar
+  // (<TitleBar>, which drags the window and has its buttons).
+  Hidden,
+  // No frame at all (GTK's undecorated window): no title bar, shadow or
+  // resize edges.
+  None,
+};
+
 struct AppOptions {
   // GApplication id, e.g. "com.myapp".
   std::string appId;
@@ -36,6 +50,14 @@ struct AppOptions {
   std::string moduleName;
   int width = 800;
   int height = 600;
+  // The main window's title bar (TitleBar::Hidden: the app draws its own
+  // with <TitleBar>).
+  TitleBar titleBar = TitleBar::Default;
+  // The main window paints no background: where the app's views don't
+  // either, the desktop shows through. Needs a compositor (always on
+  // Wayland; GNOME's and Cinnamon's on X11); without one the window stays
+  // opaque.
+  bool transparent = false;
   // The entry file Metro bundles in dev mode, without extension.
   std::string entry = "index";
   // Load from Metro unless --bundle is given. Defaults to Debug builds of

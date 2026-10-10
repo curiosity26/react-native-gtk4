@@ -2,6 +2,7 @@
 // GtkMountingManager.
 #include "GtkMountingManager.h"
 #include "GtkSwitchShadowNode.h"
+#include "GtkWindowControlsShadowNode.h"
 #include "GtkViewProps.h"
 #include "rn_css.h"
 
@@ -54,6 +55,36 @@ void measure_native_controls() {
   gtk_widget_measure(sw, GTK_ORIENTATION_VERTICAL, w, &unused, &h, nullptr, nullptr);
   g_object_unref(sw);
   GtkSwitchShadowNode::setNativeSize(Size{.width = Float(w), .height = Float(h)});
+  measure_window_controls();
+}
+
+bool measure_window_controls() {
+  // In a window (never shown) like an app's: GtkWindowControls shows the
+  // buttons its window allows (a resizable, sovereign one: all of them).
+  static Size last[2] = {Size{.width = -1, .height = -1}, Size{.width = -1, .height = -1}};
+  GtkWidget *window = gtk_window_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *controls[2] = {gtk_window_controls_new(GTK_PACK_START),
+                            gtk_window_controls_new(GTK_PACK_END)};
+  gtk_box_append(GTK_BOX(box), controls[0]);
+  gtk_box_append(GTK_BOX(box), controls[1]);
+  gtk_window_set_child(GTK_WINDOW(window), box);
+  bool changed = false;
+  for (int i = 0; i < 2; i++) {
+    int w = 0, h = 0, unused;
+    if (!gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(controls[i]))) {
+      gtk_widget_measure(controls[i], GTK_ORIENTATION_HORIZONTAL, -1, &unused, &w, nullptr,
+                         nullptr);
+      gtk_widget_measure(controls[i], GTK_ORIENTATION_VERTICAL, w, &unused, &h, nullptr,
+                         nullptr);
+    }
+    Size size{.width = Float(w), .height = Float(h)};
+    changed |= size != last[i];
+    last[i] = size;
+    GtkWindowControlsShadowNode::setNativeSize(i == 0, size);
+  }
+  gtk_window_destroy(GTK_WINDOW(window));
+  return changed;
 }
 
 void GtkMountingManager::connectSwitch(GtkWidget *widget, Tag tag) {

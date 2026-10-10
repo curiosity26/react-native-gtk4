@@ -37,6 +37,10 @@ out-of-tree platform like react-native-windows and react-native-macos.
   dialogs (`Dialogs`).
 - Context menus and the app's menu bar; more windows (`Windows.open`);
   drag and drop with react-native-macos' props; desktop notifications.
+- Window styles: windows without the desktop's title bar (`titleBar:
+  'hidden'` or `'none'`, `AppOptions::titleBar`), `<TitleBar>` and
+  `<WindowControls>` for one of the app's own, `windowDragRegion` on any
+  View, and transparent windows.
 - Native modules and components in C++: `init-linux-library`, and
   autolinking in `run-linux`.
 

@@ -68,6 +68,8 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
     draggedTypes: true,
     // An Image that can be dragged out.
     draggable: true,
+    // Dragging it moves the window (<TitleBar>).
+    windowDragRegion: true,
   },
 };
 

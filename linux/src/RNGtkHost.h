@@ -85,7 +85,13 @@ struct WindowOptions {
   // The close button only asks (a 'close-requested' event); the app
   // closes the window itself.
   bool interceptClose = false;
+  TitleBar titleBar = TitleBar::Default;
+  bool transparent = false;
 };
+
+// A new window's title bar and background (before it is shown: GTK sets the
+// title bar up once). For the main window (App.cc) and Windows.open.
+void apply_window_style(GtkWindow *window, TitleBar titleBar, bool transparent);
 
 class RNGtkHost {
  public:
@@ -228,6 +234,9 @@ class RNGtkHost {
   facebook::react::LayoutContext layoutContext() const;
   void refreshLayout();
   static void onFontDpi(GObject *, GParamSpec *, gpointer self);
+  // The window controls' size changed (the decoration layout or the
+  // theme): <WindowControls> mount again, measured anew.
+  void remeasureWindowControls();
   // AccessibilityInfo.setAccessibilityFocus / announceForAccessibility.
   void focusForAccessibility(facebook::react::Tag tag);
   void announce(const std::string &text, GtkAccessibleAnnouncementPriority priority);
@@ -279,6 +288,7 @@ class RNGtkHost {
   // Lets callbacks posted to the main loop tell the host is gone.
   std::shared_ptr<int> alive_ = std::make_shared<int>(0);
   gulong fontDpiHandler_{0};
+  gulong decorationLayoutHandler_{0};
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   std::thread loader_;

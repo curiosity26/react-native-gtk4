@@ -106,6 +106,10 @@ struct Options {
   std::string url;
   // GalleryPlatform: start with I18nManager.forceRTL(true) saved.
   bool rtl = false;
+  // The main window's title bar ('default', 'hidden', 'none'; GalleryTitleBar
+  // defaults to 'hidden') and transparency.
+  std::string title_bar;
+  bool transparent = false;
   int timeout_ms = 20000;
   // Waits this long before each self-test step (to watch, or take
   // screenshots of the desktop).
@@ -3294,6 +3298,215 @@ void add_windows_steps() {
 }
 
 // ---------------------------------------------------------------------------
+// GalleryTitleBar checks
+
+bool is_titlebar() { return opts.module == "GalleryTitleBar"; }
+
+// Input on window `window`'s surface at (x, y) in its root, with `button`.
+void send_in(SurfaceId window, rngtk::GtkPointerHandler::Phase phase, graphene_point_t p,
+             int button = 1) {
+  rngtk::GtkPointerHandler *handler = app.host->pointerHandlerFor(window);
+  if (!handler) return;
+  rngtk::GtkPointerHandler::Input input{};
+  input.phase = phase;
+  input.x = p.x;
+  input.y = p.y;
+  input.button = button;
+  input.timeMs = uint32_t(g_get_monotonic_time() / 1000);
+  handler->dispatch(input);
+}
+
+// The centre of view `id` in window `window`'s root.
+graphene_point_t center_in(SurfaceId window, const char *id) {
+  GtkWidget *v = by_id(id), *root = app.host->rootFor(window);
+  graphene_rect_t b{};
+  if (!v || !root || !gtk_widget_compute_bounds(v, root, &b)) return {-1, -1};
+  return {b.origin.x + b.size.width / 2, b.origin.y + b.size.height / 2};
+}
+
+// The GtkWindowControls under `widget`.
+std::vector<GtkWidget *> window_controls(GtkWidget *widget) {
+  std::vector<GtkWidget *> out;
+  std::function<void(GtkWidget *)> walk = [&](GtkWidget *w) {
+    if (GTK_IS_WINDOW_CONTROLS(w)) out.push_back(w);
+    for (GtkWidget *c = gtk_widget_get_first_child(w); c; c = gtk_widget_get_next_sibling(c)) {
+      walk(c);
+    }
+  };
+  if (widget) walk(widget);
+  return out;
+}
+
+// What a titlebar click does, as GtkSettings says ("" for none).
+std::string titlebar_setting(const char *name) {
+  char *value = nullptr;
+  g_object_get(gtk_widget_get_settings(app.window), name, &value, nullptr);
+  std::string out = value ? value : "";
+  g_free(value);
+  if (out != "toggle-maximize" && out != "minimize" && out != "lower" && out != "menu") out = "";
+  return out;
+}
+
+void add_titlebar_steps() {
+  using P = rngtk::GtkPointerHandler::Phase;
+  constexpr SurfaceId mainId = 1, ownId = 11, clearId = 21;
+  auto *ptr = app.host->pointerHandler();
+  ptr->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "titleBar 'hidden': no title bar, the frame stays, the content starts at the top",
+      [] {},
+      [] {
+        GtkWidget *bar = gtk_window_get_titlebar(GTK_WINDOW(app.window));
+        GtkWidget *tb = by_id("titlebar");
+        return bar && !gtk_widget_get_visible(bar) &&
+               gtk_window_get_decorated(GTK_WINDOW(app.window)) && tb &&
+               bounds_in_root(tb).origin.y == 0 && gtk_widget_get_width(tb) == 940;
+      }});
+  app.steps.push_back(Step{
+      "<TitleBar>: the window's buttons (GtkWindowControls) at each end, as the layout says",
+      [] {},
+      [] {
+        auto controls = window_controls(by_id("titlebar"));
+        if (controls.size() != 2) return false;
+        bool some = false;
+        for (GtkWidget *c : controls) {
+          int natural = 0, unused;
+          gtk_widget_measure(c, GTK_ORIENTATION_HORIZONTAL, -1, &unused, &natural, nullptr,
+                             nullptr);
+          bool empty = gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c));
+          // (This window isn't resizable: no maximize button; the frame
+          // is measured for one that is.)
+          if (!empty && (natural <= 0 || gtk_widget_get_width(c) < natural)) return false;
+          some |= !empty;
+        }
+        char *layout = nullptr;
+        g_object_get(gtk_widget_get_settings(app.window), "gtk-decoration-layout", &layout,
+                     nullptr);
+        printf("  decoration layout \"%s\"\n", layout ? layout : "");
+        g_free(layout);
+        return some;
+      }});
+  app.steps.push_back(Step{
+      "a drag on the title bar moves the window",
+      [ptr] {
+        ptr->clearLastWindowAction();
+        auto p = center_in(mainId, "title");
+        send_in(mainId, P::Down, p);
+        send_in(mainId, P::Move, {p.x + 30, p.y + 4});
+        send_in(mainId, P::Up, {p.x + 30, p.y + 4});
+      },
+      [ptr] { return ptr->lastWindowAction() == "move"; }});
+  app.steps.push_back(Step{
+      "a press on a Pressable in it is the Pressable's (no move)",
+      [ptr] {
+        ptr->clearLastWindowAction();
+        auto p = center_in(mainId, "tb-button");
+        send_in(mainId, P::Down, p);
+        send_in(mainId, P::Move, {p.x + 12, p.y});
+        send_in(mainId, P::Up, {p.x + 12, p.y});
+      },
+      [ptr] { return ptr->lastWindowAction().empty() && has_text(app.root, "presses 1"); }});
+  app.steps.push_back(Step{
+      "a double-click does gtk-titlebar-double-click",
+      [ptr] {
+        ptr->clearLastWindowAction();
+        auto p = center_in(mainId, "title");
+        for (int i = 0; i < 2; i++) {
+          send_in(mainId, P::Down, p);
+          send_in(mainId, P::Up, p);
+        }
+      },
+      [ptr] {
+        std::string want = titlebar_setting("gtk-titlebar-double-click");
+        printf("  \"%s\"\n", want.c_str());
+        return ptr->lastWindowAction() == want;
+      }});
+  app.steps.push_back(Step{
+      "a right-click does gtk-titlebar-right-click (the window menu)",
+      [ptr] {
+        ptr->clearLastWindowAction();
+        auto p = center_in(mainId, "title");
+        send_in(mainId, P::Down, p, 3);
+        send_in(mainId, P::Up, p, 3);
+      },
+      [ptr] {
+        std::string want = titlebar_setting("gtk-titlebar-right-click");
+        printf("  \"%s\"\n", want.c_str());
+        return ptr->lastWindowAction() == want;
+      }});
+  app.steps.push_back(Step{
+      "Windows.open titleBar 'hidden': a resizable window with a <TitleBar> of its own",
+      [] { click("open-hidden"); },
+      [] {
+        GtkWindow *w = app.host->windowFor(ownId);
+        if (!w || !gtk_widget_get_mapped(GTK_WIDGET(w))) return false;
+        GtkWidget *bar = gtk_window_get_titlebar(w);
+        auto controls = window_controls(by_id("child-titlebar"));
+        if (!bar || gtk_widget_get_visible(bar) || controls.size() != 2) return false;
+        // Its buttons fill the frame they were measured for.
+        for (GtkWidget *c : controls) {
+          int natural = 0, unused;
+          gtk_widget_measure(c, GTK_ORIENTATION_HORIZONTAL, -1, &unused, &natural, nullptr,
+                             nullptr);
+          if (gtk_widget_get_width(c) != natural) return false;
+        }
+        return true;
+      }});
+  app.steps.push_back(Step{
+      "  ...its title bar drags that window",
+      [] {
+        auto *p = app.host->pointerHandlerFor(ownId);
+        p->setRealInputEnabled(false);
+        p->clearLastWindowAction();
+        GtkWidget *tb = by_id("child-titlebar");
+        GtkWidget *root = app.host->rootFor(ownId);
+        graphene_rect_t b{};
+        gtk_widget_compute_bounds(tb, root, &b);
+        // Past the start buttons, left of the title.
+        graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
+        send_in(ownId, P::Down, at);
+        send_in(ownId, P::Move, {at.x + 20, at.y + 20});
+        send_in(ownId, P::Up, {at.x + 20, at.y + 20});
+      },
+      [] { return app.host->pointerHandlerFor(ownId)->lastWindowAction() == "move"; }});
+  app.steps.push_back(Step{
+      "transparent + titleBar 'none': no frame; only the views paint",
+      [] { click("open-clear"); },
+      [] {
+        GtkWindow *w = app.host->windowFor(clearId);
+        if (!w || !gtk_widget_get_mapped(GTK_WIDGET(w)) || !by_id("clear-panel")) return false;
+        if (gtk_window_get_decorated(w)) return false;
+        if (!gdk_display_is_composited(gtk_widget_get_display(GTK_WIDGET(w)))) {
+          printf("  no compositor: an opaque window\n");
+          return !gtk_widget_has_css_class(GTK_WIDGET(w), "rngtk-transparent");
+        }
+        GdkTexture *tex = rngtk::render_widget(GTK_WIDGET(w));
+        if (!tex) return false;
+        auto corner = px(tex, 4, 4);
+        auto panel = px(tex, 180, 120);
+        pixels.tex = nullptr;
+        g_object_unref(tex);
+        printf("  corner rgba(%d,%d,%d,%d), panel rgba(%d,%d,%d,%d)\n", corner.r, corner.g,
+               corner.b, corner.a, panel.r, panel.g, panel.b, panel.a);
+        return gtk_widget_has_css_class(GTK_WIDGET(w), "rngtk-transparent") && corner.a == 0 &&
+               panel.a > 200;
+      }});
+  app.steps.push_back(Step{
+      "  ...a windowDragRegion View drags it",
+      [] {
+        auto *p = app.host->pointerHandlerFor(clearId);
+        p->setRealInputEnabled(false);
+        p->clearLastWindowAction();
+        auto at = center_in(clearId, "clear-panel");
+        at.y -= 40;  // above the button
+        send_in(clearId, P::Down, at);
+        send_in(clearId, P::Move, {at.x - 20, at.y});
+        send_in(clearId, P::Up, {at.x - 20, at.y});
+      },
+      [] { return app.host->pointerHandlerFor(clearId)->lastWindowAction() == "move"; }});
+}
+
+// ---------------------------------------------------------------------------
 // GalleryDragDrop checks
 
 bool is_dragdrop() { return opts.module == "GalleryDragDrop"; }
@@ -3855,6 +4068,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_windows() && app.steps.empty()) {
     add_windows_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_titlebar() && app.steps.empty()) {
+    add_titlebar_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_menus() && app.steps.empty()) {
     add_menus_steps();
     enter(Phase::Steps);
@@ -3905,7 +4121,8 @@ void check_app(bool first) {
       verify_images(tex);
     } else if (is_controls() || is_appearance() || is_selection() || is_keyboard() ||
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
-               is_dialogs() || is_menus() || is_windows() || is_dragdrop() ||
+               is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
+               is_dragdrop() ||
                is_notifications() || is_native_module()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
@@ -4098,6 +4315,14 @@ void activate(GtkApplication *gtk_app, gpointer) {
   // (mutter maximizes near-screen-size windows); a step can turn resizing
   // on (see add_resize_steps).
   gtk_window_set_resizable(GTK_WINDOW(window), !opts.self_test);
+  {
+    std::string bar = opts.title_bar.empty() && is_titlebar() ? "hidden" : opts.title_bar;
+    rngtk::apply_window_style(GTK_WINDOW(window),
+                              bar == "hidden" ? rngtk::TitleBar::Hidden
+                              : bar == "none" ? rngtk::TitleBar::None
+                                              : rngtk::TitleBar::Default,
+                              opts.transparent);
+  }
   app.window = window;
   app.overlay = gtk_overlay_new();
   app.root = rn_view_new();
@@ -4171,6 +4396,7 @@ int usage() {
           "         [--logbox-screenshot PNG] [--dismiss-logbox]\n"
           "         [--test-animation] [--system-appearance]\n"
           "         [--system-accessibility] [--url URL] [--rtl]\n"
+          "         [--title-bar default|hidden|none] [--transparent]\n"
           "         [--step-delay MS] [--verbose]\n");
   return 2;
 }
@@ -4206,6 +4432,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--system-accessibility")) opts.system_accessibility = true;
     else if (arg("--url")) opts.url = argv[++i];
     else if (!strcmp(argv[i], "--rtl")) opts.rtl = true;
+    else if (arg("--title-bar")) opts.title_bar = argv[++i];
+    else if (!strcmp(argv[i], "--transparent")) opts.transparent = true;
     else if (!strcmp(argv[i], "--no-inspector")) opts.inspector = false;
     else if (!strcmp(argv[i], "--verbose")) opts.verbose = true;
     else if (!strcmp(argv[i], "--dev-server")) {

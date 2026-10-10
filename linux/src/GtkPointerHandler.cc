@@ -87,6 +87,7 @@ GtkPointerHandler::~GtkPointerHandler() {
   g_signal_handlers_disconnect_by_data(controller_, this);
   gtk_widget_remove_controller(root_, controller_);
   gtk_widget_remove_controller(root_, shortcuts_);
+  g_clear_pointer(&pressEvent_, gdk_event_unref);
 }
 
 gboolean GtkPointerHandler::onEvent(GtkEventControllerLegacy *, GdkEvent *event,
@@ -137,6 +138,10 @@ bool GtkPointerHandler::handleEvent(GdkEvent *event) {
   }
   input.modifiers = gdk_event_get_modifier_state(event);
   input.timeMs = gdk_event_get_time(event);
+  if (type == GDK_BUTTON_PRESS || type == GDK_TOUCH_BEGIN) {
+    g_clear_pointer(&pressEvent_, gdk_event_unref);
+    pressEvent_ = gdk_event_ref(event);
+  }
 
   double sx = 0, sy = 0;
   gdk_event_get_position(event, &sx, &sy);
@@ -224,6 +229,10 @@ void GtkPointerHandler::dispatch(const Input &input) {
   if (input.device == Device::Mouse && input.phase != Phase::Scroll) {
     updateHover(input, target);
   }
+  // Double and triple clicks (text selection, title bars).
+  int clicks = input.device == Device::Mouse && input.button == 1 && input.phase == Phase::Down
+                   ? clickCount(input)
+                   : 0;
 
   switch (input.phase) {
     case Phase::Down: {
@@ -309,10 +318,12 @@ void GtkPointerHandler::dispatch(const Input &input) {
     }
   }
 
+  windowDrag(input, target, clicks);
+
   // After the touches: a selection that turns non-empty cancels them.
   if (input.device == Device::Mouse && input.button == 1) {
     if (input.phase == Phase::Down) {
-      if (!beginSelection(input, target, clickCount(input))) clearSelection();
+      if (!beginSelection(input, target, clicks)) clearSelection();
     } else if (input.phase == Phase::Move && selecting_) {
       extendSelection(input);
     } else if (input.phase == Phase::Up && pressInSelection_) {
@@ -349,6 +360,106 @@ void GtkPointerHandler::cancelTouches() {
     touches_.erase(id);
   }
   pressTarget_ = Target{};
+}
+
+bool GtkPointerHandler::inWindowDragRegion(const Target &target) const {
+  for (GtkWidget *w = target.widget.get(); w; w = gtk_widget_get_parent(w)) {
+    // GTK's controls handle their own presses.
+    if (GTK_IS_BUTTON(w) || GTK_IS_SWITCH(w) || GTK_IS_WINDOW_CONTROLS(w) ||
+        RN_IS_TEXT_INPUT(w)) {
+      return false;
+    }
+    Tag tag = mountingManager_.targetForView(w).tag;
+    if (tag != 0) {
+      if (mountingManager_.isSelectableText(tag)) return false;
+      // Pressable and the Touchables are focusable.
+      auto props = std::dynamic_pointer_cast<const ViewProps>(mountingManager_.propsForTag(tag));
+      if (props && props->focusable) return false;
+      if (props && props->windowDragRegion) return true;
+    }
+    if (w == root_) break;
+  }
+  return false;
+}
+
+void GtkPointerHandler::windowDrag(const Input &input, const Target &target, int clicks) {
+  bool primary = input.device == Device::Touch || input.button == 1;
+  switch (input.phase) {
+    case Phase::Down:
+      windowDragPending_ = false;
+      if (!inWindowDragRegion(target)) return;
+      if (input.device == Device::Mouse && input.button == 1 && clicks == 2) {
+        titlebarAction("gtk-titlebar-double-click");
+      } else if (primary) {
+        windowDragPending_ = true;
+        windowDragX_ = input.x;
+        windowDragY_ = input.y;
+      } else if (input.button == 2) {
+        titlebarAction("gtk-titlebar-middle-click");
+      } else if (input.button == 3 && !contextMenuShown_) {
+        // (Unless the view's own contextMenu opened.)
+        titlebarAction("gtk-titlebar-right-click");
+      }
+      break;
+    case Phase::Move:
+      if (windowDragPending_ && primary &&
+          gtk_drag_check_threshold(root_, int(windowDragX_), int(windowDragY_), int(input.x),
+                                   int(input.y))) {
+        windowDragPending_ = false;
+        beginWindowMove();
+      }
+      break;
+    case Phase::Up:
+    case Phase::Cancel:
+      windowDragPending_ = false;
+      break;
+    default:
+      break;
+  }
+}
+
+void GtkPointerHandler::beginWindowMove() {
+  // The desktop moves the window from here on: the press is over for the
+  // app (the release goes to the desktop).
+  cancelTouches();
+  buttons_ = 0;
+  lastWindowAction_ = "move";
+  GtkNative *native = gtk_widget_get_native(root_);
+  GdkSurface *surface = native ? gtk_native_get_surface(native) : nullptr;
+  if (!pressEvent_ || !surface || !GDK_IS_TOPLEVEL(surface)) return;
+  graphene_point_t p{float(windowDragX_), float(windowDragY_)}, in_native;
+  if (!gtk_widget_compute_point(root_, GTK_WIDGET(native), &p, &in_native)) return;
+  double nx = 0, ny = 0;
+  gtk_native_get_surface_transform(native, &nx, &ny);
+  bool touch = gdk_event_get_event_type(pressEvent_) == GDK_TOUCH_BEGIN;
+  gdk_toplevel_begin_move(GDK_TOPLEVEL(surface), gdk_event_get_device(pressEvent_),
+                          touch ? 0 : int(gdk_button_event_get_button(pressEvent_)),
+                          in_native.x + nx, in_native.y + ny,
+                          gdk_event_get_time(pressEvent_));
+}
+
+void GtkPointerHandler::titlebarAction(const char *setting) {
+  char *action = nullptr;
+  g_object_get(gtk_widget_get_settings(root_), setting, &action, nullptr);
+  std::string what = action ? action : "none";
+  g_free(action);
+  GtkNative *native = gtk_widget_get_native(root_);
+  GdkSurface *surface = native ? gtk_native_get_surface(native) : nullptr;
+  GdkToplevel *toplevel = surface && GDK_IS_TOPLEVEL(surface) ? GDK_TOPLEVEL(surface) : nullptr;
+  if (what == "toggle-maximize") {
+    gtk_widget_activate_action(root_, "window.toggle-maximized", nullptr);
+  } else if (what == "minimize") {
+    gtk_widget_activate_action(root_, "window.minimize", nullptr);
+  } else if (what == "lower") {
+    if (toplevel) gdk_toplevel_lower(toplevel);
+  } else if (what == "menu") {
+    if (toplevel && pressEvent_) gdk_toplevel_show_window_menu(toplevel, pressEvent_);
+    // GTK then skips the press.
+    contextMenuShown_ = true;
+  } else {
+    return;  // "none" (and the -horizontally / -vertically maximizes GTK4 dropped)
+  }
+  lastWindowAction_ = what;
 }
 
 void GtkPointerHandler::dispatchTouch(const char *type, int id,

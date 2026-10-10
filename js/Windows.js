@@ -14,6 +14,8 @@
  *     width: 360, height: 600,
  *     minWidth: 280, minHeight: 300,
  *     resizable: true,
+ *     titleBar: 'hidden',   // 'default', 'hidden' (draw <TitleBar>), 'none'
+ *     transparent: false,   // the desktop shows where the views paint nothing
  *   });
  *   inspector.addListener('closed', () => ...);
  *   inspector.setTitle('Inspector — notes.txt');
@@ -125,7 +127,8 @@ const Windows = {
   /**
    * Opens a window showing `component` (an AppRegistry name). Options:
    * initialProps, title, width, height, minWidth, minHeight, resizable,
-   * interceptClose.
+   * interceptClose, titleBar ('default', 'hidden': the app draws its own
+   * with <TitleBar>, 'none': no frame at all), transparent.
    */
   open(options: {component: string, ...}): WindowHandle {
     if (NativeWindows == null) {

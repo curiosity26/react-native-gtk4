@@ -6,6 +6,7 @@
 #include "rn_text.h"
 #include "rn_text_input.h"
 #include "GtkSwitchShadowNode.h"
+#include "GtkWindowControlsShadowNode.h"
 #include "rn_view.h"
 
 #include <glog/logging.h>
@@ -310,6 +311,8 @@ void GtkMountingManager::create(const ShadowView &view) {
     widget = gtk_switch_new();
   } else if (std::strcmp(name, "ActivityIndicatorView") == 0) {
     widget = gtk_spinner_new();
+  } else if (std::strcmp(name, GtkWindowControlsComponentName) == 0) {
+    widget = gtk_window_controls_new(GTK_PACK_END);  // updateWindowControls sets the side
   } else if (hasAccessibleValue(view)) {
     widget = rn_range_view_new();  // AT-SPI's Value interface
   } else {
@@ -348,6 +351,13 @@ void GtkMountingManager::update(const ShadowView &oldView,
   if (RN_IS_TEXT_INPUT(widget)) updateTextInput(widget, oldView, newView);
   if (GTK_IS_SWITCH(widget)) updateSwitch(widget, oldView, newView);
   if (GTK_IS_SPINNER(widget)) updateSpinner(widget, oldView, newView);
+  if (GTK_IS_WINDOW_CONTROLS(widget)) {
+    auto props = std::dynamic_pointer_cast<const GtkWindowControlsProps>(newView.props);
+    GtkPackType side = props && props->side == "start" ? GTK_PACK_START : GTK_PACK_END;
+    if (gtk_window_controls_get_side(GTK_WINDOW_CONTROLS(widget)) != side) {
+      gtk_window_controls_set_side(GTK_WINDOW_CONTROLS(widget), side);
+    }
+  }
   if (std::strcmp(newView.componentName, ImageComponentName) == 0) {
     updateImage(widget, oldView, newView);
   }
@@ -599,6 +609,8 @@ ComponentRegistryFactory GtkMountingManager::getComponentRegistryFactory() {
           concreteComponentDescriptorProvider<TextInputComponentDescriptor>());
       registry->add(
           concreteComponentDescriptorProvider<GtkSwitchComponentDescriptor>());
+      registry->add(concreteComponentDescriptorProvider<
+                    GtkWindowControlsComponentDescriptor>());
       registry->add(concreteComponentDescriptorProvider<
                     ActivityIndicatorViewComponentDescriptor>());
       if (self) {

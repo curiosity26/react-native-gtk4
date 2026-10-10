@@ -92,6 +92,8 @@ export type ViewPropsLinux = {
   onDrop?: (event: {nativeEvent: DragEvent}) => void;
   /** An Image that can be dragged out (its picture, and its file or URL). */
   draggable?: boolean;
+  /** Dragging it moves the window, as a title bar (<TitleBar>). */
+  windowDragRegion?: boolean;
 };
 
 /** 'fileUrl': files and links (a URI list); 'string': text; 'image': image data. */
@@ -230,6 +232,13 @@ export type WindowOptions = {
   resizable?: boolean;
   /** The close button only asks ('close-requested'). */
   interceptClose?: boolean;
+  /**
+   * 'default': the desktop's. 'hidden': none; the window keeps its frame
+   * and the app draws its own (<TitleBar>). 'none': no frame at all.
+   */
+  titleBar?: 'default' | 'hidden' | 'none';
+  /** No window background: the desktop shows where the views paint nothing (needs a compositor). */
+  transparent?: boolean;
 };
 
 /**
@@ -247,6 +256,20 @@ export declare const Windows: {
 
 /** The window the calling component is in. */
 export declare function useWindow(): WindowHandle;
+
+/**
+ * A title bar of the app's own (windows with titleBar: 'hidden'): drags the
+ * window, double-click maximizes, right-click opens the window menu; the
+ * window's buttons at each end, as the desktop places them.
+ */
+export declare function TitleBar(
+  props: import('react-native').ViewProps & {showWindowControls?: boolean},
+): import('react').ReactElement;
+
+/** The window's minimize, maximize and close buttons for one end of a title bar. */
+export declare function WindowControls(
+  props: import('react-native').ViewProps & {side?: 'start' | 'end'},
+): import('react').ReactElement;
 
 export type NotificationOptions = {
   /** Showing again with the same id replaces it. */
