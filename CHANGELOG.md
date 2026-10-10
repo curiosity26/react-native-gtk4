@@ -84,6 +84,8 @@ out-of-tree platform like react-native-windows and react-native-macos.
   (with touchpad pinches and scrolling), cancelling the JS responder's
   touches, views, components and event emitters by tag, `setNativeProps`
   (native Animated's path), scroll observers, device events,
-  `runAfterMounts`.
+  `runAfterMounts`; and for libraries that drive Fabric (Reanimated): the
+  main and JS threads, the RuntimeScheduler, Fabric's Scheduler (commit
+  hooks, event listeners), GdkFrameClock frames, props by tag, Hermes.
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.

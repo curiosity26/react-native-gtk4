@@ -52,8 +52,9 @@ if(NOT TARGET ReactNativeGtk::sdk AND DEFINED ReactNativeGtk_SDK_INCLUDE_DIRS)
     # with it), whatever the library's build type.
     INTERFACE_COMPILE_OPTIONS "-include;cstdint;-Wno-deprecated-declarations;-fexceptions;-frtti;${ReactNativeGtk_SDK_OPTIONS};$<IF:$<BOOL:${ReactNativeGtk_SDK_NDEBUG}>,-DNDEBUG,-UNDEBUG>"
     INTERFACE_COMPILE_FEATURES cxx_std_20
+    # Hermes too: a library may make runtimes of its own (worklets').
     INTERFACE_LINK_LIBRARIES
-      "ReactNativeGtk::host;${_rngtk_prefix}/lib/libjsi.so;PkgConfig::ReactNativeGtk_GTK4")
+      "ReactNativeGtk::host;${_rngtk_prefix}/lib/libjsi.so;${_rngtk_prefix}/lib/libhermesvm.so;PkgConfig::ReactNativeGtk_GTK4")
 endif()
 
 # Sets up an app executable. Its autolinked libraries (dependencies with a
