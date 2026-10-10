@@ -15,6 +15,7 @@
     "@curiosity26/react-native-gtk4-svg": "file:../../packages/svg",
     "@curiosity26/react-native-gtk4-vector-icons": "file:../../packages/vector-icons",
     "@curiosity26/react-native-gtk4-webview": "file:../../packages/webview",
+    "@curiosity26/react-native-gtk4-reanimated": "file:../../packages/reanimated",
     "@curiosity26/react-native-gtk4-worklets": "file:../../packages/worklets",
     "@react-native-async-storage/async-storage": "3.1.1",
     "@react-native-community/netinfo": "12.0.1",

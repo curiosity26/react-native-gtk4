@@ -30,6 +30,8 @@ function load(name) {
         return require('./GalleryNavigation');
       case 'worklets':
         return require('./GalleryWorklets');
+      case 'reanimated':
+        return {...require('react-native-gesture-handler'), ...require('./GalleryReanimated')};
       case 'gestures':
         return {...require('react-native-gesture-handler'), ...require('./GalleryGestures')};
     }
@@ -594,10 +596,46 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- Reanimated: react-native-reanimated ------------------------------------
+
+  function ReanimatedPage() {
+    const {Section, styles} = helpers();
+    const lib = load('reanimated');
+    if (lib?.error || !lib?.ReanimatedAnimations) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Reanimated (react-native-reanimated)">
+            <Missing what="react-native-reanimated" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {GestureHandlerRootView, ReanimatedAnimations, ReanimatedInteraction, ReanimatedBench} = lib;
+    return (
+      <GestureHandlerRootView style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section
+            title="Reanimated (react-native-reanimated)"
+            hint="The library's C++ engine on Linux (packages/reanimated), on react-native-worklets' UI runtime: shared values and animated styles run on GTK's main thread, frame by frame on the window's frame clock. The last box keeps moving while the JS thread is blocked."
+          />
+          <ReanimatedAnimations />
+          <Section
+            title="Scrolling, measuring, gestures"
+            hint="useAnimatedScrollHandler drives the bar; measure and scrollTo run on the UI runtime; the red box follows a pan with worklets only, and springs back."
+          />
+          <ReanimatedInteraction />
+          <Section title="Many views" hint="Each box has its own animated style; the frame rate is what the UI runtime's useFrameCallback sees." />
+          <ReanimatedBench />
+        </ScrollView>
+      </GestureHandlerRootView>
+    );
+  }
+
   return [
     ['Navigation', NavigationPage],
     ['Gestures', GesturesPage],
     ['Worklets', WorkletsPage],
+    ['Reanimated', ReanimatedPage],
     ['SVG', SvgPage],
     ['WebView', WebViewPage],
     ['Storage', StoragePage],

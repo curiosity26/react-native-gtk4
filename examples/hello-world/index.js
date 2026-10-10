@@ -16,6 +16,7 @@ import GalleryModal from './GalleryModal';
 import GalleryGestures from './GalleryGestures';
 import GalleryHostSdk from './GalleryHostSdk';
 import GalleryWorklets from './GalleryWorklets';
+import GalleryReanimated from './GalleryReanimated';
 import GalleryNativeModule from './GalleryNativeModule';
 import GalleryNavigation from './GalleryNavigation';
 import GalleryNotifications from './GalleryNotifications';
@@ -43,6 +44,7 @@ AppRegistry.registerComponent('GalleryNotifications', () => GalleryNotifications
 AppRegistry.registerComponent('GalleryGestures', () => GalleryGestures);
 AppRegistry.registerComponent('GalleryHostSdk', () => GalleryHostSdk);
 AppRegistry.registerComponent('GalleryWorklets', () => GalleryWorklets);
+AppRegistry.registerComponent('GalleryReanimated', () => GalleryReanimated);
 AppRegistry.registerComponent('GalleryNativeModule', () => GalleryNativeModule);
 AppRegistry.registerComponent('GalleryNavigation', () => GalleryNavigation);
 AppRegistry.registerComponent('GalleryWindows', () => GalleryWindows);

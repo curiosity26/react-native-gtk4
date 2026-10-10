@@ -158,6 +158,9 @@ class Host {
   virtual double frameTime() = 0;
   // setNativeProps for a view by React tag.
   virtual void setNativePropsForTag(int tag, folly::dynamic props) = 0;
+  // The props a view has on screen now (after setNativeProps too), or null.
+  // Main thread.
+  virtual facebook::react::Props::Shared mountedProps(int tag) = 0;
 
   // Services packages share without linking each other, by name (any
   // thread): react-native-worklets provides "worklets.uiRuntime", a

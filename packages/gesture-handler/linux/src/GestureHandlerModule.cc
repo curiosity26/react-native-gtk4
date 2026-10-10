@@ -1036,6 +1036,12 @@ std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package() {
   package->setUp = [](rngtk::Host &h) {
     host = &h;
     h.addPointerObserver(observe);
+    // Reanimated's setGestureState (GestureStateManager in its worklets),
+    // on the main thread.
+    h.provideService("gesture-handler.setGestureState",
+                     std::make_shared<std::function<void(int, int)>>([](int tag, int state) {
+                       if (GestureHandler *handler = handlerFor(tag)) handler->setStateFromJS(rngtk_gh::State(state));
+                     }));
     // A ScrollView's native gesture activates when the user scrolls it.
     h.addScrollObserver([](GtkWidget *scrollView) {
       std::vector<GestureHandler *> list;
