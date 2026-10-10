@@ -103,10 +103,12 @@ echo "== npm install (the example, the codegen's lock)"
 (cd "$repo/scripts/codegen-deps" && rm -f package-lock.json &&
   npm install --package-lock-only --ignore-scripts --no-audit --no-fund >/dev/null)
 
-# Version strings in the docs and the scripts that name them.
+# Version strings in the docs and the scripts that name them (not
+# docs/upgrading.md: its trials name the versions they were run against).
 old_re=${old//./\\.}
 grep -rl --include=*.md --include=*.yml --include=*.sh -e "$old" \
   "$repo/README.md" "$repo/docs" "$repo/.github" "$repo/scripts" 2>/dev/null |
+  grep -v '/docs/upgrading\.md$' |
   while read -r f; do
     sed -i "s/$old_re/$new/g; s/cli@$old_cli/cli@$cli/g; s/cli_version=$old_cli/cli_version=$cli/g" "$f"
     echo "   updated $f"
