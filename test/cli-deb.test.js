@@ -102,3 +102,16 @@ describe('rpm', () => {
     assert.match(spec, /^\* Fri Oct 09 2026 A <a@b\.c> - 1\.2\.0-1$/m);
   });
 });
+
+describe('deb: web views', () => {
+  const {apparmorProfile, apparmorScripts} = require('../lib/cli/deb');
+
+  test("an AppArmor profile like Ubuntu's for Epiphany, for WebKit's sandbox", () => {
+    const profile = apparmorProfile('myapp', '/usr/bin/MyApp');
+    assert.match(profile, /^profile myapp \/usr\/bin\/MyApp flags=\(unconfined\) \{\n {2}userns,$/m);
+    assert.match(profile, /include if exists <local\/myapp>/);
+    const {postinst, postrm} = apparmorScripts('myapp');
+    assert.match(postinst, /apparmor_parser -r -T -W \/etc\/apparmor\.d\/myapp/);
+    assert.match(postrm, /apparmor_parser -R -T -W \/etc\/apparmor\.d\/myapp/);
+  });
+});
