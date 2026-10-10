@@ -523,7 +523,7 @@ export function makeLibraryPages(helpers) {
       <View style={[styles.page, {flex: 1}]}>
         <Section
           title="Navigation (@react-navigation/native-stack, bottom-tabs; react-native-screens)"
-          hint="A native stack with header options (title, colors, a header button, no header), a modal and tabs. On Linux react-native-screens' and native-stack's web components run (the Metro config picks them): no transitions yet. Back: the header's arrow, Alt+Left or the mouse's back button (BackHandler)."
+          hint="A native stack with header options (title, colors, header buttons, a search bar, no header), a modal, a form sheet, a guarded screen (usePreventRemove) and tabs. With packages/screens it's libadwaita's navigation view and header bars (slide transitions; back with the header's button, a swipe, Escape, Alt+Left or the mouse's back button); without it, react-native-screens' web components."
         />
         <NavigationDemo onLog={log} style={{padding: 0}} />
       </View>

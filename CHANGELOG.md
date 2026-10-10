@@ -67,8 +67,12 @@ out-of-tree platform like react-native-windows and react-native-macos.
 
 ### Gestures, animations and navigation (Phase 6)
 
-- React Navigation's native-stack on react-native-screens' web components
-  (the Metro config picks them on Linux), with bottom tabs, modals and
-  header options.
+- react-native-screens port (`@curiosity26/react-native-gtk4-screens`,
+  libadwaita): native-stack on `AdwNavigationView` with `AdwHeaderBar`
+  headers (header options, React views in the header, a search bar),
+  slide transitions and back gestures, modals and form sheets as layers,
+  `usePreventRemove`. Without the port, React Navigation's native-stack
+  runs on react-native-screens' web components (the Metro config picks
+  them on Linux).
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.

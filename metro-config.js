@@ -50,17 +50,74 @@ const JS_FALLBACK_PLATFORMS = {
 const PORT_JS_PLATFORMS = {
   'react-native-webview': {port: '@curiosity26/react-native-gtk4-webview', platform: 'ios'},
 };
+// Ports with native components for a library that otherwise gets a JS
+// fallback: with the port installed, the library's (and `native` packages')
+// own JS runs instead of the fallback, and files in the port's overrides/
+// folder replace the library's at the same path (react-native-screens'
+// src/core.ts, which lists the platforms it has native components on).
+const PORT_OVERRIDES = {
+  'react-native-screens': {
+    port: '@curiosity26/react-native-gtk4-screens',
+    native: ['react-native-screens', '@react-navigation/native-stack'],
+  },
+};
+
+// RNGTK_IGNORE_PORTS: ports (package names, comma-separated) Metro acts as
+// if weren't installed, e.g. to bundle react-native-screens' web fallback
+// in an app that has the port.
+function portDir(port, projectRoot) {
+  if ((process.env.RNGTK_IGNORE_PORTS || '').split(',').includes(port)) return null;
+  try {
+    return path.dirname(
+      realpath(require.resolve(`${port}/package.json`, {paths: [projectRoot || process.cwd()]})),
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** JS_FALLBACK_PLATFORMS, and PORT_JS_PLATFORMS' entries the app has the port for. */
 function fallbackPlatforms(projectRoot) {
   const out = {...JS_FALLBACK_PLATFORMS};
   for (const [name, {port, platform}] of Object.entries(PORT_JS_PLATFORMS)) {
-    try {
-      require.resolve(`${port}/package.json`, {paths: [projectRoot || process.cwd()]});
-      out[name] = platform;
-    } catch {}
+    if (portDir(port, projectRoot)) out[name] = platform;
+  }
+  for (const {port, native} of Object.values(PORT_OVERRIDES)) {
+    if (portDir(port, projectRoot)) for (const name of native) delete out[name];
   }
   return out;
+}
+
+/**
+ * For modules that resolve to nothing on Linux (they only exist per
+ * platform): fallbackPlatforms, plus 'web' for the ported libraries (the
+ * port doesn't do react-native-screens' native tabs, say).
+ */
+function missingPlatforms(projectRoot) {
+  const out = fallbackPlatforms(projectRoot);
+  for (const {port, native} of Object.values(PORT_OVERRIDES)) {
+    if (portDir(port, projectRoot)) for (const name of native) out[name] ??= 'web';
+  }
+  return out;
+}
+
+/** {library name: the installed port's overrides/ folder}. */
+function portOverrides(projectRoot) {
+  const out = {};
+  for (const [name, {port}] of Object.entries(PORT_OVERRIDES)) {
+    const dir = portDir(port, projectRoot);
+    if (dir && fs.existsSync(path.join(dir, 'overrides'))) out[name] = path.join(dir, 'overrides');
+  }
+  return out;
+}
+
+/** The app's copy of a package (its folder), or null. */
+function packageRoot(name, projectRoot) {
+  try {
+    return path.dirname(require.resolve(`${name}/package.json`, {paths: [projectRoot || process.cwd()]}));
+  } catch {
+    return null;
+  }
 }
 const NM_SEGMENT = `${path.sep}node_modules${path.sep}`;
 
@@ -148,6 +205,19 @@ function jsFallback(filePath, platforms = JS_FALLBACK_PLATFORMS) {
   return null;
 }
 
+/** The package name and the path inside it of a file under node_modules. */
+function packagePathOf(filePath) {
+  const i = filePath.lastIndexOf(NM_SEGMENT);
+  if (i === -1) return null;
+  const parts = filePath.slice(i + NM_SEGMENT.length).split(path.sep);
+  const n = parts[0].startsWith('@') ? 2 : 1;
+  return {
+    name: parts.slice(0, n).join('/'),
+    root: filePath.slice(0, i + NM_SEGMENT.length) + parts.slice(0, n).join(path.sep),
+    rel: parts.slice(n).join(path.sep),
+  };
+}
+
 /**
  * Wraps a Metro resolveRequest so that, for platform 'linux', modules inside
  * react-native resolve to overrides/ or the android variant. Third-party
@@ -155,6 +225,12 @@ function jsFallback(filePath, platforms = JS_FALLBACK_PLATFORMS) {
  */
 function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
   const platforms = fallbackPlatforms(projectRoot);
+  const missing = missingPlatforms(projectRoot);
+  const overrides = portOverrides(projectRoot);
+  // An override file stands in for the library's: its imports resolve from
+  // the library's file.
+  const libraryRoots = {};
+  for (const name of Object.keys(overrides)) libraryRoots[name] = packageRoot(name, projectRoot);
   let knownRnDir;
   if (projectRoot) {
     try {
@@ -200,6 +276,14 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
       }
     }
 
+    for (const [name, dir] of Object.entries(overrides)) {
+      if (!isInside(context.originModulePath, dir) || !libraryRoots[name]) continue;
+      context = {
+        ...context,
+        originModulePath: path.join(libraryRoots[name], path.relative(dir, context.originModulePath)),
+      };
+    }
+
     let resolution;
     let error;
     try {
@@ -211,6 +295,14 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     if (resolution) {
       if (resolution.type !== 'sourceFile') return resolution;
       const rnDir = reactNativeDirOf(resolution.filePath, knownRnDir);
+      const pkg = !rnDir && packagePathOf(resolution.filePath);
+      if (pkg && overrides[pkg.name]) {
+        libraryRoots[pkg.name] ??= pkg.root;
+        const base = stripSourceExt(path.join(overrides[pkg.name], pkg.rel));
+        for (const ext of SOURCE_EXTS) {
+          if (isFile(base + ext)) return {type: 'sourceFile', filePath: base + ext};
+        }
+      }
       if (!rnDir) {
         const fallback = jsFallback(resolution.filePath, platforms);
         return fallback ? {type: 'sourceFile', filePath: fallback} : resolution;
@@ -230,7 +322,7 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     // Foo.web.tsx).
     if (moduleName.startsWith('.')) {
       const modulePath = path.resolve(path.dirname(context.originModulePath), moduleName);
-      const fallback = jsFallback(`${modulePath}.js`, platforms);
+      const fallback = jsFallback(`${modulePath}.js`, missing);
       if (fallback) return {type: 'sourceFile', filePath: fallback};
     }
     // A react-native module that only exists as .ios.js/.android.js
@@ -274,7 +366,7 @@ function withLinux(config) {
   // js/ alone: a linked checkout of this package also holds native build
   // trees.
   const watchFolders = [...(config.watchFolders ?? [])];
-  for (const sourceDir of SOURCE_DIRS) {
+  for (const sourceDir of [...SOURCE_DIRS, ...Object.values(portOverrides(projectRoot))]) {
     const dir = realpath(sourceDir);
     const watched =
       isInside(dir, realpath(projectRoot)) ||

@@ -167,8 +167,9 @@ RNPointerEvents rn_widget_get_pointer_events(GtkWidget *widget);
 
 // React Native hit-testing under `root`: the deepest widget at (x, y) in
 // root coordinates, honouring transforms, overflow clipping (with rounded
-// corners), pointerEvents and visibility. Stores the point in the hit
-// widget's coordinates in local_x/local_y. NULL when nothing is hit.
+// corners), pointerEvents, visibility and GTK's can-target. Stores the
+// point in the hit widget's coordinates in local_x/local_y. NULL when
+// nothing is hit.
 GtkWidget *rn_widget_pick(GtkWidget *root, double x, double y,
                           double *local_x, double *local_y);
 

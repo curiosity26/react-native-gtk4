@@ -7,7 +7,14 @@
 // closes the modal and switches tabs.
 import React, {useCallback, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View, useColorScheme} from 'react-native';
-import {DarkTheme, DefaultTheme, NavigationContainer, useFocusEffect, useNavigationContainerRef} from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  useFocusEffect,
+  useNavigationContainerRef,
+  usePreventRemove,
+} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
@@ -45,6 +52,8 @@ function HomeScreen({navigation}) {
         <Action id="nav-modal" label="Open modal" onPress={() => navigation.navigate('Modal')} />
         <Action id="nav-tabs" label="Open tabs" onPress={() => navigation.navigate('Tabs')} />
         <Action id="nav-bare" label="No header" onPress={() => navigation.navigate('Bare')} />
+        <Action id="nav-sheet" label="Form sheet" onPress={() => navigation.navigate('Sheet')} />
+        <Action id="nav-guarded" label="Guarded" onPress={() => navigation.navigate('Guarded')} />
       </View>
     </View>
   );
@@ -53,6 +62,16 @@ function HomeScreen({navigation}) {
 function DetailsScreen({navigation, route}) {
   const n = route.params?.n ?? 1;
   useFocusLog(`Details ${n}`);
+  const log = React.useContext(LogContext);
+  // A search bar in the header (headerSearchBarOptions).
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerSearchBarOptions: {
+        placeholder: 'Search details',
+        onChangeText: e => log(`search "${e.nativeEvent.text}"`),
+      },
+    });
+  }, [navigation, log]);
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Details screen #{n}</Text>
@@ -71,6 +90,34 @@ function ModalScreen({navigation}) {
     <View style={[styles.screen, styles.modal]}>
       <Text style={styles.title}>Modal screen</Text>
       <Action id="nav-close" label="Close" onPress={() => navigation.goBack()} />
+    </View>
+  );
+}
+
+function SheetScreen({navigation}) {
+  useFocusLog('Sheet');
+  return (
+    <View style={[styles.screen, styles.sheet]}>
+      <Text style={styles.title}>Sheet screen</Text>
+      <Action id="nav-sheet-close" label="Close" onPress={() => navigation.goBack()} />
+    </View>
+  );
+}
+
+// Going back is refused (usePreventRemove) until "Leave": the native stack
+// can't pop it itself then (no swipe or Escape), its back button asks.
+function GuardedScreen({navigation}) {
+  useFocusLog('Guarded');
+  const log = React.useContext(LogContext);
+  const [leaving, setLeaving] = useState(false);
+  usePreventRemove(!leaving, () => log('remove prevented'));
+  React.useEffect(() => {
+    if (leaving) navigation.goBack();
+  }, [leaving, navigation]);
+  return (
+    <View style={styles.screen}>
+      <Text style={styles.title}>Guarded screen</Text>
+      <Action id="nav-guard-leave" label="Leave" onPress={() => setLeaving(true)} />
     </View>
   );
 }
@@ -128,8 +175,9 @@ function describe(state) {
 }
 
 // `onLog` (the Showcase's event log) gets each focus event too; `pushed`
-// (a number) starts with that many Details screens on the stack.
-export function NavigationDemo({onLog, style, pushed = 0}) {
+// (a number) starts with that many Details screens on the stack, `open` (a
+// screen's name) with that screen over Home.
+export function NavigationDemo({onLog, style, pushed = 0, open}) {
   const scheme = useColorScheme();
   const [stack, setStack] = useState('Home');
   const [events, setEvents] = useState([]);
@@ -157,7 +205,9 @@ export function NavigationDemo({onLog, style, pushed = 0}) {
                     index: pushed,
                     routes: [{name: 'Home'}, ...Array.from({length: pushed}, (_, i) => ({name: 'Details', params: {n: i + 1}}))],
                   }
-                : undefined
+                : open
+                  ? {index: 1, routes: [{name: 'Home'}, {name: open}]}
+                  : undefined
             }
             theme={scheme === 'dark' ? DarkTheme : DefaultTheme}
             onStateChange={state => setStack(describe(state))}>
@@ -184,9 +234,31 @@ export function NavigationDemo({onLog, style, pushed = 0}) {
                   headerTintColor: '#FFFFFF',
                 })}
               />
-              <Stack.Screen name="Modal" component={ModalScreen} options={{presentation: 'modal', headerBackTitle: 'Back'}} />
+              <Stack.Screen
+                name="Modal"
+                component={ModalScreen}
+                options={({navigation}) => ({
+                  presentation: 'modal',
+                  headerLeft: () => (
+                    <Pressable nativeID="nav-cancel" onPress={() => navigation.goBack()} style={styles.headerButton}>
+                      <Text style={styles.headerButtonText}>Cancel</Text>
+                    </Pressable>
+                  ),
+                  headerRight: () => (
+                    <Pressable nativeID="nav-done" onPress={() => log('done')} style={styles.headerButton}>
+                      <Text style={styles.headerButtonText}>Done</Text>
+                    </Pressable>
+                  ),
+                })}
+              />
+              <Stack.Screen
+                name="Sheet"
+                component={SheetScreen}
+                options={{presentation: 'formSheet', sheetAllowedDetents: [0.5], headerShown: false}}
+              />
               <Stack.Screen name="Tabs" component={TabsScreen} options={{title: 'Tabs', headerBackTitle: 'Back'}} />
               <Stack.Screen name="Bare" component={BareScreen} options={{headerShown: false}} />
+              <Stack.Screen name="Guarded" component={GuardedScreen} options={{headerBackTitle: 'Back'}} />
             </Stack.Navigator>
           </NavigationContainer>
         </View>
@@ -195,9 +267,10 @@ export function NavigationDemo({onLog, style, pushed = 0}) {
   );
 }
 
-// --initial-props '{"pushed": 2}' starts two screens deep.
-export default function GalleryNavigation({pushed}) {
-  return <NavigationDemo pushed={pushed} />;
+// --initial-props '{"pushed": 2}' starts two screens deep, '{"open":
+// "Modal"}' with the modal open.
+export default function GalleryNavigation({pushed, open}) {
+  return <NavigationDemo pushed={pushed} open={open} />;
 }
 
 const styles = StyleSheet.create({
@@ -207,6 +280,7 @@ const styles = StyleSheet.create({
   screen: {flex: 1, padding: 20, gap: 12},
   modal: {backgroundColor: '#FFF4E5'},
   bare: {backgroundColor: '#E8F5E9'},
+  sheet: {backgroundColor: '#EDE7F6'},
   title: {fontSize: 22, fontWeight: '600', color: '#8E8E93'},
   row: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   action: {backgroundColor: '#007AFF', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, alignSelf: 'flex-start'},

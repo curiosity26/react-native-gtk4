@@ -233,9 +233,9 @@ runs on Wayland and X11 (GTK 4.22).
 
 `examples/hello-world` is set up as an app for packaging (its `app.json`
 and `linux/`), with the Showcase as its component. It autolinks the
-library ports in `packages/`, two of which need more headers to build:
-`sudo apt install librsvg2-dev libwebkitgtk-6.0-dev` (Fedora:
-`librsvg2-devel webkitgtk6.0-devel`).
+library ports in `packages/`, three of which need more headers to build:
+`sudo apt install librsvg2-dev libwebkitgtk-6.0-dev libadwaita-1-dev`
+(Fedora: `librsvg2-devel webkitgtk6.0-devel libadwaita-devel`).
 
 ```sh
 cd examples/hello-world
