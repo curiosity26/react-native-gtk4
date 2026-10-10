@@ -106,7 +106,8 @@ echo "== npm install (the example, the codegen's lock)"
 # Version strings in the docs and the scripts that name them (not
 # docs/upgrading.md: its trials name the versions they were run against).
 old_re=${old//./\\.}
-grep -rl --include=*.md --include=*.yml --include=*.sh -e "$old" \
+grep -rl --include=*.md --include=*.yml --include=*.sh \
+  -e "$old" -e "cli@$old_cli" -e "cli_version=$old_cli" \
   "$repo/README.md" "$repo/docs" "$repo/.github" "$repo/scripts" 2>/dev/null |
   grep -v '/docs/upgrading\.md$' |
   while read -r f; do
