@@ -156,7 +156,13 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    async-storage, netinfo, safe-area-context, vector-icons, svg and
    webview ([docs/libraries.md](docs/libraries.md)); upgrading React
    Native ([docs/upgrading.md](docs/upgrading.md)). **Done.**
-5. *(To be defined.)*
+5. Window customization: `transparent: true` for `Windows.open` and the
+   main window, and `titleBar: 'default' | 'hidden' | 'custom'` with a
+   `<TitleBar>` component that renders React content into the window's
+   title bar (`gtk_window_set_titlebar`, dragging through
+   GtkWindowHandle, window controls following `gtk-decoration-layout`).
+   Documented differences: no blur or vibrancy on GNOME, and Wayland
+   can't position windows or keep them on top.
 6. Gesture handler, Reanimated and Screens: react-native-screens' web
    variants (native-stack as on the web), then react-native-gesture-handler
    on GTK's gesture controllers, then react-native-reanimated (and
