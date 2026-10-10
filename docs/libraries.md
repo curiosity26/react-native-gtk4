@@ -45,3 +45,33 @@ autolink, and its pages say so.
 
 [library-assessments.md](library-assessments.md) covers gesture-handler,
 reanimated and screens: where they stand on Linux and what a port takes.
+
+## Web views on Ubuntu 24.04 and later
+
+WebKitGTK runs web content in a bubblewrap sandbox, which needs
+unprivileged user namespaces. Ubuntu 24.04's AppArmor allows them only to
+programs with a profile that says so (`kernel.apparmor_restrict_unprivileged_userns`),
+as Ubuntu's own WebKit apps (Epiphany, Devhelp) have. Without one, a
+`<WebView>` shows a message saying so instead of the page; WebKit would
+otherwise abort the app.
+
+- **`.deb` packages** of apps that use the webview port install that
+  profile (`/etc/apparmor.d/<package>`) and load it, so installed apps just
+  work.
+- **Development builds** (`run-linux`, the `dir` format) run from paths no
+  profile names. Add one for your build directory, once:
+
+  ```sh
+  sudo tee /etc/apparmor.d/myapp-dev <<'EOF'
+  abi <abi/4.0>,
+  include <tunables/global>
+  profile myapp-dev /home/*/src/MyApp/linux/build/*/MyApp flags=(unconfined) {
+    userns,
+  }
+  EOF
+  sudo apparmor_parser -r /etc/apparmor.d/myapp-dev
+  ```
+
+  (or, for a quick try only, run with `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`,
+  which turns WebKit's sandbox off).
+- **Flatpaks** and Fedora don't need anything.

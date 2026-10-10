@@ -28,6 +28,10 @@ Works:
 - `goBack`, `goForward`, `reload`, `stopLoading`, `requestFocus`,
   `clearCache`.
 
+On Ubuntu 24.04 and later, WebKit's sandbox needs an AppArmor profile:
+`.deb` packages install one; for development builds see
+[docs/libraries.md](../../docs/libraries.md#web-views-on-ubuntu-2404-and-later).
+
 Not yet: POST sources (`method`/`body`: WebKitGTK loads requests as GET),
 `clearHistory`, file downloads, and the iOS-only scrolling and
 content-inset props. See [docs/libraries.md](../../docs/libraries.md).
