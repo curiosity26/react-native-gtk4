@@ -8,7 +8,7 @@ Add Linux to a React Native app, the way `react-native-windows` and
 
 ## Prerequisites
 
-React Native 0.87.1 and a desktop with GTK 4.14 or newer: Ubuntu 24.04,
+React Native 0.88.0-rc.4 and a desktop with GTK 4.14 or newer: Ubuntu 24.04,
 Linux Mint 22, Debian 13, Fedora 40 or later. Wayland and X11 both work.
 
 **Ubuntu, Debian, Linux Mint**
@@ -35,7 +35,7 @@ command for your distribution if something is missing.
 ## Create an app
 
 ```sh
-npx @react-native-community/cli@20.2.0 init MyApp --version 0.87.1
+npx @react-native-community/cli@20.2.0 init MyApp --version 0.88.0-rc.4
 cd MyApp
 npm install @curiosity26/react-native-gtk4
 npx react-native init-linux
@@ -96,10 +96,10 @@ with the template's; `--app-id org.example.MyApp` sets the application id.
 
 ```
 ~/.cache/react-native-gtk4/            $RNGTK_CACHE_DIR, or $XDG_CACHE_HOME/react-native-gtk4
-  0.87.1/deps/                         React Native sources, C++ libraries, Hermes (~1 GB)
-  0.87.1/host/<id>/build/              the host library's build (~750 MB)
-  0.87.1/host/<id>/install/            librngtk_host.so, libhermesvm.so, libjsi.so, headers, CMake config
-  0.87.1/host/<id>-release/            the host's Release build, for package-linux
+  0.88.0-rc.4/deps/                         React Native sources, C++ libraries, Hermes (~1 GB)
+  0.88.0-rc.4/host/<id>/build/              the host library's build (~750 MB)
+  0.88.0-rc.4/host/<id>/install/            librngtk_host.so, libhermesvm.so, libjsi.so, headers, CMake config
+  0.88.0-rc.4/host/<id>-release/            the host's Release build, for package-linux
   flatpak/                             flatpak-builder's state and source archives (package-linux --format flatpak)
 ```
 

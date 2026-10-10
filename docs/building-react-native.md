@@ -10,7 +10,7 @@ Run these on the Ubuntu 24.04 machine you develop on.
 sudo apt install -y clang cmake ninja-build libssl-dev libicu-dev libreadline-dev \
   libgtk-4-dev libsoup-3.0-dev
 # Node 24 LTS (Metro 0.87 needs >= 22.13; Ubuntu 24.04's apt nodejs is 18)
-python3 scripts/fetch-rn-deps.py   # RN 0.87.1 source, third-party C++ deps, codegen, Hermes source
+python3 scripts/fetch-rn-deps.py   # RN 0.88.0-rc.4 source, third-party C++ deps, codegen, Hermes source
 scripts/build-hermes.sh            # libhermesvm + hermesc + headers
 (cd examples/hello-world && npm install && npm run bundle)   # react-native bundle --platform linux --assets-dest build
 
@@ -71,7 +71,7 @@ files win over `Foo.js`, and wraps `resolver.resolveRequest` (an existing one
 still runs first). For modules inside the `react-native` package only:
 
 - If `overrides/<path in react-native>.linux.js` exists in this package, it
-  is used. There is one for each platform-split file in React Native 0.87.1.
+  is used. There is one for each platform-split file in React Native 0.88.0-rc.4.
 - Otherwise, a module React Native splits into `.ios.js` and `.android.js`
   resolves to the Android variant (the C++ core is shared with Android).
 

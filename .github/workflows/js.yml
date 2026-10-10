@@ -17,7 +17,7 @@ jobs:
         run: npm test
       - name: Install the example
         run: npm ci --prefix examples/hello-world
-      - name: Metro platform tests against React Native 0.87.1
+      - name: Metro platform tests against React Native 0.88.0-rc.4
         run: npm test
       - name: Bundle the example for --platform linux
         run: npm run bundle:hello-world

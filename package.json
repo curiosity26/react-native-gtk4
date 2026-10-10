@@ -62,6 +62,6 @@
     "package:showcase": "cd examples/hello-world && npx react-native package-linux"
   },
   "peerDependencies": {
-    "react-native": "0.87.1"
+    "react-native": "0.88.0-rc.4"
   }
 }
