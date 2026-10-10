@@ -557,10 +557,11 @@ target_compile_options(rngtk_repo_sdk INTERFACE
   $<TARGET_PROPERTY:rngtk_host_objs,COMPILE_OPTIONS> -Wno-deprecated-declarations)
 add_library(ReactNativeGtk::sdk ALIAS rngtk_repo_sdk)
 set(RNGTK_WORKLETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-worklets)
-foreach(port gesture-handler worklets)
+set(RNGTK_REANIMATED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-reanimated)
+foreach(port gesture-handler worklets reanimated)
   add_subdirectory(../packages/${port}/linux packages/${port})
 endforeach()
-target_link_libraries(rn-gtk-host PRIVATE rngtk_gesture_handler rngtk_worklets)
+target_link_libraries(rn-gtk-host PRIVATE rngtk_gesture_handler rngtk_worklets rngtk_reanimated)
 # The react-native-screens port (packages/screens), for GalleryNavigation:
 # the Showcase's bundle uses its native components. Needs libadwaita.
 pkg_check_modules(RNGTK_HARNESS_ADW QUIET IMPORTED_TARGET libadwaita-1>=1.4)
@@ -658,6 +659,9 @@ add_test(NAME gallery-host-sdk-self-test
 add_test(NAME gallery-worklets-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryWorklets --width 940 --height 680 --self-test)
+add_test(NAME gallery-reanimated-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryReanimated --width 940 --height 760 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

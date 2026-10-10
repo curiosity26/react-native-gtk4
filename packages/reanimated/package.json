@@ -1,0 +1,24 @@
+{
+  "name": "@curiosity26/react-native-gtk4-reanimated",
+  "version": "0.1.0",
+  "description": "Linux (GTK4) native side of react-native-reanimated, for @curiosity26/react-native-gtk4",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/curiosity26/react-native-gtk4.git",
+    "directory": "packages/reanimated"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "linux/",
+    "react-native.config.js",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@curiosity26/react-native-gtk4": ">=0.1.0",
+    "@curiosity26/react-native-gtk4-worklets": ">=0.1.0",
+    "react-native-reanimated": "4.7.x"
+  }
+}

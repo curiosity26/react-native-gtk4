@@ -83,6 +83,11 @@ out-of-tree platform like react-native-windows and react-native-macos.
 - react-native-worklets port (`@curiosity26/react-native-gtk4-worklets`):
   the library's shared C++ with its UI runtime on GTK's main thread;
   gesture-handler's bindings on it.
+- react-native-reanimated 4 port (`@curiosity26/react-native-gtk4-reanimated`):
+  the library's C++ engine and `ReanimatedModule` on worklets' UI runtime:
+  shared values, animated styles and animations on the frame clock,
+  animated scroll handlers and events, `measure`/`scrollTo`, frame
+  callbacks, gesture-handler gestures driving animations with worklets.
 - Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers
   (with touchpad pinches and scrolling), cancelling the JS responder's
   touches, views, components and event emitters by tag, `setNativeProps`
