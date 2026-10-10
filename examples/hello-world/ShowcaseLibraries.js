@@ -5,7 +5,7 @@
 // the pages say the native side is missing.
 //   cd examples/hello-world && npx react-native run-linux
 import React, {useCallback, useEffect, useState} from 'react';
-import {Image, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions} from 'react-native';
+import {Animated, Easing, Image, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions} from 'react-native';
 
 // Loaded when a page opens: netinfo throws at import without its native
 // module.
@@ -271,7 +271,7 @@ export function makeLibraryPages(helpers) {
     const {Section, Btn, styles, useLog} = helpers();
     const log = useLog();
     const lib = load('svg');
-    const [angle, setAngle] = useState(0);
+    const [spinning, setSpinning] = useState(true);
     const [png, setPng] = useState(null);
     const ref = React.useRef(null);
     if (lib?.error || !lib?.Svg) {
@@ -283,6 +283,7 @@ export function makeLibraryPages(helpers) {
         </ScrollView>
       );
     }
+    const AnimatedSvg = animatedSvgParts(lib);
     const {Svg, Circle, Rect, Path, G, Text: SvgText, TSpan, Defs, LinearGradient, RadialGradient, Stop, ClipPath, Pattern, Line, Ellipse, Polygon, Filter, FeGaussianBlur, FeOffset, Use, SvgXml} = lib;
     return (
       <ScrollView contentContainerStyle={styles.page}>
@@ -306,9 +307,9 @@ export function makeLibraryPages(helpers) {
               <Path d="M0 120 L50 60 L80 90 L110 55 L160 120 Z" fill="#34C759" stroke="#1E7F3A" strokeWidth="2" />
             </Svg>
             <Svg width={120} height={120} viewBox="-60 -60 120 120">
-              <G rotation={angle} origin="0, 0">
+              <AnimatedSvg.SpinningG spinning={spinning}>
                 <Polygon points="0,-50 14,-15 50,-15 21,6 32,42 0,20 -32,42 -21,6 -50,-15 -14,-15" fill="#FF3B30" stroke="#8E1E17" strokeWidth="3" strokeLinejoin="round" />
-              </G>
+              </AnimatedSvg.SpinningG>
             </Svg>
             <Svg width={120} height={120}>
               <Defs>
@@ -338,8 +339,9 @@ export function makeLibraryPages(helpers) {
             </Svg>
             <SvgXml xml={LOGO_XML} width={120} height={120} />
           </View>
+          <AnimatedSvg.Demo log={log} styles={styles} />
           <View style={styles.row}>
-            <Btn title="Rotate the star" onPress={() => setAngle(a => (a + 30) % 360)} />
+            <Btn title={spinning ? 'Stop the star' : 'Spin the star'} onPress={() => setSpinning(on => !on)} />
             <Btn
               title="toDataURL()"
               onPress={() =>
@@ -359,6 +361,77 @@ export function makeLibraryPages(helpers) {
         </Section>
       </ScrollView>
     );
+  }
+
+  // Animated SVG: a circle's radius on the native driver (the C++ Animated
+  // module, frame by frame on GTK's frame clock), and a ring's dash offset on
+  // the JS driver (react-native-svg's setNativeProps, a commit a frame).
+  const svgAnimated = new WeakMap();
+  function animatedSvgParts(lib) {
+    if (svgAnimated.has(lib)) return svgAnimated.get(lib);
+    const AnimatedCircle = Animated.createAnimatedComponent(lib.Circle);
+    function Demo({log, styles}) {
+      const radius = React.useRef(new Animated.Value(10)).current;
+      const dash = React.useRef(new Animated.Value(0)).current;
+      useEffect(() => {
+        const loops = [
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(radius, {toValue: 34, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true}),
+              Animated.timing(radius, {toValue: 10, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true}),
+            ]),
+          ),
+          Animated.loop(Animated.timing(dash, {toValue: 1, duration: 1600, easing: Easing.linear, useNativeDriver: false})),
+        ];
+        loops.forEach(l => l.start());
+        return () => loops.forEach(l => l.stop());
+      }, [radius, dash]);
+      const C = 2 * Math.PI * 34;
+      return (
+        <View style={styles.row}>
+          <lib.Svg width={90} height={90}>
+            <AnimatedCircle cx="45" cy="45" r={radius} fill="#FF2D55" />
+          </lib.Svg>
+          <lib.Svg width={90} height={90}>
+            <lib.Circle cx="45" cy="45" r="34" stroke="#E5E5EA" strokeWidth="8" fill="none" />
+            <AnimatedCircle
+              cx="45"
+              cy="45"
+              r="34"
+              stroke="#007AFF"
+              strokeWidth="8"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={`${C * 0.3} ${C}`}
+              strokeDashoffset={dash.interpolate({inputRange: [0, 1], outputRange: [0, -C]})}
+            />
+          </lib.Svg>
+          <Text style={styles.hint}>Native driver (radius) and JS driver (dash offset).</Text>
+        </View>
+      );
+    }
+    // A <G> turning once every 3 seconds: an animated `rotation`, which
+    // react-native-svg's G.setNativeProps turns into its matrix each frame
+    // (the JS driver: rotation isn't a native-driver prop).
+    const AnimatedG = Animated.createAnimatedComponent(lib.G);
+    function SpinningG({spinning, children}) {
+      const angle = React.useRef(new Animated.Value(0)).current;
+      useEffect(() => {
+        if (!spinning) return;
+        let from = 0;
+        angle.stopAnimation(v => (from = v % 360));
+        angle.setValue(from);
+        const loop = Animated.loop(
+          Animated.timing(angle, {toValue: from + 360, duration: 3000, easing: Easing.linear, useNativeDriver: false}),
+        );
+        loop.start();
+        return () => loop.stop();
+      }, [spinning, angle]);
+      return <AnimatedG rotation={angle}>{children}</AnimatedG>;
+    }
+    const parts = {Demo, SpinningG};
+    svgAnimated.set(lib, parts);
+    return parts;
   }
 
   // ---- WebView: react-native-webview ---------------------------------------------

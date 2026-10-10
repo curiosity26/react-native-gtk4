@@ -77,6 +77,9 @@ struct View {
   std::string document;
   int width = -1, height = -1;
   bool dirty = true;
+  // RNGTK_SVG_STATS
+  gint64 statsStart = 0, lastFrame = 0, maxGap = 0;
+  int frames = 0;
   ~View() {
     if (handle) g_object_unref(handle);
   }
@@ -99,8 +102,28 @@ struct _RngtkSvgView {
 
 G_DEFINE_FINAL_TYPE(RngtkSvgView, rngtk_svg_view, GTK_TYPE_WIDGET)
 
+// RNGTK_SVG_STATS=1: each SvgView's redraws per second and its longest gap
+// between two, printed once a second while it animates.
+static void frameStats(View *v) {
+  static const bool on = g_getenv("RNGTK_SVG_STATS") != nullptr;
+  if (!on) return;
+  gint64 now = g_get_monotonic_time();
+  if (v->statsStart == 0) v->statsStart = now;
+  if (v->lastFrame) v->maxGap = std::max(v->maxGap, now - v->lastFrame);
+  v->lastFrame = now;
+  v->frames++;
+  if (now - v->statsStart >= G_USEC_PER_SEC) {
+    g_printerr("svg-stats view=%p frames=%d max-gap-ms=%.1f\n", static_cast<void *>(v), v->frames,
+               v->maxGap / 1000.0);
+    v->statsStart = now;
+    v->frames = 0;
+    v->maxGap = 0;
+  }
+}
+
 static void rngtk_svg_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   View *v = RNGTK_SVG_VIEW(widget)->view;
+  frameStats(v);
   int w = gtk_widget_get_width(widget);
   int h = gtk_widget_get_height(widget);
   if (!v || !v->root || w <= 0 || h <= 0) return;
