@@ -226,6 +226,46 @@ describe('createLinuxResolver', () => {
     );
   });
 
+  test("with the screens port: the libraries' native JS, the port's overrides", () => {
+    const rns = path.join(app, 'node_modules', 'react-native-screens', 'src');
+    write(path.join(rns, '..', 'package.json'), '{"name":"react-native-screens"}');
+    write(path.join(rns, 'index.js'));
+    write(path.join(rns, 'core.js'));
+    write(path.join(rns, 'ScreenStack.js'));
+    write(path.join(rns, 'ScreenStack.web.js'));
+    write(path.join(rns, 'TabsHost.ios.js'));
+    write(path.join(rns, 'TabsHost.web.js'));
+    const stack = path.join(app, 'node_modules', '@react-navigation', 'native-stack', 'src');
+    write(path.join(stack, 'index.js'));
+    write(path.join(stack, 'NativeStackView.native.js'));
+    write(path.join(stack, 'NativeStackView.js'));
+    const port = path.join(app, 'node_modules', '@curiosity26', 'react-native-gtk4-screens');
+    write(path.join(port, 'package.json'), '{}');
+    write(path.join(port, 'overrides', 'src', 'core.ts'));
+    const from = path.join(rns, 'index.js');
+    assert.equal(resolve(from, './ScreenStack').filePath, path.join(rns, 'ScreenStack.js'));
+    assert.equal(resolve(from, './core').filePath, path.join(port, 'overrides', 'src', 'core.ts'));
+    // Native tabs aren't ported: their web variant.
+    assert.equal(resolve(from, './TabsHost').filePath, path.join(rns, 'TabsHost.web.js'));
+    assert.equal(
+      resolve(path.join(stack, 'index.js'), './NativeStackView').filePath,
+      path.join(stack, 'NativeStackView.native.js'),
+    );
+    // An override's imports resolve from the library's file.
+    assert.equal(
+      resolve(path.join(port, 'overrides', 'src', 'core.ts'), './ScreenStack').filePath,
+      path.join(rns, 'ScreenStack.js'),
+    );
+    // RNGTK_IGNORE_PORTS: as if it weren't installed.
+    process.env.RNGTK_IGNORE_PORTS = '@curiosity26/react-native-gtk4-screens';
+    try {
+      assert.equal(resolve(from, './ScreenStack').filePath, path.join(rns, 'ScreenStack.web.js'));
+      assert.equal(resolve(from, './core').filePath, path.join(rns, 'core.js'));
+    } finally {
+      delete process.env.RNGTK_IGNORE_PORTS;
+    }
+  });
+
   test("react-native-webview gets its iOS JS only with the Linux port installed", () => {
     const wv = path.join(app, 'node_modules', 'react-native-webview', 'src');
     write(path.join(wv, 'index.js'));

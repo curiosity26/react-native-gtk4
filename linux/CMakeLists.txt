@@ -545,6 +545,17 @@ target_sources(rn-gtk-host PRIVATE
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExampleView.cc
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExamplePackage.cc)
 target_include_directories(rn-gtk-host PRIVATE ${RNGTK_TEMPLATE_LIBRARY}/src)
+# The react-native-screens port (packages/screens), for GalleryNavigation:
+# the Showcase's bundle uses its native components. Needs libadwaita.
+pkg_check_modules(RNGTK_HARNESS_ADW QUIET IMPORTED_TARGET libadwaita-1>=1.4)
+if(RNGTK_HARNESS_ADW_FOUND)
+  target_sources(rn-gtk-host PRIVATE ../packages/screens/linux/src/Screens.cc)
+  target_link_libraries(rn-gtk-host PRIVATE PkgConfig::RNGTK_HARNESS_ADW)
+  target_compile_definitions(rn-gtk-host PRIVATE RNGTK_HARNESS_SCREENS)
+else()
+  message(WARNING "libadwaita-1 >= 1.4 not found: rn-gtk-host is built without the "
+                  "react-native-screens port, and gallery-navigation-self-test fails")
+endif()
 # GalleryAccessibility's self-test runs scripts/a11y-probe.py.
 target_compile_definitions(rn-gtk-host PRIVATE
   RNGTK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -616,6 +627,11 @@ add_test(NAME gallery-native-module-self-test
                  --module GalleryNativeModule --width 940 --height 680 --self-test)
 add_test(NAME gallery-navigation-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryNavigation --width 940 --height 680 --self-test)
+# The same without the port: react-native-screens' web components.
+add_test(NAME gallery-navigation-web-self-test
+         COMMAND rn-gtk-host
+                 --bundle ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/build/web-screens.bundle.js
                  --module GalleryNavigation --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}

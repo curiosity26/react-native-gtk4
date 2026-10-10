@@ -75,6 +75,9 @@ using namespace facebook::react;
 
 // template-library/linux/src/ExamplePackage.cc
 std::shared_ptr<const rngtk::Package> example_package();
+#ifdef RNGTK_HARNESS_SCREENS
+std::shared_ptr<const rngtk::Package> rngtk_screens_package();
+#endif
 
 namespace {
 
@@ -312,8 +315,24 @@ void verify_hello_world(GdkTexture *tex) {
 
 bool is_gallery() { return opts.module == "Gallery"; }
 
+// The mounted view with nativeID `id`: the one on screen when several
+// have it (screens of a navigation stack).
+GtkWidget *mapped_with_id(GtkWidget *widget, const char *id) {
+  auto &mm = app.host->mountingManager();
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (!gtk_widget_get_mapped(c)) continue;
+    auto props = std::dynamic_pointer_cast<const facebook::react::ViewProps>(
+        mm.propsForTag(mm.targetForView(c).tag));
+    if (props && props->nativeId == id && mm.viewForTag(mm.targetForView(c).tag) == c) return c;
+    if (GtkWidget *found = mapped_with_id(c, id)) return found;
+  }
+  return nullptr;
+}
+
 GtkWidget *by_id(const char *id) {
-  return app.host->mountingManager().viewForNativeId(id);
+  GtkWidget *shown = app.root ? mapped_with_id(app.root, id) : nullptr;
+  return shown ? shown : app.host->mountingManager().viewForNativeId(id);
 }
 
 bool near_color(rngtk::Rgba8 p, int r, int g, int b, int tol = 40) {
@@ -1511,6 +1530,17 @@ void click(const char *id) {
   GtkWidget *v = by_id(id);
   if (!v) return;
   graphene_point_t c = center_of(v);
+  double lx, ly;
+  GtkWidget *hit = rn_widget_pick(app.root, c.x, c.y, &lx, &ly);
+  if (getenv("RNGTK_DEBUG_CLICKS") && !(hit == v || (hit && gtk_widget_is_ancestor(hit, v)))) {
+    printf("click %s at %.0f,%.0f hits %s %d:", id, c.x, c.y, hit ? G_OBJECT_TYPE_NAME(hit) : "nothing",
+           hit ? app.host->mountingManager().targetForView(hit).tag : 0);
+    for (GtkWidget *w = hit; w && w != app.root; w = gtk_widget_get_parent(w)) {
+      printf(" %s(%d,m%d,cv%d)", G_OBJECT_TYPE_NAME(w), app.host->mountingManager().targetForView(w).tag,
+             gtk_widget_get_mapped(w), gtk_widget_get_child_visible(w));
+    }
+    printf("\n");
+  }
   send(rngtk::GtkPointerHandler::Phase::Down, c);
   send(rngtk::GtkPointerHandler::Phase::Up, c);
 }
@@ -4017,13 +4047,13 @@ void add_native_module_steps() {
 
 bool is_navigation() { return opts.module == "GalleryNavigation"; }
 
-// A Text showing `text` (exactly, or containing it), inside views that are
-// all visible: the stack keeps the screens below the top one mounted, with
-// display: none.
+// A Text showing `text` (exactly, or containing it), on screen: the stack
+// keeps the screens below the top one mounted, with display: none (web
+// components) or in pages libadwaita unmaps (the native port).
 GtkWidget *shown_text(GtkWidget *widget, const std::string &text, bool exact = true) {
   for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
        c = gtk_widget_get_next_sibling(c)) {
-    if (!gtk_widget_get_visible(c)) continue;
+    if (!gtk_widget_get_mapped(c)) continue;
     if (RN_IS_TEXT(c)) {
       std::string t = rn_text_get_text(RN_TEXT(c));
       if (exact ? t == text : t.find(text) != std::string::npos) return c;
@@ -4034,6 +4064,48 @@ GtkWidget *shown_text(GtkWidget *widget, const std::string &text, bool exact = t
 }
 
 bool shows(const std::string &text) { return shown_text(app.root, text) != nullptr; }
+
+// A GTK label (a native header's title) showing `text`, on screen.
+GtkWidget *shown_label(GtkWidget *widget, const std::string &text) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (!gtk_widget_get_mapped(c)) continue;
+    if (GTK_IS_LABEL(c) && text == gtk_label_get_text(GTK_LABEL(c))) return c;
+    if (GtkWidget *found = shown_label(c, text)) return found;
+  }
+  return nullptr;
+}
+
+// The header's title: a Text (web components) or the header bar's label.
+GtkWidget *header_title(const std::string &title) {
+  GtkWidget *t = shown_text(app.root, title);
+  return t ? t : shown_label(app.root, title);
+}
+
+// The native port's header back button (libadwaita's, which activates
+// navigation.pop), on screen.
+GtkWidget *native_back_button(GtkWidget *widget) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (!gtk_widget_get_mapped(c)) continue;
+    if (GTK_IS_BUTTON(c) && g_strcmp0(gtk_actionable_get_action_name(GTK_ACTIONABLE(c)),
+                                      "navigation.pop") == 0) {
+      return c;
+    }
+    if (GtkWidget *found = native_back_button(c)) return found;
+  }
+  return nullptr;
+}
+
+// The react-native-screens port's components are on screen (else its web
+// fallback: a bundle made with RNGTK_IGNORE_PORTS).
+bool find_type(GtkWidget *widget, const char *type) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    if (!strcmp(G_OBJECT_TYPE_NAME(c), type) || find_type(c, type)) return true;
+  }
+  return false;
+}
+bool native_screens() { return find_type(app.root, "AdwNavigationView"); }
 
 bool stack_is(const std::string &stack) { return shows("Stack: " + stack); }
 
@@ -4046,6 +4118,29 @@ void click_label(const char *label) {
 }
 
 constexpr guint kLeft = 113;
+
+// The view `id` takes clicks: on screen, with no navigation view in a
+// transition (libadwaita's pages take no input while they slide).
+bool nav_settled(GtkWidget *widget) {
+  bool nav = !strcmp(G_OBJECT_TYPE_NAME(widget), "AdwNavigationView");
+  int pages = 0;
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (nav && gtk_widget_get_mapped(c) && !strcmp(G_OBJECT_TYPE_NAME(c), "AdwNavigationPage")) pages++;
+    if (!nav_settled(c)) return false;
+  }
+  return pages <= 1;
+}
+
+bool targetable(const char *id) {
+  if (!nav_settled(app.root)) return false;
+  GtkWidget *v = by_id(id);
+  if (!v || !gtk_widget_get_mapped(v)) return false;
+  for (GtkWidget *w = v; w; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_can_target(w)) return false;
+  }
+  return true;
+}
 
 // Feed's red title is visible: shown, and not covered.
 bool feed_drawn() {
@@ -4066,7 +4161,7 @@ void add_navigation_steps() {
   app.steps.push_back(Step{
       "native-stack: the first screen, with its header title and button",
       [] {},
-      [] { return shows("Home screen") && shows("Navigation") && by_id("nav-header-right") &&
+      [] { return shows("Home screen") && header_title("Navigation") && targetable("nav-header-right") &&
                   stack_is("Home"); }});
   app.steps.push_back(Step{"  ...the header button works", [] { click("nav-header-right"); },
                            [] { return shown_text(app.root, "header button", false); }});
@@ -4074,8 +4169,8 @@ void add_navigation_steps() {
       "push: the new screen shows (the one below hides), with its title and header color",
       [] { click("nav-push"); },
       [] {
-        GtkWidget *title = shown_text(app.root, "Details 1");
-        if (!title || shows("Home screen") || !shows("Details screen #1") ||
+        GtkWidget *title = header_title("Details 1");
+        if (!title || shows("Home screen") || !targetable("nav-push-more") ||
             !stack_is("Home > Details 1")) {
           return false;
         }
@@ -4090,46 +4185,172 @@ void add_navigation_steps() {
   app.steps.push_back(Step{"  ...the screens' focus events", [] {},
                            [] { return shown_text(app.root, "blur Home", false) &&
                                        shown_text(app.root, "focus Details 1", false); }});
+  if (native_screens()) {
+    // headerSearchBarOptions: RNSSearchBar, a GtkSearchEntry under the
+    // header; typing reaches onChangeText.
+    app.steps.push_back(Step{"  ...its header's search bar (onChangeText)",
+                             [] {
+                               GtkWidget *entry = nullptr;
+                               std::function<void(GtkWidget *)> find = [&](GtkWidget *w) {
+                                 for (GtkWidget *c = gtk_widget_get_first_child(w); c && !entry;
+                                      c = gtk_widget_get_next_sibling(c)) {
+                                   if (gtk_widget_get_mapped(c) && GTK_IS_SEARCH_ENTRY(c)) entry = c;
+                                   find(c);
+                                 }
+                               };
+                               find(app.root);
+                               if (check(entry != nullptr, "  the header has a search entry")) {
+                                 gtk_editable_set_text(GTK_EDITABLE(entry), "gtk");
+                               }
+                             },
+                             [] { return shown_text(app.root, "search \"gtk\"", false) != nullptr; }});
+  }
   app.steps.push_back(Step{"push another (navigation.push)", [] { click("nav-push-more"); },
                            [] { return shows("Details screen #2") && !shows("Details screen #1") &&
+                                       targetable("nav-push-more") &&
                                        stack_is("Home > Details 1 > Details 2"); }});
-  app.steps.push_back(Step{"the header's back button pops", [] { click_label("Go back"); },
+  app.steps.push_back(Step{native_screens() ? "the header's back button (libadwaita's) pops"
+                                            : "the header's back button pops",
+                           [] {
+                             if (!native_screens()) return click_label("Go back");
+                             GtkWidget *back = native_back_button(app.root);
+                             if (check(back != nullptr, "  the header has a back button")) {
+                               g_signal_emit_by_name(back, "clicked");
+                             }
+                           },
                            [] { return shows("Details screen #1") && !shows("Details screen #2") &&
-                                       stack_is("Home > Details 1"); }});
+                                       targetable("nav-push-more") && stack_is("Home > Details 1"); }});
   app.steps.push_back(Step{
       "Alt+Left pops (BackHandler's hardwareBackPress)",
       [] { check(key(GDK_KEY_Left, kLeft, GDK_ALT_MASK), "  Alt+Left handled"); },
-      [] { return shows("Home screen") && stack_is("Home"); }});
+      [] { return shows("Home screen") && !shows("Details screen #1") && targetable("nav-push") &&
+                  stack_is("Home"); }});
   app.steps.push_back(Step{"  ...and does nothing on the first screen",
                            [] { key(GDK_KEY_Left, kLeft, GDK_ALT_MASK); },
                            [] { return shows("Home screen") && stack_is("Home"); }});
   app.steps.push_back(Step{"push, then the mouse's back button pops",
                            [] { click("nav-push"); },
-                           [] { return shows("Details screen #1"); }});
+                           [] { return targetable("nav-push-more"); }});
   app.steps.push_back(Step{"  ...(button 8)",
                            [] {
                              graphene_point_t c = center_of(by_id("nav-push-more"));
                              mouse(rngtk::GtkPointerHandler::Phase::Down, c, 8);
                              mouse(rngtk::GtkPointerHandler::Phase::Up, c, 8);
                            },
-                           [] { return shows("Home screen") && stack_is("Home"); }});
+                           [] { return shows("Home screen") && !shows("Details screen #1") &&
+                                       targetable("nav-push") && stack_is("Home"); }});
   app.steps.push_back(Step{"pop to top", [] { click("nav-push"); },
-                           [] { return shows("Details screen #1"); }});
+                           [] { return shows("Details screen #1") && targetable("nav-push-more"); }});
   app.steps.push_back(Step{"  ...", [] { click("nav-push-more"); },
-                           [] { return shows("Details screen #2"); }});
+                           [] { return shows("Details screen #2") && targetable("nav-pop-top"); }});
   app.steps.push_back(Step{"  ...popToTop()", [] { click("nav-pop-top"); },
-                           [] { return shows("Home screen") && stack_is("Home"); }});
+                           [] { return shows("Home screen") && !shows("Details screen #2") &&
+                                       targetable("nav-modal") && stack_is("Home"); }});
   app.steps.push_back(Step{"a modal screen (presentation: 'modal')", [] { click("nav-modal"); },
-                           [] { return shows("Modal screen") && stack_is("Home > Modal"); }});
+                           [] { return shows("Modal screen") && targetable("nav-close") &&
+                                       stack_is("Home > Modal"); }});
   app.steps.push_back(Step{"  ...closes", [] { click("nav-close"); },
-                           [] { return shows("Home screen") && stack_is("Home"); }});
+                           [] { return shows("Home screen") && targetable("nav-modal") && stack_is("Home"); }});
+  app.steps.push_back(Step{"  ...opens again: its header has headerLeft and headerRight",
+                           [] { click("nav-modal"); },
+                           [] { return shows("Modal screen") && targetable("nav-cancel") &&
+                                       targetable("nav-done") && stack_is("Home > Modal"); }});
+  app.steps.push_back(Step{"  ...headerLeft's Cancel closes it", [] { click("nav-cancel"); },
+                           [] { return !shows("Modal screen") && targetable("nav-sheet") &&
+                                       stack_is("Home"); }});
+  app.steps.push_back(Step{"a form sheet (presentation: 'formSheet', half the height)",
+                           [] { click("nav-sheet"); },
+                           [] {
+                             GtkWidget *close = by_id("nav-sheet-close");
+                             if (!shows("Sheet screen") || !targetable("nav-sheet-close") ||
+                                 !stack_is("Home > Sheet")) {
+                               return false;
+                             }
+                             if (!native_screens()) return true;
+                             // A card over the stack, not all of it.
+                             GtkWidget *screen = close;
+                             while (screen && strcmp(G_OBJECT_TYPE_NAME(gtk_widget_get_parent(screen)),
+                                                     "AdwToolbarView")) {
+                               screen = gtk_widget_get_parent(screen);
+                             }
+                             return screen && gtk_widget_get_width(screen) < 700 &&
+                                    gtk_widget_get_height(screen) < 400;
+                           }});
+  app.steps.push_back(Step{"  ...closes", [] { click("nav-sheet-close"); },
+                           [] { return !shows("Sheet screen") && targetable("nav-modal") &&
+                                       stack_is("Home"); }});
+  if (native_screens()) {
+    // A modal is a layer of its own over the stack; Escape dismisses it and
+    // tells React (onDismissed).
+    app.steps.push_back(Step{"  ...opens again, in a layer with its own header",
+                             [] { click("nav-modal"); },
+                             [] { return shows("Modal screen") && header_title("Modal") &&
+                                         targetable("nav-close") && stack_is("Home > Modal"); }});
+    app.steps.push_back(Step{"  ...Escape dismisses it (onDismissed)",
+                             [] {
+                               GtkWidget *w = by_id("nav-close");
+                               while (w && !GTK_IS_REVEALER(w)) w = gtk_widget_get_parent(w);
+                               if (!check(w != nullptr, "  the modal is in a layer")) return;
+                               // The layer's Escape shortcut, as a key press would trigger it.
+                               GListModel *controllers = gtk_widget_observe_controllers(w);
+                               for (guint i = 0; i < g_list_model_get_n_items(controllers); i++) {
+                                 auto *c = GTK_EVENT_CONTROLLER(g_list_model_get_item(controllers, i));
+                                 if (GTK_IS_SHORTCUT_CONTROLLER(c)) {
+                                   auto *model = G_LIST_MODEL(c);
+                                   for (guint j = 0; j < g_list_model_get_n_items(model); j++) {
+                                     auto *sc = GTK_SHORTCUT(g_list_model_get_item(model, j));
+                                     gtk_shortcut_action_activate(gtk_shortcut_get_action(sc),
+                                                                  GTK_SHORTCUT_ACTION_EXCLUSIVE, w,
+                                                                  nullptr);
+                                     g_object_unref(sc);
+                                   }
+                                 }
+                                 g_object_unref(c);
+                               }
+                               g_object_unref(controllers);
+                             },
+                             [] { return !shows("Modal screen") && targetable("nav-bare") &&
+                                         stack_is("Home"); }});
+  }
+  // usePreventRemove: going back asks React, which refuses.
+  app.steps.push_back(Step{"a guarded screen (usePreventRemove)", [] { click("nav-guarded"); },
+                           [] { return shows("Guarded screen") && targetable("nav-guard-leave") &&
+                                       stack_is("Home > Guarded"); }});
+  app.steps.push_back(Step{native_screens() ? "  ...its back button (ours: libadwaita's can't pop it) is refused"
+                                            : "  ...its back button is refused",
+                           [] {
+                             if (!native_screens()) return click_label("Go back");
+                             check(native_back_button(app.root) == nullptr,
+                                   "  no libadwaita back button");
+                             GtkWidget *back = nullptr;
+                             std::function<void(GtkWidget *)> find = [&](GtkWidget *w) {
+                               for (GtkWidget *c = gtk_widget_get_first_child(w); c && !back;
+                                    c = gtk_widget_get_next_sibling(c)) {
+                                 if (gtk_widget_get_mapped(c) && GTK_IS_BUTTON(c) &&
+                                     gtk_widget_has_css_class(c, "back")) {
+                                   back = c;
+                                 }
+                                 find(c);
+                               }
+                             };
+                             find(app.root);
+                             if (check(back != nullptr, "  the header has our back button")) {
+                               g_signal_emit_by_name(back, "clicked");
+                             }
+                           },
+                           [] { return shown_text(app.root, "remove prevented", false) &&
+                                       shows("Guarded screen") && stack_is("Home > Guarded"); }});
+  app.steps.push_back(Step{"  ...Leave", [] { click("nav-guard-leave"); },
+                           [] { return !shows("Guarded screen") && targetable("nav-bare") &&
+                                       stack_is("Home"); }});
   app.steps.push_back(Step{"a screen without a header (headerShown: false)", [] { click("nav-bare"); },
-                           [] { return shows("Screen without a header") && !shows("Navigation") &&
-                                       stack_is("Home > Bare"); }});
+                           [] { return shows("Screen without a header") && !header_title("Navigation") &&
+                                       targetable("nav-bare-back") && stack_is("Home > Bare"); }});
   app.steps.push_back(Step{"  ...back", [] { click("nav-bare-back"); },
-                           [] { return shows("Home screen"); }});
+                           [] { return shows("Home screen") && !shows("Screen without a header") &&
+                                       targetable("nav-tabs"); }});
   app.steps.push_back(Step{"bottom tabs inside the stack", [] { click("nav-tabs"); },
-                           [] { return feed_drawn() && stack_is("Home > Tabs / Feed"); }});
+                           [] { return feed_drawn() && nav_settled(app.root) && stack_is("Home > Tabs / Feed"); }});
   // Without native screens the inactive tab stays mounted under the
   // active one (zIndex -1), as on the web: Feed's red title is covered.
   app.steps.push_back(Step{"  ...switching tabs", [] { click_label("Settings tab button"); },
@@ -4547,6 +4768,9 @@ void activate(GtkApplication *gtk_app, gpointer) {
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
   host_options.packages = {example_package(), animated_probe::package()};
+#ifdef RNGTK_HARNESS_SCREENS
+  host_options.packages.push_back(rngtk_screens_package());
+#endif
   app.host = new rngtk::RNGtkHost(host_options, GTK_OVERLAY(app.overlay));
   if (opts.dev) rngtk::addDevControls(window, app.host, opts.verbose);
   folly::dynamic props = folly::dynamic::object();
