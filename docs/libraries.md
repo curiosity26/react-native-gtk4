@@ -26,6 +26,32 @@ The ports' versions follow this package's. The Showcase has a page for each
 react-native run-linux`. The repository's `rn-gtk-host` harness doesn't
 autolink, and its pages say so.
 
+## Navigation: react-native-screens and React Navigation
+
+[React Navigation](https://reactnavigation.org) 7 works on Linux: its JS
+stack, tabs and drawer as they are, and `@react-navigation/native-stack`
+through react-native-screens 4's web components. The Metro config picks
+the web build of `react-native-screens` and `@react-navigation/native-stack`
+on Linux (a `Foo.web.tsx` where there is one, and the platform-less
+`Foo.tsx` over `Foo.native.tsx`), so native-stack draws its stack and
+header (`@react-navigation/elements`) as it does in a browser: header
+options (title, colors, `headerLeft`/`headerRight`, `headerShown`), `push`,
+`pop`, `popToTop`, modals, and nested tab navigators. There are no screen
+transitions, and `presentation: 'modal'` is a pushed screen, as on the web.
+Back works with the header's arrow, Alt+Left and the mouse's back button
+([BackHandler](apis.md#backhandler)). Nothing to install besides the
+libraries:
+
+```sh
+npm install @react-navigation/native @react-navigation/native-stack \
+  react-native-screens react-native-safe-area-context
+```
+
+The Showcase's Navigation page has a stack with header options, a modal
+and tabs; `rn-gtk-host --module GalleryNavigation --self-test` pushes and
+pops screens (buttons, the header's back button, Alt+Left, the mouse's back
+button), opens the modal and switches tabs.
+
 ## In a Flatpak
 
 - **async-storage**: nothing to do. The data lives in the app's own data
@@ -44,7 +70,8 @@ autolink, and its pages say so.
 ## Not ported yet
 
 [library-assessments.md](library-assessments.md) covers gesture-handler,
-reanimated and screens: where they stand on Linux and what a port takes.
+reanimated and a native screens port: where they stand on Linux and what a
+port takes.
 
 ## Web views on Ubuntu 24.04 and later
 

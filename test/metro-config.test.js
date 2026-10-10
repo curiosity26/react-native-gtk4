@@ -197,6 +197,35 @@ describe('createLinuxResolver', () => {
     assert.equal(resolve(path.join(other, 'B.js'), './A').filePath, path.join(other, 'A.js'));
   });
 
+  test('web packages: .web variants, and the platform-less file over .native', () => {
+    const rns = path.join(app, 'node_modules', 'react-native-screens', 'src');
+    write(path.join(rns, 'index.js'));
+    write(path.join(rns, 'ScreenStack.js'));
+    write(path.join(rns, 'ScreenStack.web.js'));
+    write(path.join(rns, 'core.js'));
+    const stack = path.join(app, 'node_modules', '@react-navigation', 'native-stack', 'src');
+    write(path.join(stack, 'index.js'));
+    write(path.join(stack, 'NativeStackView.native.js'));
+    write(path.join(stack, 'NativeStackView.js'));
+    write(path.join(stack, 'Only.native.js'));
+    assert.equal(
+      resolve(path.join(rns, 'index.js'), './ScreenStack').filePath,
+      path.join(rns, 'ScreenStack.web.js'),
+    );
+    assert.equal(resolve(path.join(rns, 'index.js'), './core').filePath, path.join(rns, 'core.js'));
+    const from = path.join(stack, 'index.js');
+    assert.equal(resolve(from, './NativeStackView').filePath, path.join(stack, 'NativeStackView.js'));
+    // No web file to use instead: unchanged.
+    assert.equal(resolve(from, './Only').filePath, path.join(stack, 'Only.native.js'));
+    // Only platform variants (no platform-less file): the web one.
+    write(path.join(rns, 'TabsHost.ios.js'));
+    write(path.join(rns, 'TabsHost.web.js'));
+    assert.equal(
+      resolve(path.join(rns, 'index.js'), './TabsHost').filePath,
+      path.join(rns, 'TabsHost.web.js'),
+    );
+  });
+
   test("react-native-webview gets its iOS JS only with the Linux port installed", () => {
     const wv = path.join(app, 'node_modules', 'react-native-webview', 'src');
     write(path.join(wv, 'index.js'));

@@ -585,6 +585,11 @@ bool RNGtkHost::run(const std::string &script, SurfaceId surfaceId,
   mountingManager_->registerSurface(surfaceId, root);
   pointerHandler_ = std::make_unique<GtkPointerHandler>(*mountingManager_, root);
   keyboardHandler_ = std::make_unique<GtkKeyboardHandler>(*mountingManager_, root);
+  mountingManager_->setOnBackRequested([this] {
+    if (loaded_ && reactHost_) {
+      reactHost_->emitDeviceEvent(folly::dynamic::array("hardwareBackPress"));
+    }
+  });
   mountingManager_->setOnUserScroll([this] {
     if (pointerHandler_) pointerHandler_->cancelTouches();
     if (logBoxPointerHandler_) logBoxPointerHandler_->cancelTouches();
