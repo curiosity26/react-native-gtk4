@@ -47,3 +47,5 @@ based on it, and `ldd` finds every library it links. Otherwise, or with
 `RNGTK_NO_PREBUILT=1`, they build the host from source as before. Apps
 with native libraries also fetch React Native's sources for the headers
 (`fetch-rn-deps.py`, then `build-hermes.sh --headers-only`).
+
+To move to a new React Native version, see [upgrading.md](upgrading.md).
