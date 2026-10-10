@@ -28,6 +28,10 @@
 #include <webkit/webkit.h>
 
 #include <atomic>
+#include <fcntl.h>
+#include <sched.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <map>
 #include <mutex>
 
@@ -198,7 +202,49 @@ void load(WebKitWebView *view, const folly::dynamic &source) {
   g_object_unref(request);
 }
 
+// WebKitGTK runs its web processes in a bubblewrap sandbox, which needs
+// unprivileged user namespaces. Ubuntu 24.04's AppArmor allows them only to
+// programs with a profile that says so (Epiphany's has `userns,`), and
+// WebKit aborts the app when the sandbox can't start. Checks once, in a
+// child process, whether this program may map its user in a new user
+// namespace (Flatpak has its own sandbox: always fine).
+bool sandboxAvailable() {
+  static const bool available = [] {
+    if (g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS)) return true;
+    if (g_getenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS")) return true;
+    // (Only async-signal-safe calls in the child: the app has threads.)
+    char map[64];
+    int n = snprintf(map, sizeof(map), "0 %u 1\n", unsigned(getuid()));
+    pid_t pid = fork();
+    if (pid < 0) return true;
+    if (pid == 0) {
+      if (unshare(CLONE_NEWUSER) != 0) _exit(1);
+      int fd = open("/proc/self/uid_map", O_WRONLY);
+      if (fd < 0) _exit(1);
+      _exit(write(fd, map, size_t(n)) == n ? 0 : 1);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+  }();
+  return available;
+}
+
+// What the view shows instead of crashing.
+GtkWidget *sandboxMissing() {
+  g_warning("react-native-webview: WebKitGTK's sandbox can't start: this system's AppArmor doesn't let "
+            "this program use unprivileged user namespaces. Packages from package-linux --format deb "
+            "install a profile that does; see docs/libraries.md for development builds.");
+  GtkWidget *label = gtk_label_new(
+      "This web view can't start: WebKitGTK's sandbox needs unprivileged user namespaces, which this "
+      "system's AppArmor doesn't allow this program. See react-native-gtk4's docs/libraries.md.");
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+  return label;
+}
+
 GtkWidget *create(const ShadowView &view) {
+  if (!sandboxAvailable()) return sandboxMissing();
   folly::dynamic props = folly::dynamic::object;
   if (auto p = std::dynamic_pointer_cast<const WebViewProps>(view.props)) props = p->raw;
   // Incognito: a session of its own, kept in memory.
@@ -307,6 +353,7 @@ GtkWidget *create(const ShadowView &view) {
 }
 
 void update(GtkWidget *widget, const ShadowView &, const ShadowView &newView) {
+  if (!WEBKIT_IS_WEB_VIEW(widget)) return;
   State *s = stateOf(widget);
   auto props = std::dynamic_pointer_cast<const WebViewProps>(newView.props);
   if (!s || !props) return;
@@ -324,6 +371,7 @@ void update(GtkWidget *widget, const ShadowView &, const ShadowView &newView) {
 }
 
 void command(GtkWidget *widget, const std::string &name, const folly::dynamic &args) {
+  if (!WEBKIT_IS_WEB_VIEW(widget)) return;
   WebKitWebView *view = WEBKIT_WEB_VIEW(widget);
   auto arg = [&](size_t i) { return args.isArray() && args.size() > i && args[i].isString() ? args[i].asString() : std::string(); };
   if (name == "goBack") webkit_web_view_go_back(view);
