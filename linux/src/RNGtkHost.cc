@@ -261,6 +261,47 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
   void addScrollObserver(std::function<void(GtkWidget *)> observer) override {
     host_.mountingManager_->addScrollObserver(std::move(observer));
   }
+  bool isMainThread() override { return g_main_context_is_owner(g_main_context_default()); }
+  bool isJSThread() override {
+    std::lock_guard<std::mutex> lock(host_.queueMutex_);
+    auto queue = host_.queue_.lock();
+    return queue && queue->isOnThread();
+  }
+  void runOnMainThread(std::function<void()> fn) override {
+    auto *data = new std::function<void()>(std::move(fn));
+    g_idle_add_full(G_PRIORITY_HIGH_IDLE, [](gpointer d) -> gboolean {
+      (*static_cast<std::function<void()> *>(d))();
+      return G_SOURCE_REMOVE;
+    }, data, [](gpointer d) { delete static_cast<std::function<void()> *>(d); });
+  }
+  void runOnJSThread(std::function<void(facebook::jsi::Runtime &)> task) override {
+    if (host_.reactHost_) host_.reactHost_->runOnRuntimeScheduler(std::move(task));
+  }
+  void runOnScheduler(std::function<void(Scheduler &)> task) override {
+    if (host_.reactHost_) host_.reactHost_->runOnScheduler(std::move(task));
+  }
+  void requestFrame(std::function<void(double)> callback) override {
+    // On the main window's frame clock: a one-shot tick callback.
+    auto *data = new std::function<void(double)>(std::move(callback));
+    runOnMainThread([this, data] {
+      gtk_widget_add_tick_callback(
+          GTK_WIDGET(host_.overlay_),
+          [](GtkWidget *, GdkFrameClock *clock, gpointer d) -> gboolean {
+            auto *fn = static_cast<std::function<void(double)> *>(d);
+            (*fn)(double(gdk_frame_clock_get_frame_time(clock)) / 1000.0);
+            return G_SOURCE_REMOVE;
+          },
+          data, [](gpointer d) { delete static_cast<std::function<void(double)> *>(d); });
+      gtk_widget_queue_draw(GTK_WIDGET(host_.overlay_));
+    });
+  }
+  double frameTime() override {
+    GdkFrameClock *clock = host_.overlay_ ? gtk_widget_get_frame_clock(GTK_WIDGET(host_.overlay_)) : nullptr;
+    return double(clock ? gdk_frame_clock_get_frame_time(clock) : g_get_monotonic_time()) / 1000.0;
+  }
+  void setNativePropsForTag(int tag, folly::dynamic props) override {
+    host_.mountingManager_->synchronouslyUpdateViewOnUIThread(tag, props);
+  }
   void runAfterMounts(std::function<void()> fn) override {
     host_.mountingManager_->afterPendingMounts(std::move(fn));
   }

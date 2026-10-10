@@ -37,12 +37,16 @@
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/propsConversions.h>
+#include <hermes/hermes.h>
+#include <react/renderer/uimanager/UIManagerCommitHook.h>
+#include <rngtk/CxxModule.h>
 #include <rngtk/Extensions.h>
 #include <glib/gstdio.h>
 #include <glog/logging.h>
 #include <folly/json.h>
 #include <libsoup/soup.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -4596,6 +4600,181 @@ void add_gestures_steps() {
                            }});
 }
 
+// RNGtkHostSdkProbe: a library module exercising rngtk::Host's API for
+// libraries that drive Fabric themselves (Reanimated): threads, the
+// runtime, the Fabric scheduler (a commit hook, an event listener),
+// frames, props by tag without a commit, a Hermes runtime of its own.
+// GalleryHostSdk calls it.
+namespace sdk_probe {
+rngtk::Host *host = nullptr;
+std::atomic<int> commits{0};
+std::atomic<int> events{0};
+
+class CommitCounter final : public facebook::react::UIManagerCommitHook {
+ public:
+  void commitHookWasRegistered(const facebook::react::UIManager &) noexcept override {}
+  void commitHookWasUnregistered(const facebook::react::UIManager &) noexcept override {}
+  facebook::react::RootShadowNode::Unshared shadowTreeWillCommit(
+      const facebook::react::ShadowTree &, const facebook::react::RootShadowNode::Shared &,
+      const facebook::react::RootShadowNode::Unshared &newRoot,
+      const facebook::react::ShadowTreeCommitOptions &) noexcept override {
+    commits++;
+    return newRoot;
+  }
+};
+CommitCounter counter;
+bool hooked = false;
+
+class Module final : public rngtk::CxxModule<Module> {
+ public:
+  explicit Module(std::shared_ptr<facebook::react::CallInvoker> js) : CxxModule("RNGtkHostSdkProbe", std::move(js)) {
+    method<&Module::threads>("threads");
+    method<&Module::frames>("frames");
+    method<&Module::setGlobal>("setGlobal");
+    method<&Module::hookFabric>("hookFabric");
+    method<&Module::counts>("counts");
+    method<&Module::setOpacity>("setOpacity");
+    method<&Module::hermes>("hermes");
+  }
+  // From JS: on the JS thread, not the main one; then the main thread.
+  facebook::react::AsyncPromise<std::string> threads(facebook::jsi::Runtime &rt) {
+    facebook::react::AsyncPromise<std::string> promise(rt, jsInvoker_);
+    std::string fromJS = std::string("js ") + (host->isJSThread() ? "yes" : "no") + ", main " +
+                         (host->isMainThread() ? "yes" : "no");
+    host->runOnMainThread([promise, fromJS]() mutable {
+      promise.resolve(fromJS + "; then js " + (host->isJSThread() ? "yes" : "no") + ", main " +
+                      (host->isMainThread() ? "yes" : "no"));
+    });
+    return promise;
+  }
+  // `n` frames in a row: their count and whether the times went up.
+  facebook::react::AsyncPromise<std::string> frames(facebook::jsi::Runtime &rt, double n) {
+    facebook::react::AsyncPromise<std::string> promise(rt, jsInvoker_);
+    struct Run {
+      int left;
+      int count = 0;
+      double first = 0, last = 0;
+      bool increasing = true;
+      facebook::react::AsyncPromise<std::string> promise;
+    };
+    auto run = std::make_shared<Run>(Run{int(n), 0, 0, 0, true, promise});
+    auto next = std::make_shared<std::function<void(double)>>();
+    *next = [run, next](double t) {
+      if (run->count == 0) run->first = t;
+      else if (t <= run->last) run->increasing = false;
+      run->last = t;
+      run->count++;
+      if (--run->left > 0) {
+        host->requestFrame(*next);
+        return;
+      }
+      char buffer[96];
+      snprintf(buffer, sizeof(buffer), "%d frames, increasing %s, %.0f ms", run->count,
+               run->increasing ? "yes" : "no", run->last - run->first);
+      run->promise.resolve(buffer);
+    };
+    host->requestFrame(*next);
+    return promise;
+  }
+  // runOnJSThread: a global set there, from the main thread.
+  void setGlobal(facebook::jsi::Runtime &, double value) {
+    host->runOnMainThread([value] {
+      host->runOnJSThread([value](facebook::jsi::Runtime &rt) {
+        rt.global().setProperty(rt, "__rngtkSdkProbe", facebook::jsi::Value(value));
+      });
+    });
+  }
+  // A commit hook on the UIManager and an event listener on the scheduler.
+  bool hookFabric(facebook::jsi::Runtime &) {
+    bool ran = false;
+    host->runOnScheduler([&ran](facebook::react::Scheduler &scheduler) {
+      ran = true;
+      if (hooked) return;
+      hooked = true;
+      scheduler.getUIManager()->registerCommitHook(counter);
+      scheduler.addEventListener(std::make_shared<const facebook::react::EventListener>(
+          [](const facebook::react::RawEvent &) {
+            events++;
+            return false;
+          }));
+    });
+    return ran;
+  }
+  std::string counts(facebook::jsi::Runtime &) {
+    return std::to_string(commits.load()) + " commits, " + std::to_string(events.load()) + " events";
+  }
+  // Props by tag, without a commit.
+  void setOpacity(facebook::jsi::Runtime &, double tag, double opacity) {
+    host->setNativePropsForTag(int(tag), folly::dynamic::object("opacity", opacity));
+  }
+  // Hermes, linked for libraries: a runtime of their own.
+  double hermes(facebook::jsi::Runtime &) {
+    auto runtime = facebook::hermes::makeHermesRuntime();
+    auto result = runtime->evaluateJavaScript(std::make_shared<facebook::jsi::StringBuffer>("6 * 7"), "probe.js");
+    return result.isNumber() ? result.asNumber() : -1;
+  }
+};
+
+std::shared_ptr<const rngtk::Package> package() {
+  auto p = std::make_shared<rngtk::Package>();
+  p->name = "host-sdk-probe";
+  p->turboModules.push_back(
+      [](const std::string &name, const std::shared_ptr<facebook::react::CallInvoker> &js)
+          -> std::shared_ptr<facebook::react::TurboModule> {
+        return name == "RNGtkHostSdkProbe" ? std::make_shared<Module>(js) : nullptr;
+      });
+  p->setUp = [](rngtk::Host &h) { host = &h; };
+  return p;
+}
+}  // namespace sdk_probe
+
+bool is_host_sdk() { return opts.module == "GalleryHostSdk"; }
+
+void add_host_sdk_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  auto says = [](std::string text) { return has_text(app.root, text); };
+  app.steps.push_back(Step{"threads: a module call is on the JS thread; runOnMainThread on the main one",
+                           [] { click("sdk-threads"); },
+                           [says] { return says("js yes, main no; then js no, main yes"); }});
+  app.steps.push_back(Step{"requestFrame: 30 frames of the GdkFrameClock, in order",
+                           [] { click("sdk-frames"); },
+                           [says] { return says("30 frames, increasing yes"); }});
+  app.steps.push_back(Step{"runOnJSThread: a global set on the runtime",
+                           [] { click("sdk-global"); },
+                           [says] { return says("global 7"); }});
+  app.steps.push_back(Step{"runOnScheduler: a commit hook and an event listener",
+                           [] { click("sdk-hook"); },
+                           [says] { return says("hooked yes"); }});
+  app.steps.push_back(Step{"  ...they see a commit and events",
+                           [] { click("sdk-bump"); },
+                           [] {
+                             // (and the counts line is in: the layout below settles)
+                             return sdk_probe::commits.load() > 0 && sdk_probe::events.load() > 0 &&
+                                    has_text(app.root, "bumped 1") && has_text(app.root, " commits, ") &&
+                                    app.host->isIdle();
+                           }});
+  static int mounts = 0;
+  app.steps.push_back(Step{"setNativePropsForTag: opacity without a commit",
+                           [] { click("sdk-opacity"); },
+                           [] {
+                             // Once the press's own commits are in.
+                             GtkWidget *v = by_id("sdk-target");
+                             mounts = app.host->mountingManager().mountCount();
+                             return v && std::abs(gtk_widget_get_opacity(v) - 0.25) < 0.01 && app.host->isIdle();
+                           }});
+  app.steps.push_back(after_frames("  ...it holds, with no commit since", 10, [] {
+    GtkWidget *v = by_id("sdk-target");
+    return v && std::abs(gtk_widget_get_opacity(v) - 0.25) < 0.01 &&
+           app.host->mountingManager().mountCount() == mounts;
+  }));
+  app.steps.push_back(Step{"Hermes: a runtime of the library's own evaluates 6 * 7",
+                           [] { click("sdk-hermes"); },
+                           [says] { return says("hermes 42"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -4694,6 +4873,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_host_sdk() && app.steps.empty()) {
+    add_host_sdk_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_gestures() && app.steps.empty()) {
     add_gestures_steps();
     enter(Phase::Steps);
@@ -4767,7 +4949,8 @@ void check_app(bool first) {
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
-               is_notifications() || is_native_module() || is_navigation() || is_gestures()) {
+               is_notifications() || is_native_module() || is_navigation() || is_gestures() ||
+               is_host_sdk()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -4995,7 +5178,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
   };
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
-  host_options.packages = {example_package(), animated_probe::package(),
+  host_options.packages = {example_package(), animated_probe::package(), sdk_probe::package(),
                            rngtk_gesture_handler_package()};
 #ifdef RNGTK_HARNESS_SCREENS
   host_options.packages.push_back(rngtk_screens_package());

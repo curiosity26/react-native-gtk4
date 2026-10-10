@@ -27,6 +27,7 @@
 #include <react/nativemodule/TurboModuleProvider.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
 #include <react/renderer/core/EventEmitter.h>
+#include <react/renderer/scheduler/Scheduler.h>
 #include <react/renderer/mounting/ShadowView.h>
 
 #include <functional>
@@ -118,8 +119,9 @@ class Host {
   // a library's...), or "".
   virtual std::string componentName(GtkWidget *view) = 0;
   // Applies props to a mounted view now, without a React commit, as native
-  // Animated does (opacity, transform, colors...); they hold until the next
-  // commit sets the view's props.
+  // Animated does (opacity, transform, colors...); they hold until a commit
+  // updates the view (its props or its layout), which applies the
+  // committed props (Reanimated's commit hook keeps its values in those).
   virtual void setNativeProps(GtkWidget *view, folly::dynamic props) = 0;
   // Called when the user scrolls a ScrollView (a drag, the wheel), with its
   // view.
@@ -130,6 +132,32 @@ class Host {
   // so far (a TurboModule call naming a view JS just rendered finds it
   // mounted). Any thread; in order.
   virtual void runAfterMounts(std::function<void()> fn) = 0;
+
+  // ---- For libraries that drive Fabric themselves (Reanimated) ----
+  // These may be called from any thread.
+  //
+  // The GTK main thread and the JS thread (the current JS instance's).
+  virtual bool isMainThread() = 0;
+  virtual bool isJSThread() = 0;
+  // Runs `fn` on the main thread, soon (not inline).
+  virtual void runOnMainThread(std::function<void()> fn) = 0;
+  // Runs `task` on the JS thread with the runtime, through React Native's
+  // RuntimeScheduler.
+  virtual void runOnJSThread(std::function<void(facebook::jsi::Runtime &)> task) = 0;
+  // Runs `task` now with the JS instance's Fabric scheduler (its
+  // getUIManager(): commit and mount hooks, the shadow trees; and
+  // addEventListener: every event before JS gets it). Not while a reload is
+  // replacing the instance: then it doesn't run.
+  virtual void runOnScheduler(std::function<void(facebook::react::Scheduler &)> task) = 0;
+  // Calls `callback` once on the main thread at the next frame of the main
+  // window's GdkFrameClock, with its frame time (ms, monotonic), as
+  // requestAnimationFrame does.
+  virtual void requestFrame(std::function<void(double timestampMs)> callback) = 0;
+  // The frame time of the frame being drawn (ms, the clock of
+  // requestFrame), or the monotonic time between frames.
+  virtual double frameTime() = 0;
+  // setNativeProps for a view by React tag.
+  virtual void setNativePropsForTag(int tag, folly::dynamic props) = 0;
 };
 
 // What a library adds: TurboModules and native components, and code that
