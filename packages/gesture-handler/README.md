@@ -37,12 +37,15 @@ npx react-native run-linux
 - The library's `ScrollView`, `FlatList`, `Switch`...: their native gesture
   activates when the view takes over (a ScrollView when it scrolls), and
   cancels the gestures it isn't simultaneous with.
-- `ReanimatedSwipeable` and `ReanimatedDrawerLayout` need
-  react-native-reanimated on Linux (not yet).
+- `ReanimatedSwipeable` and `ReanimatedDrawerLayout`, with
+  react-native-reanimated and its Linux port.
 - A gesture that activates takes the touches from React Native's
   responder (Pressable, ScrollView): their press is cancelled.
-- Events: callbacks on the JS thread. Reanimated worklets need
-  react-native-reanimated on Linux (not yet).
+- Events: callbacks on the JS thread, or with react-native-reanimated
+  (and its Linux port), worklets on the UI runtime, in the same event as
+  the input; `GestureStateManager` works in worklets. As on iOS and
+  Android, with Reanimated installed callbacks are worklets unless the
+  gesture says `runOnJS: true`.
 
 The Showcase's Gestures page has all of them; `rn-gtk-host --module
 GalleryGestures --self-test` drives each with the mouse, touch points and a

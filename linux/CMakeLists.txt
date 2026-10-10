@@ -662,6 +662,9 @@ add_test(NAME gallery-worklets-self-test
 add_test(NAME gallery-reanimated-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryReanimated --width 940 --height 760 --self-test)
+add_test(NAME gallery-reanimated-layout-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryReanimatedLayout --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)
