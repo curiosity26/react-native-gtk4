@@ -80,8 +80,10 @@ using namespace facebook::react;
 // template-library/linux/src/ExamplePackage.cc
 std::shared_ptr<const rngtk::Package> example_package();
 std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package();
+#ifdef RNGTK_HARNESS_REANIMATED
 std::shared_ptr<const rngtk::Package> rngtk_worklets_package();
 std::shared_ptr<const rngtk::Package> rngtk_reanimated_package();
+#endif
 #ifdef RNGTK_HARNESS_SCREENS
 std::shared_ptr<const rngtk::Package> rngtk_screens_package();
 #endif
@@ -5559,8 +5561,11 @@ void activate(GtkApplication *gtk_app, gpointer) {
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
   host_options.packages = {example_package(), animated_probe::package(), sdk_probe::package(),
-                           rngtk_gesture_handler_package(), rngtk_worklets_package(),
-                           rngtk_reanimated_package()};
+                           rngtk_gesture_handler_package()};
+#ifdef RNGTK_HARNESS_REANIMATED
+  host_options.packages.push_back(rngtk_worklets_package());
+  host_options.packages.push_back(rngtk_reanimated_package());
+#endif
 #ifdef RNGTK_HARNESS_SCREENS
   host_options.packages.push_back(rngtk_screens_package());
 #endif
