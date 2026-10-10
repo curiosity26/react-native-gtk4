@@ -113,6 +113,10 @@ struct HandlerDelegate {
   virtual void cancelTimer(guint id) = 0;
   // The JS responder (Pressable, ScrollView) loses its touches.
   virtual void cancelJSResponder() = 0;
+  // A button's native gesture: whether it shows pressed, and (a button the
+  // library manages itself: Touchable) its events (onButtonPress...).
+  virtual void buttonPressed(bool) {}
+  virtual void buttonEvent(const char * /*name*/, folly::dynamic /*payload*/) {}
 };
 
 class GestureHandler {
@@ -162,8 +166,8 @@ class GestureHandler {
 
   bool shouldWaitForHandlerFailure(GestureHandler &other);
   bool shouldRequireToWaitForFailure(GestureHandler &other);
-  bool shouldRecognizeSimultaneously(GestureHandler &other);
-  bool shouldBeCancelledByOther(GestureHandler &other);
+  virtual bool shouldRecognizeSimultaneously(GestureHandler &other);
+  virtual bool shouldBeCancelledByOther(GestureHandler &other);
   virtual bool shouldBeginWithRecordedHandlers(const std::vector<GestureHandler *> &) { return true; }
 
   void sendEvent(State newState, State oldState);
@@ -187,6 +191,15 @@ class GestureHandler {
   virtual void onPointerMoveOver(const AdaptedEvent &) {}
   virtual void onPointerMoveOut(const AdaptedEvent &) {}
   virtual void onWheel(const AdaptedEvent &) {}
+  // A touchpad pinch at `focus` (root coordinates): Begin, Update (scale
+  // since it began, rotation since the last one), End or Cancel.
+  enum class PinchPhase { Begin, Update, End, Cancel };
+  virtual void onTouchpadPinch(PinchPhase, Point, double /*scale*/, double /*angleDelta*/, double /*time*/) {}
+  // The view it's on scrolled (a ScrollView's native gesture).
+  virtual void onScroll() {}
+  // What kind of view it's attached to: "Button" (an RNGestureHandlerButton),
+  // "ScrollView", "Switch", or "".
+  std::string viewRole;
 
   // Relations (configureRelations): handler tags.
   std::vector<int> waitFor, simultaneousWith, blocks;

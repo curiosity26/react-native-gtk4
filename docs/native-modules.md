@@ -100,7 +100,10 @@ quits):
 
 | `rngtk::Host` | |
 | --- | --- |
-| `addPointerObserver(fn)` | every pointer event on the app's surfaces (`rngtk::PointerInput`: press, move, release, cancel, leave, scroll; mouse or touch, the pointer id, root coordinates, the React view under it), before the host turns it into touches; `fn` returning true keeps the host from handling it. packages/gesture-handler's recognizers run on it |
+| `addPointerObserver(fn)` | every pointer event on the app's surfaces (`rngtk::PointerInput`: press, move, release, cancel, leave, scroll, touchpad pinch; mouse or touch, the pointer id, root coordinates, the React view under it), before the host turns it into touches; `fn` returning true keeps the host from handling it. packages/gesture-handler's recognizers run on it |
+| `componentName(widget)` | a mounted view's React component (`"ScrollView"`, a library's...) |
+| `setNativeProps(widget, props)` | props applied now, without a commit, as native Animated does (opacity, transform, colors); they hold until the next commit |
+| `addScrollObserver(fn)` | the user scrolled a ScrollView (its view) |
 | `cancelTouches(root)` | the JS responder (Pressable, ScrollView) loses the touches in progress on that surface (touchCancel), as when a native gesture takes over |
 | `viewForTag(tag)`, `tagForView(widget)`, `eventEmitterForView(widget)` | mounted views by React tag, and a view's event emitter (`emitter->dispatchEvent("onMyEvent", payload)` for a prop `onMyEvent`) |
 | `emitDeviceEvent(name, payload)` | `RCTDeviceEventEmitter` events |

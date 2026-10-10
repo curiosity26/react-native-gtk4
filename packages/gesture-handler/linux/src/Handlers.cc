@@ -6,6 +6,8 @@
 #include "Orchestrator.h"
 
 #include <cmath>
+#include <cstring>
+#include <functional>
 #include <limits>
 
 namespace rngtk_gh {
@@ -701,6 +703,570 @@ class ManualHandler final : public GestureHandler {
   }
 };
 
+
+// ---- Pinch ----------------------------------------------------------------------
+
+// Android's ScaleGestureDetector, as the web port has it.
+class ScaleDetector {
+ public:
+  double focusX = 0, focusY = 0, currentSpan = 0, prevSpan = 0, initialSpan = 0;
+  double currentTime = 0, prevTime = 0;
+  bool inProgress = false;
+  std::function<bool()> onBegin, onScale;
+  std::function<void()> onEnd;
+
+  void onTouchEvent(const AdaptedEvent &e, const PointerTracker &tracker) {
+    currentTime = e.time;
+    int n = tracker.trackedPointersCount();
+    if (e.eventType == EventType::AdditionalPointerUp && n <= 2) return;
+    bool complete = e.eventType == EventType::Up || e.eventType == EventType::Cancel;
+    if (e.eventType == EventType::Down || complete) {
+      if (inProgress) {
+        onEnd();
+        inProgress = false;
+        initialSpan = 0;
+      }
+      if (complete) return;
+    }
+    bool configChanged = e.eventType == EventType::Down || e.eventType == EventType::AdditionalPointerUp ||
+                         e.eventType == EventType::AdditionalPointerDown;
+    bool pointerUp = e.eventType == EventType::AdditionalPointerUp;
+    int ignored = pointerUp ? e.pointerId : std::numeric_limits<int>::min();
+    double div = pointerUp ? n - 1 : n;
+    double sx = 0, sy = 0;
+    for (auto &[id, el] : tracker.trackedPointers()) {
+      if (id == ignored) continue;
+      sx += el.absolute.x;
+      sy += el.absolute.y;
+    }
+    double fx = sx / div, fy = sy / div, devX = 0, devY = 0;
+    for (auto &[id, el] : tracker.trackedPointers()) {
+      if (id == ignored) continue;
+      devX += std::abs(el.absolute.x - fx);
+      devY += std::abs(el.absolute.y - fy);
+    }
+    double span = std::hypot(devX / div * 2, devY / div * 2);
+    bool wasInProgress = inProgress;
+    focusX = fx;
+    focusY = fy;
+    if (inProgress && configChanged) {
+      onEnd();
+      inProgress = false;
+      initialSpan = span;
+    }
+    if (configChanged) initialSpan = prevSpan = currentSpan = span;
+    if (!inProgress && (wasInProgress || std::abs(span - initialSpan) > kTouchSlop * 2)) {
+      prevSpan = currentSpan = span;
+      prevTime = currentTime;
+      inProgress = onBegin();
+    }
+    if (e.eventType != EventType::Move) return;
+    currentSpan = span;
+    if (inProgress && !onScale()) return;
+    prevSpan = currentSpan;
+    prevTime = currentTime;
+  }
+  double scaleFactor(int pointers) const {
+    if (pointers < 2) return 1;
+    return prevSpan > 0 ? currentSpan / prevSpan : 1;
+  }
+};
+
+class PinchHandler final : public GestureHandler {
+ public:
+  PinchHandler(int tag, std::string name, Orchestrator &o) : GestureHandler(tag, std::move(name), o) {
+    detector_.onBegin = [this] {
+      startingSpan_ = detector_.currentSpan;
+      return true;
+    };
+    detector_.onScale = [this] {
+      double prev = scale_;
+      scale_ *= detector_.scaleFactor(tracker_.trackedPointersCount());
+      double delta = detector_.currentTime - detector_.prevTime;
+      if (delta > 0) velocity_ = (scale_ - prev) / delta;
+      if (std::abs(startingSpan_ - detector_.currentSpan) >= kTouchSlop && state_ == BEGAN) activate();
+      return true;
+    };
+    detector_.onEnd = [] {};
+  }
+  bool isContinuous() const override { return true; }
+
+  void activate(bool force = false) override {
+    if (state_ != ACTIVE) resetProgress();
+    GestureHandler::activate(force);
+  }
+
+  void onTouchpadPinch(PinchPhase phase, Point focus, double scale, double, double time) override {
+    switch (phase) {
+      case PinchPhase::Begin:
+        orchestrator_.recordHandlerIfNotPresent(this);
+        pointerType_ = POINTER_OTHER;
+        touchpad_ = true;
+        focus_ = focus;
+        lastTime_ = time;
+        resetProgress();
+        beginTouchpad();
+        break;
+      case PinchPhase::Update: {
+        if (!touchpad_) return;
+        focus_ = focus;
+        double prev = scale_;
+        scale_ = scale;
+        if (time > lastTime_) velocity_ = (scale_ - prev) / (time - lastTime_);
+        lastTime_ = time;
+        if (state_ == BEGAN && std::abs(scale_ - 1) > 0.02) activate();
+        if (active) sendEvent(state_, state_);
+        break;
+      }
+      case PinchPhase::End:
+      case PinchPhase::Cancel:
+        if (!touchpad_) return;
+        touchpad_ = false;
+        if (state_ == ACTIVE && phase == PinchPhase::End) end();
+        else if (state_ == ACTIVE) cancel();
+        else fail();
+        break;
+    }
+  }
+
+ protected:
+  folly::dynamic eventData() override {
+    Point focal = touchpad_ ? focus_ : Point{detector_.focusX, detector_.focusY};
+    graphene_rect_t b = delegate_ ? delegate_->viewBounds() : graphene_rect_t{};
+    return folly::dynamic::object("focalX", focal.x - b.origin.x)("focalY", focal.y - b.origin.y)(
+        "velocity", velocity_)("scale", scale_);
+  }
+  void resetConfig() override {
+    GestureHandler::resetConfig();
+    shouldCancelWhenOutside_ = false;
+  }
+  void onPointerDown(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerDown(e);
+  }
+  void onPointerAdd(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerAdd(e);
+    detector_.onTouchEvent(e, tracker_);
+    if (state_ == UNDETERMINED) {
+      resetProgress();
+      begin();
+    }
+  }
+  void onPointerUp(const AdaptedEvent &e) override {
+    GestureHandler::onPointerUp(e);
+    tracker_.removeFromTracker(e.pointerId);
+    if (state_ == ACTIVE) {
+      detector_.onTouchEvent(e, tracker_);
+      end();
+    } else {
+      fail();
+    }
+  }
+  void onPointerRemove(const AdaptedEvent &e) override {
+    GestureHandler::onPointerRemove(e);
+    detector_.onTouchEvent(e, tracker_);
+    tracker_.removeFromTracker(e.pointerId);
+  }
+  void onPointerMove(const AdaptedEvent &e) override {
+    tracker_.track(e);
+    if (tracker_.trackedPointersCount() < 2) return;
+    detector_.onTouchEvent(e, tracker_);
+    GestureHandler::onPointerMove(e);
+  }
+  void onPointerOutOfBounds(const AdaptedEvent &e) override {
+    tracker_.track(e);
+    if (tracker_.trackedPointersCount() < 2) return;
+    detector_.onTouchEvent(e, tracker_);
+    GestureHandler::onPointerOutOfBounds(e);
+  }
+  void onReset() override { resetProgress(); }
+  void resetProgress() override {
+    if (state_ == ACTIVE) return;
+    velocity_ = 0;
+    scale_ = 1;
+  }
+
+ private:
+  // A touchpad pinch has no pointers: begin as if one pressed.
+  void beginTouchpad() {
+    if (state_ == UNDETERMINED) moveToState(BEGAN);
+  }
+
+  ScaleDetector detector_;
+  double scale_ = 1, velocity_ = 0, startingSpan_ = 0, lastTime_ = 0;
+  bool touchpad_ = false;
+  Point focus_;
+};
+
+// ---- Rotation -------------------------------------------------------------------
+
+class RotationDetector {
+ public:
+  double currentTime = 0, previousTime = 0, previousAngle = NAN, rotation = 0, anchorX = 0, anchorY = 0;
+  bool inProgress = false;
+  int keys[2] = {-1, -1};
+  std::function<void()> onBegin, onRotation, onEnd;
+
+  void reset() {
+    keys[0] = keys[1] = -1;
+    inProgress = false;
+  }
+  void onTouchEvent(const AdaptedEvent &e, const PointerTracker &tracker) {
+    switch (e.eventType) {
+      case EventType::Down: inProgress = false; break;
+      case EventType::AdditionalPointerDown:
+        if (inProgress) break;
+        inProgress = true;
+        previousTime = e.time;
+        previousAngle = NAN;
+        setKeys(tracker);
+        update(e, tracker);
+        onBegin();
+        break;
+      case EventType::Move:
+        if (!inProgress) break;
+        update(e, tracker);
+        onRotation();
+        break;
+      case EventType::AdditionalPointerUp:
+        if (!inProgress) break;
+        if (keys[0] == e.pointerId || keys[1] == e.pointerId) {
+          if (tracker.trackedPointersCount() <= 2) {
+            reset();
+          } else {
+            keys[0] = keys[1] = -1;
+            setKeys(tracker, e.pointerId);
+            previousAngle = NAN;
+          }
+        }
+        break;
+      case EventType::Up:
+        if (inProgress) {
+          inProgress = false;
+          keys[0] = keys[1] = -1;
+        }
+        onEnd();
+        break;
+      default: break;
+    }
+  }
+
+ private:
+  void setKeys(const PointerTracker &tracker, int exclude = std::numeric_limits<int>::min()) {
+    if (keys[0] >= 0 && keys[1] >= 0) return;
+    int assigned = 0;
+    for (auto &[id, el] : tracker.trackedPointers()) {
+      if (id == exclude) continue;
+      keys[assigned++] = id;
+      if (assigned == 2) break;
+    }
+  }
+  void update(const AdaptedEvent &e, const PointerTracker &tracker) {
+    previousTime = currentTime;
+    currentTime = e.time;
+    auto a = tracker.lastAbsoluteCoords(keys[0]), b = tracker.lastAbsoluteCoords(keys[1]);
+    if (!a || !b) return;
+    anchorX = (a->x + b->x) / 2;
+    anchorY = (a->y + b->y) / 2;
+    double angle = -std::atan2(b->y - a->y, b->x - a->x);
+    rotation = std::isnan(previousAngle) ? 0 : previousAngle - angle;
+    previousAngle = angle;
+    if (rotation > M_PI) rotation -= M_PI;
+    else if (rotation < -M_PI) rotation += M_PI;
+    if (rotation > M_PI / 2) rotation -= M_PI;
+    else if (rotation < -M_PI / 2) rotation += M_PI;
+  }
+};
+
+class RotationHandler final : public GestureHandler {
+ public:
+  RotationHandler(int tag, std::string name, Orchestrator &o) : GestureHandler(tag, std::move(name), o) {
+    detector_.onBegin = [] {};
+    detector_.onRotation = [this] {
+      double prev = rotation_;
+      rotation_ += detector_.rotation;
+      double delta = detector_.currentTime - detector_.previousTime;
+      if (delta > 0) velocity_ = (rotation_ - prev) / delta;
+      if (std::abs(rotation_) >= M_PI / 36 && state_ == BEGAN) activate();
+    };
+    detector_.onEnd = [this] {
+      if (state_ == ACTIVE) end();
+      else fail();
+    };
+  }
+  bool isContinuous() const override { return true; }
+
+  void onTouchpadPinch(PinchPhase phase, Point focus, double, double angleDelta, double time) override {
+    switch (phase) {
+      case PinchPhase::Begin:
+        orchestrator_.recordHandlerIfNotPresent(this);
+        pointerType_ = POINTER_OTHER;
+        touchpad_ = true;
+        anchor_ = focus;
+        lastTime_ = time;
+        rotation_ = velocity_ = 0;
+        if (state_ == UNDETERMINED) moveToState(BEGAN);
+        break;
+      case PinchPhase::Update: {
+        if (!touchpad_) return;
+        anchor_ = focus;
+        rotation_ += angleDelta;
+        if (time > lastTime_) velocity_ = angleDelta / (time - lastTime_);
+        lastTime_ = time;
+        if (state_ == BEGAN && std::abs(rotation_) >= M_PI / 36) activate();
+        if (active) sendEvent(state_, state_);
+        break;
+      }
+      case PinchPhase::End:
+      case PinchPhase::Cancel:
+        if (!touchpad_) return;
+        touchpad_ = false;
+        if (state_ == ACTIVE && phase == PinchPhase::End) end();
+        else if (state_ == ACTIVE) cancel();
+        else fail();
+        break;
+    }
+  }
+
+ protected:
+  folly::dynamic eventData() override {
+    Point anchor = touchpad_ ? anchor_ : Point{detector_.anchorX, detector_.anchorY};
+    graphene_rect_t b = delegate_ ? delegate_->viewBounds() : graphene_rect_t{};
+    return folly::dynamic::object("rotation", rotation_)("anchorX", anchor.x - b.origin.x)(
+        "anchorY", anchor.y - b.origin.y)("velocity", velocity_);
+  }
+  void resetConfig() override {
+    GestureHandler::resetConfig();
+    shouldCancelWhenOutside_ = false;
+  }
+  void onPointerDown(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerDown(e);
+  }
+  void onPointerAdd(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerAdd(e);
+    detector_.onTouchEvent(e, tracker_);
+    if (state_ == UNDETERMINED) begin();
+  }
+  void onPointerMove(const AdaptedEvent &e) override {
+    tracker_.track(e);
+    if (tracker_.trackedPointersCount() < 2) return;
+    detector_.onTouchEvent(e, tracker_);
+    GestureHandler::onPointerMove(e);
+  }
+  void onPointerOutOfBounds(const AdaptedEvent &e) override {
+    tracker_.track(e);
+    if (tracker_.trackedPointersCount() < 2) return;
+    detector_.onTouchEvent(e, tracker_);
+    GestureHandler::onPointerOutOfBounds(e);
+  }
+  void onPointerUp(const AdaptedEvent &e) override {
+    GestureHandler::onPointerUp(e);
+    tracker_.removeFromTracker(e.pointerId);
+    detector_.onTouchEvent(e, tracker_);
+  }
+  void onPointerRemove(const AdaptedEvent &e) override {
+    GestureHandler::onPointerRemove(e);
+    detector_.onTouchEvent(e, tracker_);
+    tracker_.removeFromTracker(e.pointerId);
+  }
+  void onReset() override {
+    if (state_ == ACTIVE) return;
+    rotation_ = velocity_ = 0;
+    detector_.reset();
+  }
+
+ private:
+  RotationDetector detector_;
+  double rotation_ = 0, velocity_ = 0, lastTime_ = 0;
+  bool touchpad_ = false;
+  Point anchor_;
+};
+
+// ---- Native view ----------------------------------------------------------------
+
+// A native view's own gesture: a button's press, a scroll view's scroll, a
+// switch's toggle (viewRole), or a plain view's drag past the touch slop.
+class NativeHandler final : public GestureHandler {
+ public:
+  using GestureHandler::GestureHandler;
+  bool isContinuous() const override { return true; }
+  bool isButton() const override { return viewRole == "Button"; }
+  bool disallowsInterruption() const { return disallowInterruption_; }
+
+  void updateGestureConfig(const folly::dynamic &c) override {
+    GestureHandler::updateGestureConfig(c);
+    if (auto v = boolIn(c, "shouldActivateOnStart")) shouldActivateOnStart_ = *v;
+    if (auto v = boolIn(c, "disallowInterruption")) disallowInterruption_ = *v;
+    if (auto v = boolIn(c, "yieldsToContinuousGestures")) yieldsToContinuous_ = *v;
+    if (auto v = boolIn(c, "hasLongPressHandler")) hasLongPressHandler_ = *v;
+    if (auto v = numberIn(c, "longPressDuration")) longPressDuration_ = *v;
+  }
+
+  bool shouldRecognizeSimultaneously(GestureHandler &other) override { return shouldRecognizeSimultaneouslyWith(other); }
+  bool shouldBeCancelledByOther(GestureHandler &other) override { return interruptibleBy(other); }
+
+  bool shouldRecognizeSimultaneouslyWith(GestureHandler &other) {
+    if (GestureHandler::shouldRecognizeSimultaneously(other)) return true;
+    auto *native = dynamic_cast<NativeHandler *>(&other);
+    if (native && native->state() == ACTIVE && native->disallowsInterruption() && !native->yieldsToContinuous_) {
+      return false;
+    }
+    bool interruptible = !disallowInterruption_ || (yieldsToContinuous_ && other.isContinuous());
+    if (state_ == ACTIVE && other.state() == ACTIVE && interruptible) return false;
+    return state_ == ACTIVE && interruptible && other.tag() > 0;
+  }
+
+  bool shouldBeginWithRecordedHandlers(const std::vector<GestureHandler *> &recorded) override {
+    if (!isButton()) return true;
+    for (GestureHandler *other : recorded) {
+      if (!(other->shouldRecognizeSimultaneously(*this) || shouldRecognizeSimultaneouslyWith(*other) ||
+            other->view == view || other->name() == "HoverGestureHandler")) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void onScroll() override {
+    if (viewRole != "ScrollView" || tracker_.trackedPointersCount() == 0) return;
+    scrollDetected_ = true;
+    tryScrollActivation();
+  }
+
+  bool interruptibleBy(GestureHandler &other) const {
+    return !disallowInterruption_ || (yieldsToContinuous_ && other.isContinuous());
+  }
+
+ protected:
+  folly::dynamic eventData() override {
+    folly::dynamic d = GestureHandler::eventData();
+    d["pointerInside"] = isPointerInBounds(tracker_.absoluteCoordsAverage());
+    return d;
+  }
+  void resetConfig() override {
+    GestureHandler::resetConfig();
+    shouldCancelWhenOutside_ = true;
+    shouldActivateOnStart_ = disallowInterruption_ = yieldsToContinuous_ = false;
+  }
+  void onPointerDown(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerDown(e);
+    newPointerAction();
+  }
+  void onPointerAdd(const AdaptedEvent &e) override {
+    tracker_.addToTracker(e);
+    GestureHandler::onPointerAdd(e);
+    newPointerAction();
+  }
+  void onPointerMove(const AdaptedEvent &e) override {
+    tracker_.track(e);
+    updatePressed();
+    if (viewRole == "Switch" || viewRole == "Button") return;
+    if (viewRole == "ScrollView") {
+      tryScrollActivation();
+      return;
+    }
+    if (travelSq() >= kTouchSlop * kTouchSlop && state_ == BEGAN) activate();
+  }
+  void onPointerLeave(const AdaptedEvent &) override {
+    if (state_ == BEGAN || state_ == ACTIVE) cancel();
+  }
+  void onPointerUp(const AdaptedEvent &e) override {
+    GestureHandler::onPointerUp(e);
+    onUp(e);
+  }
+  void onPointerRemove(const AdaptedEvent &e) override {
+    GestureHandler::onPointerRemove(e);
+    onUp(e);
+  }
+  void onReset() override {
+    scrollDetected_ = false;
+    cancelTimer(longPressTimer_);
+    lastEventWasInside_ = longPressDetected_ = false;
+  }
+
+  // A button shows pressed while its gesture is on and the pointer inside;
+  // a button the library manages (actionType NONE: Touchable) gets its
+  // press events, as the web's NativeViewGestureHandler sends them.
+  void onStateChange(State newState, State) override {
+    updatePressed();
+    if (!isButton() || actionType_ != ACTION_NONE || !delegate_) return;
+    if (newState == BEGAN) {
+      if (!pointerInside()) return;
+      buttonEvent("onButtonPressIn");
+      longPressDetected_ = false;
+      if (hasLongPressHandler_ && longPressDuration_ >= 0) {
+        longPressTimer_ = startTimer(int(longPressDuration_), [this] {
+          longPressTimer_ = 0;
+          longPressDetected_ = true;
+          buttonEvent("onButtonLongPress");
+        });
+      }
+      return;
+    }
+    if (newState != END && newState != FAILED && newState != CANCELLED) return;
+    bool endedInside = lastEventWasInside_;
+    if (endedInside) buttonEvent("onButtonPressOut");
+    cancelTimer(longPressTimer_);
+    if (newState == END && !longPressDetected_ && endedInside) buttonEvent("onButtonPress");
+    buttonEvent("onButtonInteractionFinished");
+    longPressDetected_ = false;
+  }
+
+  void setLongPress(bool has, double duration) {
+    hasLongPressHandler_ = has;
+    longPressDuration_ = duration;
+  }
+
+ private:
+  bool pointerInside() const { return isPointerInBounds(tracker_.absoluteCoordsAverage()); }
+  void updatePressed() {
+    if (isButton() && delegate_) delegate_->buttonPressed((state_ == BEGAN || state_ == ACTIVE) && pointerInside());
+  }
+  void buttonEvent(const char *name) {
+    if (!strcmp(name, "onButtonPressIn")) lastEventWasInside_ = true;
+    else if (!strcmp(name, "onButtonPressOut")) lastEventWasInside_ = false;
+    Point absolute = tracker_.absoluteCoordsAverage(), relative = tracker_.relativeCoordsAverage();
+    delegate_->buttonEvent(name, folly::dynamic::object("pointerInside", pointerInside())("x", relative.x)(
+                                     "y", relative.y)("absoluteX", absolute.x)("absoluteY", absolute.y)(
+                                     "numberOfPointers", tracker_.trackedPointersCount())(
+                                     "pointerType", int(pointerType_)));
+  }
+  double travelSq() const {
+    Point p = tracker_.absoluteCoordsAverage();
+    return (startX_ - p.x) * (startX_ - p.x) + (startY_ - p.y) * (startY_ - p.y);
+  }
+  void newPointerAction() {
+    Point p = tracker_.absoluteCoordsAverage();
+    startX_ = p.x;
+    startY_ = p.y;
+    if (state_ != UNDETERMINED) return;
+    scrollDetected_ = false;
+    begin();
+    if ((viewRole == "Button" && shouldActivateOnStart_) || viewRole == "Switch") activate();
+  }
+  void tryScrollActivation() {
+    if (!scrollDetected_ || state_ != BEGAN) return;
+    if (travelSq() >= 4) activate();
+  }
+  void onUp(const AdaptedEvent &e) {
+    tracker_.removeFromTracker(e.pointerId);
+    if (tracker_.trackedPointersCount() != 0) return;
+    if (viewRole == "Button" && state_ == BEGAN) activate();
+    if (state_ == ACTIVE) end();
+    else fail();
+  }
+
+  bool shouldActivateOnStart_ = false, disallowInterruption_ = false, yieldsToContinuous_ = false;
+  bool scrollDetected_ = false;
+  bool hasLongPressHandler_ = false, longPressDetected_ = false, lastEventWasInside_ = false;
+  double longPressDuration_ = -1;
+  guint longPressTimer_ = 0;
+  double startX_ = 0, startY_ = 0;
+};
 }  // namespace
 
 std::unique_ptr<GestureHandler> createHandler(const std::string &name, int tag, Orchestrator &orchestrator) {
@@ -711,6 +1277,9 @@ std::unique_ptr<GestureHandler> createHandler(const std::string &name, int tag, 
   else if (name == "FlingGestureHandler") h = std::make_unique<FlingHandler>(tag, name, orchestrator);
   else if (name == "HoverGestureHandler") h = std::make_unique<HoverHandler>(tag, name, orchestrator);
   else if (name == "ManualGestureHandler") h = std::make_unique<ManualHandler>(tag, name, orchestrator);
+  else if (name == "PinchGestureHandler") h = std::make_unique<PinchHandler>(tag, name, orchestrator);
+  else if (name == "RotationGestureHandler") h = std::make_unique<RotationHandler>(tag, name, orchestrator);
+  else if (name == "NativeViewGestureHandler") h = std::make_unique<NativeHandler>(tag, name, orchestrator);
   return h;
 }
 

@@ -179,6 +179,11 @@ bool GtkMountingManager::scrollCommand(GtkWidget *widget,
 
 void GtkMountingManager::onScrollOffsetChanged(Tag tag, bool user) {
   if (user && onUserScroll_) onUserScroll_();
+  if (user && !scrollObservers_.empty()) {
+    if (GtkWidget *view = viewForTag(tag)) {
+      for (auto &observer : scrollObservers_) observer(view);
+    }
+  }
   auto it = scrolls_.find(tag);
   if (it == scrolls_.end()) return;
   auto &tracking = it->second;

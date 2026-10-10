@@ -133,6 +133,11 @@ struct Attachment final : HandlerDelegate {
   void cancelJSResponder() override {
     if (host && root) host->cancelTouches(root);
   }
+  void buttonPressed(bool pressed) override;
+  void buttonEvent(const char *name, folly::dynamic payload) override {
+    if (!host || !view) return;
+    if (auto emitter = host->eventEmitterForView(view)) emitter->dispatchEvent(name, std::move(payload));
+  }
 };
 
 std::map<int, std::unique_ptr<GestureHandler>> handlers;
@@ -169,6 +174,11 @@ void attach(int tag, GtkWidget *view, ActionType actionType, GtkWidget *detector
   h->attach(a.get(), actionType);
   h->view = view;
   h->hostDetector = detector;
+  std::string component = host->componentName(view);
+  h->viewRole = component == "RNGestureHandlerButton" ? "Button"
+                : component == "ScrollView"           ? "ScrollView"
+                : component == "Switch"               ? "Switch"
+                                                      : "";
   attachments[tag] = std::move(a);
 }
 
@@ -192,6 +202,152 @@ void attachWhenMounted(int tag, int viewTag, ActionType actionType, int tries) {
     attachWhenMounted(r->tag, r->viewTag, r->actionType, r->tries + 1);
     return G_SOURCE_REMOVE;
   }, new Retry{tag, viewTag, actionType, tries}, [](gpointer data) { delete static_cast<Retry *>(data); });
+}
+
+// ---- RNGestureHandlerButton ---------------------------------------------------
+
+// A button's look while pressed or hovered (activeOpacity, activeScale,
+// activeUnderlayOpacity, the hover ones; defaults otherwise), animated over
+// tapAnimationIn/OutDuration and hoverAnimationIn/OutDuration and applied
+// without a commit (host->setNativeProps, as native Animated does). The
+// underlay (underlayColor at that opacity) is blended into the background.
+struct Button {
+  GtkWidget *view = nullptr;
+  folly::dynamic props = folly::dynamic::object();
+  // What the feedback last applied: the host hands those back as props.
+  folly::dynamic applied = folly::dynamic::object();
+  SharedEventEmitter emitter;
+  bool pressed = false, hovered = false;
+  double opacity = -1, scale = -1, underlay = -1;  // current; -1 before the first frame
+  struct Animation {
+    double from[3], to[3];
+    gint64 start = 0, duration = 0;
+  } animation;
+  guint tick = 0;
+
+  double prop(const char *key, double fallback) const {
+    auto it = props.find(key);
+    return it != props.items().end() && it->second.isNumber() ? it->second.asDouble() : fallback;
+  }
+  bool hasFeedback() const {
+    for (const char *k : {"activeOpacity", "activeScale", "activeUnderlayOpacity", "hoverOpacity", "hoverScale",
+                          "hoverUnderlayOpacity", "defaultOpacity", "defaultScale", "defaultUnderlayOpacity"}) {
+      double v = prop(k, NAN);
+      bool isDefault = std::isnan(v) || (strstr(k, "hover") && v < 0) ||
+                       ((!strcmp(k, "activeOpacity") || !strcmp(k, "activeScale") || !strcmp(k, "defaultOpacity") ||
+                         !strcmp(k, "defaultScale")) && v == 1) ||
+                       (strstr(k, "UnderlayOpacity") && v == 0);
+      if (!isDefault) return true;
+    }
+    return false;
+  }
+  void targets(double out[3]) const {
+    out[0] = prop("defaultOpacity", 1);
+    out[1] = prop("defaultScale", 1);
+    out[2] = prop("defaultUnderlayOpacity", 0);
+    if (hovered) {
+      if (prop("hoverOpacity", -1) >= 0) out[0] = prop("hoverOpacity", -1);
+      if (prop("hoverScale", -1) >= 0) out[1] = prop("hoverScale", -1);
+      if (prop("hoverUnderlayOpacity", -1) >= 0) out[2] = prop("hoverUnderlayOpacity", -1);
+    }
+    if (pressed) {
+      out[0] = prop("activeOpacity", 1);
+      out[1] = prop("activeScale", 1);
+      out[2] = prop("activeUnderlayOpacity", 0);
+    }
+  }
+  void update(bool pressing, bool hovering) {
+    if (!hasFeedback()) return;
+    double to[3];
+    targets(to);
+    if (opacity < 0) {
+      opacity = to[0];
+      scale = to[1];
+      underlay = to[2];
+      apply();
+      return;
+    }
+    animation.from[0] = opacity;
+    animation.from[1] = scale;
+    animation.from[2] = underlay;
+    std::copy(to, to + 3, animation.to);
+    const char *key = pressing ? "tapAnimationInDuration"
+                      : hovering ? (hovered ? "hoverAnimationInDuration" : "hoverAnimationOutDuration")
+                                 : "tapAnimationOutDuration";
+    double fallback = pressing ? 50 : hovering ? (hovered ? 50 : 100) : 100;
+    animation.duration = gint64(std::max(0.0, prop(key, fallback)) * 1000);
+    animation.start = g_get_monotonic_time();
+    if (!tick && view) {
+      tick = gtk_widget_add_tick_callback(view, [](GtkWidget *, GdkFrameClock *, gpointer self) -> gboolean {
+        return static_cast<Button *>(self)->step() ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+      }, this, nullptr);
+    }
+  }
+  bool step() {
+    double t = animation.duration > 0
+                   ? std::min(1.0, double(g_get_monotonic_time() - animation.start) / double(animation.duration))
+                   : 1.0;
+    opacity = animation.from[0] + (animation.to[0] - animation.from[0]) * t;
+    scale = animation.from[1] + (animation.to[1] - animation.from[1]) * t;
+    underlay = animation.from[2] + (animation.to[2] - animation.from[2]) * t;
+    apply();
+    if (t < 1) return true;
+    tick = 0;
+    return false;
+  }
+  static uint32_t argb(const folly::dynamic &v, uint32_t fallback) {
+    return v.isNumber() ? uint32_t(int64_t(v.asDouble())) : fallback;
+  }
+  void apply() {
+    if (!host || !view) return;
+    folly::dynamic transform = folly::dynamic::array();
+    if (props.count("transform") && props["transform"].isArray()) transform = props["transform"];
+    transform.push_back(folly::dynamic::object("scale", scale));
+    folly::dynamic out = folly::dynamic::object("opacity", opacity * prop("opacity", 1))("transform", transform);
+    // The underlay over the background.
+    uint32_t bg = argb(props.count("backgroundColor") ? props["backgroundColor"] : folly::dynamic(), 0);
+    uint32_t ul = argb(props.count("underlayColor") ? props["underlayColor"] : folly::dynamic(), 0xFF000000);
+    double ua = ((ul >> 24) & 0xFF) / 255.0 * underlay, ba = ((bg >> 24) & 0xFF) / 255.0;
+    double a = ua + ba * (1 - ua);
+    auto channel = [&](int shift) {
+      double c = a > 0 ? (((ul >> shift) & 0xFF) * ua + ((bg >> shift) & 0xFF) * ba * (1 - ua)) / a : 0;
+      return uint32_t(std::lround(c)) & 0xFF;
+    };
+    uint32_t blended = (uint32_t(std::lround(a * 255)) << 24) | (channel(16) << 16) | (channel(8) << 8) | channel(0);
+    out["backgroundColor"] = double(int32_t(blended));
+    applied = out;
+    host->setNativeProps(view, out);
+  }
+};
+
+std::map<GtkWidget *, std::unique_ptr<Button>> buttons;
+
+Button *buttonFor(GtkWidget *view) {
+  auto it = buttons.find(view);
+  return it == buttons.end() ? nullptr : it->second.get();
+}
+
+void Attachment::buttonPressed(bool pressed) {
+  Button *b = buttonFor(view);
+  if (!b || b->pressed == pressed) return;
+  b->pressed = pressed;
+  b->update(true, false);
+  if (!pressed) b->update(false, false);
+}
+
+// The mouse over buttons: hover feedback and onButtonHoverIn/Out.
+void hoverButtons(GtkWidget *target) {
+  for (auto &[view, b] : buttons) {
+    bool now = target && (target == view || gtk_widget_is_ancestor(target, view));
+    if (now == b->hovered) continue;
+    b->hovered = now;
+    b->update(false, true);
+    if (auto emitter = host ? host->eventEmitterForView(view) : nullptr) {
+      emitter->dispatchEvent(now ? "onButtonHoverIn" : "onButtonHoverOut",
+                             folly::dynamic::object("pointerInside", now)("x", 0)("y", 0)("absoluteX", 0)(
+                                 "absoluteY", 0)("numberOfPointers", 0)("pointerType", int(POINTER_MOUSE)));
+    }
+  }
 }
 
 void Attachment::sendEvent(GestureHandler &h, folly::dynamic event, const char *kind) {
@@ -312,6 +468,7 @@ bool observe(const rngtk::PointerInput &e) {
       break;
     }
     case Phase::Move: {
+      if (e.device == rngtk::PointerInput::Device::Mouse) hoverButtons(e.target);
       std::vector<Attachment *> list;
       for (auto &[tag, a] : attachments) list.push_back(a.get());
       for (Attachment *a : list) {
@@ -387,11 +544,23 @@ bool observe(const rngtk::PointerInput &e) {
       break;
     }
     case Phase::Leave: {
+      hoverButtons(nullptr);
       // The mouse left the surface: hover ends.
       for (auto &[tag, a] : attachments) {
         if (!isHover(*a) || !a->hoverInside || a->root != e.root) continue;
         a->hoverInside = false;
         a->handler->onPointerMoveOut(adapt(*a, e, EventType::Leave));
+      }
+      break;
+    }
+    case Phase::Pinch: {
+      // A touchpad pinch: the Pinch and Rotation handlers under the pointer.
+      for (Attachment *a : attachmentsAlong(e.target, e.root)) {
+        const std::string &name = a->handler->name();
+        if (name != "PinchGestureHandler" && name != "RotationGestureHandler") continue;
+        a->setWeak(a->root, e.root);
+        a->handler->onTouchpadPinch(GestureHandler::PinchPhase(int(e.pinchPhase)), Point{e.x, e.y}, e.scale,
+                                    e.angleDelta, double(e.timeMs));
       }
       break;
     }
@@ -438,6 +607,7 @@ void configureRelations(GestureHandler &h, const folly::dynamic &relations) {
 }
 
 void tryWanted(int tag);
+void attachToDetector(int tag, GtkWidget *detector, int viewTag, ActionType type, int tries);
 
 void createGestureHandler(const std::string &name, int tag, const folly::dynamic &config) {
   auto h = createHandler(name, tag, orchestrator());
@@ -459,8 +629,7 @@ void tryWanted(int tag) {
   auto range = wanted.equal_range(tag);
   for (auto it = range.first; it != range.second; ++it) {
     const Wanted &w = it->second;
-    GtkWidget *view = w.viewTag ? host->viewForTag(w.viewTag) : w.detector;
-    if (view) attach(tag, view, w.actionType, w.detector);
+    attachToDetector(tag, w.detector, w.viewTag, w.actionType, 0);
   }
 }
 
@@ -574,6 +743,8 @@ class DetectorProps final : public ViewProps {
 };
 
 extern const char DetectorComponentName[] = "RNGestureHandlerDetector";
+extern const char ButtonComponentName[] = "RNGestureHandlerButton";
+extern const char RootViewComponentName[] = "RNGestureHandlerRootView";
 
 // The library's RNGestureHandlerDetectorShadowNode: the detector forms a
 // view whose frame is its children's bounding box (they keep theirs,
@@ -660,6 +831,35 @@ namespace {
 // What a detector has attached: handler tag -> view tag (0: itself).
 std::map<GtkWidget *, std::map<int, int>> detectorAttachments;
 
+// A detector's handler goes on the detector, or (virtualChildren) on that
+// view; a native gesture on the detector's child (a button's, a scroll
+// view's), mounted maybe a little later.
+void attachToDetector(int tag, GtkWidget *detector, int viewTag, ActionType type, int tries) {
+  GestureHandler *h = handlerFor(tag);
+  if (!h || !detectorAttachments.count(detector)) return;
+  GtkWidget *target = viewTag ? host->viewForTag(viewTag) : detector;
+  if (target && !viewTag && h->name() == "NativeViewGestureHandler") target = gtk_widget_get_first_child(detector);
+  auto it = attachments.find(tag);
+  if (target && it != attachments.end() && it->second->detector == detector && it->second->view == target) return;
+  if (target) {
+    attach(tag, target, type, detector);
+    return;
+  }
+  if (tries >= 60) return;
+  struct Retry {
+    int tag;
+    GtkWidget *detector;
+    int viewTag;
+    ActionType type;
+    int tries;
+  };
+  g_timeout_add_full(G_PRIORITY_DEFAULT, 16, [](gpointer data) -> gboolean {
+    auto *r = static_cast<Retry *>(data);
+    attachToDetector(r->tag, r->detector, r->viewTag, r->type, r->tries + 1);
+    return G_SOURCE_REMOVE;
+  }, new Retry{tag, detector, viewTag, type, tries}, [](gpointer data) { delete static_cast<Retry *>(data); });
+}
+
 void updateDetector(GtkWidget *widget, const ShadowView &, const ShadowView &view) {
   auto props = std::static_pointer_cast<const DetectorProps>(view.props);
   if (!props) return;
@@ -706,15 +906,85 @@ void updateDetector(GtkWidget *widget, const ShadowView &, const ShadowView &vie
   for (auto &[tag, viewTag] : want) {
     ActionType type = viewTag ? ACTION_VIRTUAL_DETECTOR : ACTION_NATIVE_DETECTOR;
     wanted.emplace(tag, Wanted{widget, viewTag, type});
-    auto it = attachments.find(tag);
-    bool attached = it != attachments.end() && it->second->detector == widget &&
-                    it->second->view == (viewTag ? host->viewForTag(viewTag) : widget);
-    if (!attached) {
-      GtkWidget *target = viewTag ? host->viewForTag(viewTag) : widget;
-      if (target) attach(tag, target, type, widget);
-    }
+    attachToDetector(tag, widget, viewTag, type, 0);
   }
   have = want;
+}
+
+// RNGestureHandlerButton's (and RNGestureHandlerRootView's) props, as JS
+// sends them, merged.
+class RawProps2 final : public ViewProps {
+ public:
+  RawProps2() = default;
+  RawProps2(const PropsParserContext &context, const RawProps2 &source, const RawProps &raw)
+      : ViewProps(context, source, raw), raw(source.raw) {
+    folly::dynamic changed = raw.toDynamic();
+    if (changed.isObject()) {
+      for (auto &[k, v] : changed.items()) this->raw[k] = v;
+    }
+  }
+  folly::dynamic raw = folly::dynamic::object();
+};
+
+void updateButton(GtkWidget *widget, const ShadowView &, const ShadowView &view) {
+  auto props = std::static_pointer_cast<const RawProps2>(view.props);
+  if (!props) return;
+  Button *b = buttonFor(widget);
+  if (!b) {
+    auto owned = std::make_unique<Button>();
+    b = owned.get();
+    b->view = widget;
+    buttons[widget] = std::move(owned);
+    g_object_weak_ref(G_OBJECT(widget), [](gpointer, GObject *gone) {
+      auto *w = reinterpret_cast<GtkWidget *>(gone);
+      buttons.erase(w);
+      // Its own gesture (Touchable's) goes with it.
+      for (auto it = attachments.begin(); it != attachments.end();) {
+        if (it->second->view != w || it->second->handler->actionType() != ACTION_NONE) {
+          ++it;
+          continue;
+        }
+        int tag = it->first;
+        it->second->view = nullptr;
+        ++it;
+        dropGestureHandler(tag);
+      }
+    }, nullptr);
+  }
+  // The feedback's own values come back here; keep the style's.
+  folly::dynamic base = props->raw;
+  for (const char *key : {"opacity", "transform", "backgroundColor"}) {
+    bool fromFeedback = b->applied.count(key) && base.count(key) && base[key] == b->applied[key];
+    if (!fromFeedback) continue;
+    if (b->props.count(key)) base[key] = b->props[key];
+    else base.erase(key);
+  }
+  b->props = base;
+  b->emitter = view.eventEmitter;
+  // A button with a handlerTag (Touchable) runs its own native gesture
+  // under that tag, as on Android; JS can relate other gestures to it.
+  auto tag = numberIn(props->raw, "handlerTag");
+  if (!tag) return;
+  folly::dynamic config = folly::dynamic::object("enabled", boolIn(props->raw, "enabled").value_or(true))(
+      "shouldCancelWhenOutside", boolIn(props->raw, "cancelOnLeave").value_or(true))(
+      "hasLongPressHandler", boolIn(props->raw, "hasLongPressHandler").value_or(false))(
+      "longPressDuration", numberIn(props->raw, "longPressDuration").value_or(-1));
+  if (props->raw.count("gestureHitSlop") && props->raw["gestureHitSlop"].isObject()) {
+    const auto &h = props->raw["gestureHitSlop"];
+    auto edge = [&](const char *k) { return h.count(k) && h[k].isNumber() ? h[k] : folly::dynamic(); };
+    config["hitSlop"] = folly::dynamic::array(edge("left"), edge("top"), edge("right"), edge("bottom"), nullptr, nullptr);
+  }
+  if (props->raw.count("gestureTestID")) config["testID"] = props->raw["gestureTestID"];
+  int t = int(*tag);
+  GestureHandler *h = handlerFor(t);
+  if (!h) {
+    createGestureHandler("NativeViewGestureHandler", t, config);
+    h = handlerFor(t);
+  } else {
+    h->updateGestureConfig(config);
+  }
+  auto it = attachments.find(t);
+  if (h && (it == attachments.end() || it->second->view != widget)) attach(t, widget, ACTION_NONE, nullptr);
 }
 
 }  // namespace
@@ -733,9 +1003,26 @@ std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package() {
   detector.descriptor = concreteComponentDescriptorProvider<DetectorComponentDescriptor>();
   detector.update = updateDetector;
   package->components.push_back(detector);
+  using ButtonShadowNode = ConcreteViewShadowNode<ButtonComponentName, RawProps2, ViewEventEmitter>;
+  using RootShadowNode = ConcreteViewShadowNode<RootViewComponentName, RawProps2, ViewEventEmitter>;
+  rngtk::NativeComponent button;
+  button.descriptor = concreteComponentDescriptorProvider<ConcreteComponentDescriptor<ButtonShadowNode>>();
+  button.update = updateButton;
+  package->components.push_back(button);
+  rngtk::NativeComponent root;
+  root.descriptor = concreteComponentDescriptorProvider<ConcreteComponentDescriptor<RootShadowNode>>();
+  package->components.push_back(root);
   package->setUp = [](rngtk::Host &h) {
     host = &h;
     h.addPointerObserver(observe);
+    // A ScrollView's native gesture activates when the user scrolls it.
+    h.addScrollObserver([](GtkWidget *scrollView) {
+      std::vector<GestureHandler *> list;
+      for (auto &[tag, a] : attachments) {
+        if (a->view == scrollView) list.push_back(a->handler);
+      }
+      for (GestureHandler *handler : list) handler->onScroll();
+    });
   };
   return package;
 }

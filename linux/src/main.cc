@@ -4399,6 +4399,126 @@ void gh_drag(const char *id, double fx, double fy, double dx, double dy, int n, 
 
 bool gh_status(const std::string &needle) { return shown_text(app.root, needle, false) != nullptr; }
 
+// A touchpad pinch event at the view `id`.
+void touchpad_pinch(const char *id, int phase, double scale, double angleDelta) {
+  rngtk::GtkPointerHandler::Input input{};
+  input.phase = rngtk::GtkPointerHandler::Phase::Pinch;
+  graphene_point_t c = center_of(by_id(id));
+  input.x = c.x;
+  input.y = c.y;
+  input.pinchPhase = phase;
+  input.scale = scale;
+  input.angleDelta = angleDelta;
+  mouse_ms += 16;
+  input.timeMs = mouse_ms;
+  app.host->pointerHandler()->dispatch(input);
+}
+
+// A touch point (sequence) at (x, y).
+void touch(rngtk::GtkPointerHandler::Phase phase, int sequence, double x, double y) {
+  rngtk::GtkPointerHandler::Input input{};
+  input.phase = phase;
+  input.device = rngtk::GtkPointerHandler::Device::Touch;
+  input.sequence = sequence;
+  input.x = x;
+  input.y = y;
+  input.timeMs = mouse_ms;
+  app.host->pointerHandler()->dispatch(input);
+}
+
+void add_gestures_part2_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.steps.push_back(Step{"a touchpad pinch: pinch and rotation together (useSimultaneousGestures)",
+                           [] {
+                             touchpad_pinch("gh-pinch", 0, 1.0, 0);
+                             for (int i = 1; i <= 5; i++) touchpad_pinch("gh-pinch", 1, 1.0 + 0.1 * i, 0.06);
+                           },
+                           [] { return gh_status("scale 1.50 rotation 0.30 pinching rotating"); }});
+  app.steps.push_back(Step{"  ...ends", [] { touchpad_pinch("gh-pinch", 2, 1.5, 0); },
+                           [] { return gh_status("scale 1.50 rotation 0.30 ·"); }});
+  app.steps.push_back(Step{"a pinch with two fingers on a touchscreen",
+                           [] {
+                             graphene_point_t c = center_of(by_id("gh-pinch"));
+                             mouse_ms += 1000;
+                             touch(Phase::Down, 1, c.x - 20, c.y);
+                             mouse_ms += 16;
+                             touch(Phase::Down, 2, c.x + 20, c.y);
+                             for (int i = 1; i <= 8; i++) {
+                               mouse_ms += 16;
+                               touch(Phase::Move, 1, c.x - 20 - 5 * i, c.y);
+                               mouse_ms += 1;
+                               touch(Phase::Move, 2, c.x + 20 + 5 * i, c.y);
+                             }
+                           },
+                           [] { return gh_status(" pinching") && !gh_status("scale 1.00 ") && !gh_status("scale 1.50 "); }});
+  app.steps.push_back(Step{"  ...lifted",
+                           [] {
+                             graphene_point_t c = center_of(by_id("gh-pinch"));
+                             mouse_ms += 16;
+                             touch(Phase::Up, 2, c.x + 60, c.y);
+                             touch(Phase::Up, 1, c.x - 60, c.y);
+                           },
+                           [] { return !gh_status(" pinching"); }});
+  app.steps.push_back(Step{"a double tap on the box whose pan waits for it to fail",
+                           [] { clicks(center_of(by_id("gh-wait")), 2); },
+                           [] { return gh_status("double taps 1 · waiting pan 0,0"); }});
+  app.steps.push_back(Step{"  ...a drag fails the double tap (maxDistance 10), then pans",
+                           [] { gh_drag("gh-wait", 0.5, 0.5, 60, 0, 6, 16); },
+                           [] { return gh_status("double taps 1 · waiting pan 40,0"); }});
+  app.steps.push_back(Step{"a manual gesture, activated from JS (GestureStateManager)",
+                           [] {
+                             mouse_ms += 1000;
+                             mouse(Phase::Down, center_of(by_id("gh-manual")));
+                           },
+                           [] { return gh_status("manual active"); }});
+  app.steps.push_back(Step{"  ...and ended from JS on release",
+                           [] {
+                             mouse_ms += 50;
+                             mouse(Phase::Up, center_of(by_id("gh-manual")));
+                           },
+                           [] { return gh_status("manual ended"); }});
+  app.steps.push_back(Step{"RectButton (a native gesture on RNGestureHandlerButton)",
+                           [] { clicks(center_of(by_id("gh-rect")), 1); },
+                           [] { return gh_status("RectButton presses 1 ·"); }});
+  app.steps.push_back(Step{"Touchable: its own gesture; activeOpacity while pressed",
+                           [] {
+                             mouse_ms += 1000;
+                             mouse(Phase::Down, center_of(by_id("gh-touchable")));
+                           },
+                           [] {
+                             GtkWidget *v = by_id("gh-touchable");
+                             return v && gtk_widget_get_opacity(v) < 0.6;
+                           }});
+  app.steps.push_back(Step{"  ...released: onPress, and the opacity back",
+                           [] {
+                             mouse_ms += 50;
+                             mouse(Phase::Up, center_of(by_id("gh-touchable")));
+                           },
+                           [] {
+                             GtkWidget *v = by_id("gh-touchable");
+                             return gh_status("Touchable presses 1 ·") && v && gtk_widget_get_opacity(v) > 0.99;
+                           }});
+  app.steps.push_back(Step{"the library's ScrollView: its native gesture activates when it scrolls",
+                           [] {
+                             GtkWidget *v = by_id("gh-scroll");
+                             graphene_rect_t b = bounds_in_root(v);
+                             graphene_point_t p{b.origin.x + 40, b.origin.y + 30};
+                             mouse_ms += 1000;
+                             mouse(Phase::Down, p);
+                             mouse_ms += 16;
+                             mouse(Phase::Move, graphene_point_t{p.x, p.y - 6});
+                             wheel("gh-scroll", 0, 2);
+                           },
+                           [] { return gh_status("scrolled by its native gesture"); }});
+  app.steps.push_back(Step{"  ...released",
+                           [] {
+                             graphene_rect_t b = bounds_in_root(by_id("gh-scroll"));
+                             mouse_ms += 16;
+                             mouse(Phase::Up, graphene_point_t{b.origin.x + 40, b.origin.y + 24});
+                           },
+                           [] { return true; }});
+}
+
 void add_gestures_steps() {
   using Phase = rngtk::GtkPointerHandler::Phase;
   app.host->pointerHandler()->setRealInputEnabled(false);
@@ -4470,6 +4590,7 @@ void add_gestures_steps() {
                            [] { return gh_status("legacy taps 1 ·"); }});
   app.steps.push_back(Step{"  ...Gesture.Pan()", [] { gh_drag("gh-legacy-pan", 0.5, 0.5, 40, -20, 4, 16); },
                            [] { return gh_status("legacy pan 20,-10"); }});
+  add_gestures_part2_steps();
   app.steps.push_back(Step{"no JS errors", [] {}, [] {
                              return check(app.host->jsErrorCount() == 0, "  no JS errors");
                            }});

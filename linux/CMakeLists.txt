@@ -642,7 +642,7 @@ add_test(NAME gallery-navigation-web-self-test
                  --module GalleryNavigation --width 940 --height 680 --self-test)
 add_test(NAME gallery-gestures-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
-                 --module GalleryGestures --width 940 --height 680 --self-test)
+                 --module GalleryGestures --width 940 --height 760 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

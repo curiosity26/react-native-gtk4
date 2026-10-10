@@ -137,6 +137,11 @@ class GtkMountingManager
     return consumed;
   }
   bool hasPointerObservers() const { return !pointerObservers_.empty(); }
+  void addScrollObserver(std::function<void(GtkWidget *)> observer) {
+    scrollObservers_.push_back(std::move(observer));
+  }
+  // The mounted view's component name, or "".
+  std::string componentNameForTag(facebook::react::Tag tag) const;
 
   // Back navigation the user asked for (Alt+Left, the Back key, the
   // mouse's back button): BackHandler's hardwareBackPress, as on
@@ -312,6 +317,7 @@ class GtkMountingManager
   std::function<void()> onUserScroll_;
   std::function<void()> onBackRequested_;
   std::vector<std::function<bool(const PointerInput &)>> pointerObservers_;
+  std::vector<std::function<void(GtkWidget *)>> scrollObservers_;
   std::function<void()> onUIManagerChanged_;
   bool onMainThread() const {
     return std::this_thread::get_id() == mainThread_;
