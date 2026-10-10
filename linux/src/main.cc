@@ -3443,12 +3443,14 @@ void add_titlebar_steps() {
         GtkWidget *bar = gtk_window_get_titlebar(w);
         auto controls = window_controls(by_id("child-titlebar"));
         if (!bar || gtk_widget_get_visible(bar) || controls.size() != 2) return false;
-        // Its buttons fill the frame they were measured for.
+        // Its buttons fill the frame they were measured for (the frame
+        // includes the theme's CSS margin, border and padding;
+        // gtk_widget_get_width doesn't).
         for (GtkWidget *c : controls) {
           int natural = 0, unused;
           gtk_widget_measure(c, GTK_ORIENTATION_HORIZONTAL, -1, &unused, &natural, nullptr,
                              nullptr);
-          if (gtk_widget_get_width(c) != natural) return false;
+          if (int(rn_widget_get_frame(c).size.width) != natural) return false;
         }
         return true;
       }});
@@ -3461,7 +3463,7 @@ void add_titlebar_steps() {
         GtkWidget *tb = by_id("child-titlebar");
         GtkWidget *root = app.host->rootFor(ownId);
         graphene_rect_t b{};
-        gtk_widget_compute_bounds(tb, root, &b);
+        (void)gtk_widget_compute_bounds(tb, root, &b);
         // Past the start buttons, left of the title.
         graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
         send_in(ownId, P::Down, at);
