@@ -28,6 +28,8 @@ function load(name) {
         return require('react-native-webview');
       case 'navigation':
         return require('./GalleryNavigation');
+      case 'worklets':
+        return require('./GalleryWorklets');
       case 'gestures':
         return {...require('react-native-gesture-handler'), ...require('./GalleryGestures')};
     }
@@ -566,9 +568,36 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- Worklets: react-native-worklets ---------------------------------------
+
+  function WorkletsPage() {
+    const {Section, styles} = helpers();
+    const lib = load('worklets');
+    if (lib?.error || !lib?.WorkletsDemo) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Worklets (react-native-worklets)">
+            <Missing what="react-native-worklets" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {WorkletsDemo} = lib;
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <Section
+          title="Worklets (react-native-worklets)"
+          hint="The library's shared C++ on Linux (packages/worklets): 'worklet' functions (its Babel plugin) run on its UI runtime, a Hermes runtime of its own on GTK's main thread, and call back to JS; synchronizables are shared between them; requestAnimationFrame on the UI runtime follows the window's frame clock."
+        />
+        <WorkletsDemo />
+      </ScrollView>
+    );
+  }
+
   return [
     ['Navigation', NavigationPage],
     ['Gestures', GesturesPage],
+    ['Worklets', WorkletsPage],
     ['SVG', SvgPage],
     ['WebView', WebViewPage],
     ['Storage', StoragePage],

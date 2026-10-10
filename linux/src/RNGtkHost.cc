@@ -302,6 +302,15 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
   void setNativePropsForTag(int tag, folly::dynamic props) override {
     host_.mountingManager_->synchronouslyUpdateViewOnUIThread(tag, props);
   }
+  void provideService(const std::string &name, std::shared_ptr<void> service) override {
+    std::lock_guard<std::mutex> lock(servicesMutex_);
+    services_[name] = std::move(service);
+  }
+  std::shared_ptr<void> service(const std::string &name) override {
+    std::lock_guard<std::mutex> lock(servicesMutex_);
+    auto it = services_.find(name);
+    return it == services_.end() ? nullptr : it->second;
+  }
   void runAfterMounts(std::function<void()> fn) override {
     host_.mountingManager_->afterPendingMounts(std::move(fn));
   }
@@ -313,6 +322,8 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
 
  private:
   RNGtkHost &host_;
+  std::mutex servicesMutex_;
+  std::map<std::string, std::shared_ptr<void>> services_;
 };
 
 RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
