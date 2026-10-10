@@ -18,6 +18,12 @@
 // click for words, triple-click for the paragraph, Shift+click to extend.
 // Ctrl+C (or Ctrl+Insert) and the right-click Copy copy it. A selection
 // that becomes non-empty cancels the press it started with.
+//
+// A view with windowDragRegion (<TitleBar>) is a title bar, as GTK's
+// GtkWindowHandle: a drag moves the window (cancelling the touches), and
+// double-, middle- and right-clicks do what the desktop's titlebar
+// settings say (maximize, the window menu...). Presses on focusable views,
+// selectable text and GTK controls inside it stay theirs.
 #pragma once
 
 #include <gtk/gtk.h>
@@ -72,6 +78,11 @@ class GtkPointerHandler {
   std::string selectedText() const;
   // Copies the selection to the clipboard; false with no selection.
   bool copySelection();
+  // What the last press on a windowDragRegion did: "move",
+  // "toggle-maximize", "minimize", "lower", "menu" (or "" for none yet).
+  // Tests read it: without a real event the move itself can't start.
+  const std::string &lastWindowAction() const { return lastWindowAction_; }
+  void clearLastWindowAction() { lastWindowAction_.clear(); }
 
   // Drag and drop (GtkDragDrop.cc), as react-native-macos spells it: views
   // with draggedTypes ('fileUrl', 'string', 'image') get onDragEnter,
@@ -130,6 +141,13 @@ class GtkPointerHandler {
   void showCopyMenu(const Target &target, double x, double y);
   // A press focuses the focusable view it lands in (as on the web).
   void focusOnPress(const Target &target);
+  // Title bars of the app's own (windowDragRegion).
+  bool inWindowDragRegion(const Target &target) const;
+  void windowDrag(const Input &input, const Target &target, int clicks);
+  void beginWindowMove();
+  // Runs the GtkSettings titlebar action `setting` names
+  // (gtk-titlebar-double-click...).
+  void titlebarAction(const char *setting);
   // Selection by mouse on selectable text.
   int clickCount(const Input &input);
   bool beginSelection(const Input &input, const Target &target, int clicks);
@@ -166,6 +184,14 @@ class GtkPointerHandler {
   bool realInput_ = true;
   // A right-click just opened a context menu (GTK then skips the press).
   bool contextMenuShown_ = false;
+  // The real press being handled (a new reference), for the window move
+  // and menu, which need its device, serial and time.
+  GdkEvent *pressEvent_ = nullptr;
+  // A primary press in a windowDragRegion: past GTK's drag threshold, the
+  // window moves.
+  bool windowDragPending_ = false;
+  double windowDragX_ = 0, windowDragY_ = 0;
+  std::string lastWindowAction_;
   GtkEventController *shortcuts_;
 
   // The paragraph with a selection (or being dragged over), what the

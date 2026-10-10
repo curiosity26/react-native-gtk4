@@ -259,7 +259,8 @@ the menus closed, and a checkbox's state.
 
 ## Windows
 
-More top-level windows, from `@curiosity26/react-native-gtk4`. Each shows a
+More top-level windows, from `@curiosity26/react-native-gtk4` (title bars
+of the app's own and transparent windows: [Window styles](#window-styles)). Each shows a
 component registered with `AppRegistry`, as a surface of its own in the
 app's one JS runtime: modules, stores and state are shared (render your
 providers in each window's component). This is react-native-macos'
@@ -318,6 +319,73 @@ them, `setSize` (and the `resize` event), `setTitle` from inside one and on
 the main window, a Modal opened in one, the close button (with and without
 `interceptClose`), the main window hiding while another is open, and the
 app quitting when the last one closes.
+
+## Window styles
+
+A window can drop the desktop's title bar and draw its own, or show the
+desktop through it: `titleBar` and `transparent` in `Windows.open`, and
+`AppOptions::titleBar` / `transparent` in the app's `linux/main.cc` for the
+main window (GTK sets a title bar up once, before the window shows, so
+these can't change later).
+
+```js
+import {TitleBar, Windows} from '@curiosity26/react-native-gtk4';
+
+Windows.open({component: 'Editor', titleBar: 'hidden'});
+
+function Editor() {
+  return (
+    <View style={{flex: 1}}>
+      <TitleBar>
+        <Text style={styles.title}>notes.txt</Text>
+        <Pressable onPress={save}>...</Pressable>
+      </TitleBar>
+      ...
+    </View>
+  );
+}
+```
+
+```cpp
+// linux/main.cc
+options.titleBar = rngtk::TitleBar::Hidden;
+options.transparent = false;
+```
+
+| | Notes |
+| --- | --- |
+| `titleBar: 'default'` | the desktop's: GTK's title bar on GNOME, the window manager's themed one on X11 desktops like Cinnamon |
+| `titleBar: 'hidden'` | no title bar; the content starts at the top and the window keeps its frame (rounded corners, shadow, resize edges). Draw a `<TitleBar>` |
+| `titleBar: 'none'` | no frame at all (GTK's undecorated window): no shadow or resize edges. For splash screens and shaped windows |
+| `transparent: true` | the window paints no background, so the desktop shows wherever the app's views don't paint (give the root view no `backgroundColor`). With `'hidden'` or `'none'`, no frame either. Needs a compositor: always there on Wayland, and GNOME's and Cinnamon's on X11; without one the window stays opaque (a warning is logged) |
+| `<TitleBar>` | a View that looks like a GTK header bar (`headerbar_*` colors) with the window's buttons at each end. Dragging it moves the window; double-, middle- and right-clicks do what the desktop's titlebar settings say (maximize, the window menu). Presses on Pressables, Touchables, Buttons, Switches, TextInputs and selectable Text in it stay theirs. `showWindowControls={false}` leaves the buttons out |
+| `<WindowControls side="start" \| "end" />` | the window's minimize, maximize and close buttons (GtkWindowControls) for one end: as many as the desktop's button layout (`gtk-decoration-layout`) puts there, so nothing on the left by default and close on the left with a macOS-style layout. Measured at GTK's size; mounts again when the layout or the theme changes |
+| `windowDragRegion` (View) | what `<TitleBar>` uses: any View can drag the window (a shaped, transparent window's body, say). Focusable views inside it keep their presses |
+
+How the other desktop platforms compare: react-native-macos and
+react-native-windows expose none of this to JS; their apps do it in native
+code (`NSWindow`'s `titlebarAppearsTransparent` and
+`fullSizeContentView`; `AppWindow.TitleBar.ExtendsContentIntoTitleBar`).
+What GTK and the Linux desktops can't do:
+
+- **No blur behind a window.** macOS's vibrancy and Windows' Mica and
+  Acrylic have no GNOME equivalent: a transparent window shows the desktop
+  through, unblurred.
+- **The buttons go where the user's layout says**, not at a fixed inset as
+  macOS' traffic lights; their size comes from the theme.
+- **On Wayland a window can't place itself** or stay on top; X11 can (not
+  exposed).
+- A non-resizable window has no maximize button, but `<WindowControls>` is
+  sized for one that has.
+
+`GalleryTitleBar` (`--module GalleryTitleBar --self-test`, its main window
+with `titleBar 'hidden'`) checks the hidden title bar and the buttons'
+size, that a drag on the title bar moves the window while a press on a
+Pressable in it doesn't, the double- and right-click actions, a window
+opened with its own title bar, and a transparent frameless window's
+pixels (clear at the corner, the panel opaque) and its drag region. The
+move itself is the desktop's (`gdk_toplevel_begin_move`), which synthetic
+input can't start; the self-test checks that it was asked for.
 
 ## Notifications
 

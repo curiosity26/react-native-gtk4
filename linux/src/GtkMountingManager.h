@@ -29,9 +29,12 @@
 
 namespace rngtk {
 
-// Measures GTK controls the shadow nodes size to (the Switch); call on the
-// main thread before JS starts.
+// Measures GTK controls the shadow nodes size to (the Switch, the window
+// controls); call on the main thread before JS starts.
 void measure_native_controls();
+// Measures the window controls again (the decoration layout or the theme
+// changed); true if their size changed.
+bool measure_window_controls();
 
 class GtkMountingManager
     : public facebook::react::IMountingManager,

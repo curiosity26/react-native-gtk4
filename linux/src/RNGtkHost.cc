@@ -277,6 +277,9 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
   fontDpiHandler_ = g_signal_connect(
       gtk_widget_get_settings(GTK_WIDGET(overlay_)), "notify::gtk-xft-dpi",
       G_CALLBACK(onFontDpi), this);
+  decorationLayoutHandler_ = g_signal_connect_swapped(
+      gtk_widget_get_settings(GTK_WIDGET(overlay_)), "notify::gtk-decoration-layout",
+      G_CALLBACK(+[](RNGtkHost *self) { self->remeasureWindowControls(); }), this);
 
   auto contextContainer = std::make_shared<const ContextContainer>();
   // Called once per JS instance, i.e. again on every reload.
@@ -525,6 +528,10 @@ RNGtkHost::~RNGtkHost() {
   if (fontDpiHandler_) {
     g_signal_handler_disconnect(gtk_widget_get_settings(GTK_WIDGET(overlay_)),
                                 fontDpiHandler_);
+  }
+  if (decorationLayoutHandler_) {
+    g_signal_handler_disconnect(gtk_widget_get_settings(GTK_WIDGET(overlay_)),
+                                decorationLayoutHandler_);
   }
   closeAllWindows();
   for (GtkWindow *w : trackedWindows_) {
@@ -928,8 +935,14 @@ void RNGtkHost::reload() {
 // Main thread: the scheme or accent changed. Mounted views re-resolve
 // their PlatformColors, and JS hears about it (Appearance's listeners,
 // useColorScheme()).
+void RNGtkHost::remeasureWindowControls() {
+  if (!measure_window_controls() || !loaded_ || !reactHost_) return;
+  reactHost_->emitDeviceEvent(folly::dynamic::array("rngtkWindowControlsChanged"));
+}
+
 void RNGtkHost::onAppearanceChanged() {
   mountingManager_->refreshColors();
+  remeasureWindowControls();
   if (!loaded_ || !reactHost_) return;
   reactHost_->emitDeviceEvent(folly::dynamic::array(
       "appearanceChanged",

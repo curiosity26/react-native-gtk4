@@ -12,6 +12,8 @@
 //   the app, keep running); the app quits once no window is left, unless
 //   told not to.
 // - 'focus' and 'blur' as each window becomes active or stops being.
+// - titleBar 'hidden' / 'none' and transparent (apply_window_style): the
+//   app draws its own title bar (<TitleBar>), or shows the desktop through.
 #include "RNGtkHost.h"
 
 #include "rngtk/CxxModule.h"
@@ -91,7 +93,55 @@ void tear_down(W &w, gpointer host) {
   }
 }
 
+TitleBar title_bar_from(const std::string &name) {
+  if (name == "hidden") return TitleBar::Hidden;
+  if (name == "none") return TitleBar::None;
+  return TitleBar::Default;
+}
+
 }  // namespace
+
+void apply_window_style(GtkWindow *window, TitleBar titleBar, bool transparent) {
+  switch (titleBar) {
+    case TitleBar::Default:
+      break;
+    case TitleBar::Hidden: {
+      // A title bar of nothing: GTK draws the frame (client-side, on X11
+      // too) and no bar; the content starts at the top.
+      GtkWidget *empty = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      gtk_widget_set_visible(empty, FALSE);
+      gtk_window_set_titlebar(window, empty);
+      break;
+    }
+    case TitleBar::None:
+      gtk_window_set_decorated(window, FALSE);
+      break;
+  }
+  if (!transparent) return;
+  GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+  if (!gdk_display_is_composited(display)) {
+    LOG(WARNING) << "transparent window: the display has no compositor; it stays opaque";
+    return;
+  }
+  static GtkCssProvider *css = [display] {
+    GtkCssProvider *provider = gtk_css_provider_new();
+    // No background; without a title bar, no frame either (a shadow and
+    // rounded corners around nothing).
+    gtk_css_provider_load_from_string(
+        provider,
+        "window.rngtk-transparent { background: none; }\n"
+        "window.rngtk-transparent.rngtk-frameless { box-shadow: none; border-radius: 0; "
+        "outline: none; border: none; }\n");
+    gtk_style_context_add_provider_for_display(display, GTK_STYLE_PROVIDER(provider),
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    return provider;
+  }();
+  (void)css;
+  gtk_widget_add_css_class(GTK_WIDGET(window), "rngtk-transparent");
+  if (titleBar != TitleBar::Default) {
+    gtk_widget_add_css_class(GTK_WIDGET(window), "rngtk-frameless");
+  }
+}
 
 // ---- The Windows module ------------------------------------------------------
 
@@ -114,7 +164,7 @@ class RNGtkHost::WindowsModule : public CxxModule<RNGtkHost::WindowsModule> {
   }
 
   // options: {component, initialProps, title, width, height, minWidth,
-  // minHeight, resizable, interceptClose}. The window opens on the main
+  // minHeight, resizable, interceptClose, titleBar, transparent}. The window opens on the main
   // loop; its id comes back now.
   int open(facebook::jsi::Runtime &, folly::dynamic options) {
     WindowOptions o;
@@ -131,6 +181,8 @@ class RNGtkHost::WindowsModule : public CxxModule<RNGtkHost::WindowsModule> {
     if (auto *v = get("minHeight"); v && v->isNumber()) o.minHeight = int(v->asDouble());
     if (auto *v = get("resizable"); v && v->isBool()) o.resizable = v->getBool();
     if (auto *v = get("interceptClose"); v && v->isBool()) o.interceptClose = v->getBool();
+    if (auto *v = get("titleBar"); v && v->isString()) o.titleBar = title_bar_from(v->getString());
+    if (auto *v = get("transparent"); v && v->isBool()) o.transparent = v->getBool();
     SurfaceId id = host_.allocateWindowId();
     run([id, o = std::move(o)](RNGtkHost &host) { host.openWindow(id, o); });
     return id;
@@ -243,6 +295,7 @@ void RNGtkHost::openWindow(SurfaceId id, WindowOptions options) {
   // Its natural size (the root view's frame, under the title bar), as the
   // main window gets.
   gtk_window_set_resizable(w->window, options.resizable);
+  apply_window_style(w->window, options.titleBar, options.transparent);
   w->overlay = gtk_overlay_new();
   if (options.minWidth > 0 || options.minHeight > 0) {
     gtk_widget_set_size_request(w->overlay, options.minWidth, options.minHeight);

@@ -188,6 +188,7 @@ void activate(GtkApplication *gtkApp, gpointer data) {
   GtkWidget *window = gtk_application_window_new(gtkApp);
   gtk_window_set_title(GTK_WINDOW(window),
                        (o.title.empty() ? o.moduleName : o.title).c_str());
+  apply_window_style(GTK_WINDOW(window), o.titleBar, o.transparent);
   GtkWidget *overlay = gtk_overlay_new();
   run->root = rn_view_new();
   gtk_widget_set_halign(run->root, GTK_ALIGN_START);

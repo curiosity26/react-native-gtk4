@@ -89,7 +89,13 @@ HostPlatformViewProps::HostPlatformViewProps(
           false)),
       contextMenu(convertRawProp(context, rawProps, "contextMenu", sourceProps.contextMenu, {})),
       draggedTypes(convertRawProp(context, rawProps, "draggedTypes", sourceProps.draggedTypes, {})),
-      draggable(convertRawProp(context, rawProps, "draggable", sourceProps.draggable, false)) {}
+      draggable(convertRawProp(context, rawProps, "draggable", sourceProps.draggable, false)),
+      windowDragRegion(convertRawProp(
+          context,
+          rawProps,
+          "windowDragRegion",
+          sourceProps.windowDragRegion,
+          false)) {}
 
 void HostPlatformViewProps::setProp(
     const PropsParserContext &context,
@@ -113,6 +119,7 @@ void HostPlatformViewProps::setProp(
     RAW_SET_PROP_SWITCH_CASE_BASIC(contextMenu);
     RAW_SET_PROP_SWITCH_CASE_BASIC(draggedTypes);
     RAW_SET_PROP_SWITCH_CASE_BASIC(draggable);
+    RAW_SET_PROP_SWITCH_CASE_BASIC(windowDragRegion);
   }
 }
 

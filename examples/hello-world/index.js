@@ -16,6 +16,7 @@ import GalleryModal from './GalleryModal';
 import GalleryNativeModule from './GalleryNativeModule';
 import GalleryNotifications from './GalleryNotifications';
 import GallerySelection from './GallerySelection';
+import GalleryTitleBar, {GalleryTitleBarChild} from './GalleryTitleBar';
 import GalleryWindows, {GalleryWindowChild} from './GalleryWindows';
 import Showcase, {ShowcaseWindow} from './Showcase';
 
@@ -38,5 +39,7 @@ AppRegistry.registerComponent('GalleryNotifications', () => GalleryNotifications
 AppRegistry.registerComponent('GalleryNativeModule', () => GalleryNativeModule);
 AppRegistry.registerComponent('GalleryWindows', () => GalleryWindows);
 AppRegistry.registerComponent('GalleryWindowChild', () => GalleryWindowChild);
+AppRegistry.registerComponent('GalleryTitleBar', () => GalleryTitleBar);
+AppRegistry.registerComponent('GalleryTitleBarChild', () => GalleryTitleBarChild);
 AppRegistry.registerComponent('Showcase', () => Showcase);
 AppRegistry.registerComponent('ShowcaseWindow', () => ShowcaseWindow);

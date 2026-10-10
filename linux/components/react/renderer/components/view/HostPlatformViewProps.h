@@ -78,6 +78,10 @@ class HostPlatformViewProps : public BaseViewProps {
   // out.
   std::vector<std::string> draggedTypes{};
   bool draggable{false};
+  // Dragging it moves the window, as a title bar does (<TitleBar>): a
+  // double-click maximizes and a right-click opens the window menu. Presses
+  // on focusable views and GTK controls inside it stay theirs.
+  bool windowDragRegion{false};
 };
 
 } // namespace facebook::react
