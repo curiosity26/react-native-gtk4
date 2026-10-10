@@ -46,7 +46,8 @@ class GtkPointerHandler {
  public:
   // Scroll: a wheel turn of (dx, dy) notches over the scroll view under the
   // pointer.
-  enum class Phase { Down, Move, Up, Cancel, Leave, Scroll };
+  // Pinch: a touchpad pinch, for libraries' observers only.
+  enum class Phase { Down, Move, Up, Cancel, Leave, Scroll, Pinch };
   enum class Device { Mouse, Touch };
 
   struct Input {
@@ -57,7 +58,10 @@ class GtkPointerHandler {
     int button = 1;        // 1 primary, 2 middle, 3 secondary
     GdkModifierType modifiers = GdkModifierType(0);
     uint32_t timeMs = 0;   // event time, for velocity in JS
-    double dx = 0, dy = 0; // Scroll
+    double dx = 0, dy = 0; // Scroll; Pinch: the fingers' movement
+    int pinchPhase = 1;    // Pinch: rngtk::PointerInput::PinchPhase
+    bool observeOnly = false;  // a real scroll: GTK scrolls; observers see it
+    double scale = 1, angleDelta = 0;
   };
 
   // Listens to input on `root` (an RNView registered as a surface root).

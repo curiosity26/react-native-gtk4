@@ -77,9 +77,13 @@ out-of-tree platform like react-native-windows and react-native-macos.
 - react-native-gesture-handler port (`@curiosity26/react-native-gtk4-gesture-handler`):
   `RNGestureHandlerModule` and `RNGestureHandlerDetector`, recognizers and
   orchestrator ported from the library's web implementation, on the host's
-  pointer input (Tap, LongPress, Pan, Fling, Hover, Manual).
-- Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers,
-  cancelling the JS responder's touches, views and event emitters by tag,
-  device events, `runAfterMounts`.
+  pointer input (Tap, LongPress, Pan, Fling, Hover, Manual, Pinch and
+  Rotation with touchpad pinches, Native), `RNGestureHandlerButton`
+  (RectButton, Touchable and its feedback) and the library's ScrollView.
+- Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers
+  (with touchpad pinches and scrolling), cancelling the JS responder's
+  touches, views, components and event emitters by tag, `setNativeProps`
+  (native Animated's path), scroll observers, device events,
+  `runAfterMounts`.
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.

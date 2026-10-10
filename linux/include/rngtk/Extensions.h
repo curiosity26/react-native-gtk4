@@ -67,8 +67,10 @@ struct NativeComponent {
 // Pointer input on the app's surfaces (main windows and Windows.open's),
 // as the host receives it, before it becomes React Native's touches.
 struct PointerInput {
-  // Scroll: a wheel or touchpad scroll of (dx, dy).
-  enum class Phase { Down, Move, Up, Cancel, Leave, Scroll };
+  // Scroll: a wheel or touchpad scroll of (dx, dy). Pinch: a touchpad
+  // pinch (pinchPhase, scale, angleDelta), at the pointer.
+  enum class Phase { Down, Move, Up, Cancel, Leave, Scroll, Pinch };
+  enum class PinchPhase { Begin, Update, End, Cancel };
   enum class Device { Mouse, Touch };
   Phase phase = Phase::Move;
   Device device = Device::Mouse;
@@ -81,7 +83,11 @@ struct PointerInput {
   int button = 1;
   GdkModifierType modifiers = GdkModifierType(0);
   uint32_t timeMs = 0;
-  double dx = 0, dy = 0;  // Scroll
+  double dx = 0, dy = 0;  // Scroll; Pinch: the fingers' movement
+  // Pinch: the scale since it began, and the rotation since the last event
+  // (radians, clockwise).
+  PinchPhase pinchPhase = PinchPhase::Update;
+  double scale = 1, angleDelta = 0;
   // The surface's root view, and the React view under the pointer (the
   // host's hit-testing: transforms, clipping, pointerEvents), or null.
   GtkWidget *root = nullptr;
@@ -108,6 +114,16 @@ class Host {
   // A mounted view's event emitter, to send it events (emitter->
   // dispatchEvent("onMyEvent", payload)), or null.
   virtual facebook::react::SharedEventEmitter eventEmitterForView(GtkWidget *view) = 0;
+  // The React component of a mounted view ("View", "ScrollView", "Switch",
+  // a library's...), or "".
+  virtual std::string componentName(GtkWidget *view) = 0;
+  // Applies props to a mounted view now, without a React commit, as native
+  // Animated does (opacity, transform, colors...); they hold until the next
+  // commit sets the view's props.
+  virtual void setNativeProps(GtkWidget *view, folly::dynamic props) = 0;
+  // Called when the user scrolls a ScrollView (a drag, the wheel), with its
+  // view.
+  virtual void addScrollObserver(std::function<void(GtkWidget *scrollView)> observer) = 0;
   // A device event to JS (RCTDeviceEventEmitter.emit(name, payload)).
   virtual void emitDeviceEvent(const std::string &name, folly::dynamic payload) = 0;
   // Runs `fn` on the main thread after the mount transactions committed

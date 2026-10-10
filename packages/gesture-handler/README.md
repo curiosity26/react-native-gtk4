@@ -24,11 +24,29 @@ npx react-native run-linux
   the JS thread.
 - Gestures: Tap (and double tap), LongPress, Pan (and two-finger touchpad
   scrolling with `enableTrackpadTwoFingerGesture`), Fling, Hover, Manual
-  (`GestureStateManager` from JS).
+  (`GestureStateManager` from JS), Pinch and Rotation (two fingers on a
+  touchscreen, or a touchpad pinch: GTK's touchpad gesture events, which
+  give both at once), Native.
+- Buttons: `RNGestureHandlerButton` with its native gesture, so
+  `RectButton`, `BorderlessButton` and `Touchable` work: Touchable's own
+  gesture (under its `handlerTag`, for relations) sends its press, long
+  press and hover events, and the press and hover feedback
+  (`activeOpacity`, `activeScale`, `activeUnderlayOpacity` with
+  `underlayColor`, the hover ones) animates on GTK's frame clock without a
+  React commit.
+- The library's `ScrollView`, `FlatList`, `Switch`...: their native gesture
+  activates when the view takes over (a ScrollView when it scrolls), and
+  cancels the gestures it isn't simultaneous with.
+- `ReanimatedSwipeable` and `ReanimatedDrawerLayout` need
+  react-native-reanimated on Linux (not yet).
 - A gesture that activates takes the touches from React Native's
   responder (Pressable, ScrollView): their press is cancelled.
 - Events: callbacks on the JS thread. Reanimated worklets need
   react-native-reanimated on Linux (not yet).
+
+The Showcase's Gestures page has all of them; `rn-gtk-host --module
+GalleryGestures --self-test` drives each with the mouse, touch points and a
+touchpad pinch.
 
 `run-linux` and `package-linux` autolink it. See
 [docs/libraries.md](../../docs/libraries.md).

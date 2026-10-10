@@ -251,6 +251,16 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
   SharedEventEmitter eventEmitterForView(GtkWidget *view) override {
     return view ? host_.mountingManager_->targetForView(view).emitter : nullptr;
   }
+  std::string componentName(GtkWidget *view) override {
+    return view ? host_.mountingManager_->componentNameForTag(host_.mountingManager_->targetForView(view).tag) : "";
+  }
+  void setNativeProps(GtkWidget *view, folly::dynamic props) override {
+    Tag tag = view ? host_.mountingManager_->targetForView(view).tag : 0;
+    if (tag) host_.mountingManager_->synchronouslyUpdateViewOnUIThread(tag, props);
+  }
+  void addScrollObserver(std::function<void(GtkWidget *)> observer) override {
+    host_.mountingManager_->addScrollObserver(std::move(observer));
+  }
   void runAfterMounts(std::function<void()> fn) override {
     host_.mountingManager_->afterPendingMounts(std::move(fn));
   }
