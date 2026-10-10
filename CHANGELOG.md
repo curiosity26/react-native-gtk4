@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.83.1 (unreleased)
+
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
+
 ## 0.83.0 (2026-10-11)
 
 The first release: React Native 0.83.10 for Linux on GTK4, as an
