@@ -31,7 +31,11 @@ function load(name) {
       case 'worklets':
         return require('./GalleryWorklets');
       case 'reanimated':
-        return {...require('react-native-gesture-handler'), ...require('./GalleryReanimated')};
+        return {
+          ...require('react-native-gesture-handler'),
+          ...require('./GalleryReanimated'),
+          ...require('./GalleryReanimatedLayout'),
+        };
       case 'gestures':
         return {...require('react-native-gesture-handler'), ...require('./GalleryGestures')};
     }
@@ -610,7 +614,15 @@ export function makeLibraryPages(helpers) {
         </ScrollView>
       );
     }
-    const {GestureHandlerRootView, ReanimatedAnimations, ReanimatedInteraction, ReanimatedBench} = lib;
+    const {
+      GestureHandlerRootView,
+      ReanimatedAnimations,
+      ReanimatedInteraction,
+      ReanimatedBench,
+      ReanimatedLayoutDemo,
+      ReanimatedCSSDemo,
+      ReanimatedSwipeDrawerDemo,
+    } = lib;
     return (
       <GestureHandlerRootView style={{flex: 1}}>
         <ScrollView contentContainerStyle={styles.page}>
@@ -626,6 +638,21 @@ export function makeLibraryPages(helpers) {
           <ReanimatedInteraction />
           <Section title="Many views" hint="Each box has its own animated style; the frame rate is what the UI runtime's useFrameCallback sees." />
           <ReanimatedBench />
+          <Section
+            title="Layout animations"
+            hint="Items fade or slide in (entering), fade or zoom out (exiting), and the others move to make room (layout transitions)."
+          />
+          <ReanimatedLayoutDemo />
+          <Section
+            title="CSS animations and transitions"
+            hint="Keyframes with an iteration count and direction; width and opacity transitioning when the style changes."
+          />
+          <ReanimatedCSSDemo />
+          <Section
+            title="Swipeable and drawer"
+            hint="gesture-handler's ReanimatedSwipeable (swipe the row left) and ReanimatedDrawerLayout."
+          />
+          <ReanimatedSwipeDrawerDemo />
         </ScrollView>
       </GestureHandlerRootView>
     );

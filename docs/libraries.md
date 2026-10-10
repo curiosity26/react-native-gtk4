@@ -11,10 +11,10 @@ GTK4, next to the library's own JavaScript. Install both; `run-linux` and
 | [@react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage) 3.x | `@curiosity26/react-native-gtk4-async-storage` | The `RNAsyncStorage` TurboModule: each database is a JSON file under `$XDG_DATA_HOME/<app id>/async-storage/` (`~/.local/share/...`; in a Flatpak, `~/.var/app/<app id>/data/...`), written atomically. The default `AsyncStorage` is the `legacy` database |
 | [@react-native-community/netinfo](https://github.com/react-native-netinfo/react-native-netinfo) 11+ | `@curiosity26/react-native-gtk4-netinfo` | The `RNCNetInfo` TurboModule on GIO's GNetworkMonitor: `isConnected`, `isInternetReachable` (connectivity FULL), `isConnectionExpensive` (metered), and change events. The type (`wifi`, `ethernet`, `cellular`, `vpn`, `bluetooth`), Wi-Fi SSID and IPv4 address come from NetworkManager over the system bus |
 | [react-native-safe-area-context](https://github.com/AppAndFlow/react-native-safe-area-context) 5.x | `@curiosity26/react-native-gtk4-safe-area-context` | The `RNCSafeAreaContext` TurboModule's `initialWindowMetrics`: zero insets (nothing covers a desktop window's content) and the window's content size. The components are the library's own pure-JS ones (its Windows variants), which the Metro config picks on Linux |
-| [react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) 3 | `@curiosity26/react-native-gtk4-gesture-handler` | `RNGestureHandlerModule` and `RNGestureHandlerDetector`: the hook API, the builder API and the handler components, with recognizers ported from the library's web implementation running on the main thread on the host's pointer input (Tap, LongPress, Pan with touchpad scrolling, Fling, Hover, Manual, Pinch and Rotation with touchpad pinches, Native), its orchestrator (simultaneous, waitFor, blocks), gestures that activate cancelling React Native's responder, `RNGestureHandlerButton` (RectButton, Touchable with press feedback) and the library's ScrollView/FlatList |
+| [react-native-gesture-handler](https://github.com/software-mansion/react-native-gesture-handler) 3 | `@curiosity26/react-native-gtk4-gesture-handler` | `RNGestureHandlerModule` and `RNGestureHandlerDetector`: the hook API, the builder API and the handler components, with recognizers ported from the library's web implementation running on the main thread on the host's pointer input (Tap, LongPress, Pan with touchpad scrolling, Fling, Hover, Manual, Pinch and Rotation with touchpad pinches, Native), its orchestrator (simultaneous, waitFor, blocks), gestures that activate cancelling React Native's responder, `RNGestureHandlerButton` (RectButton, Touchable with press feedback) and the library's ScrollView/FlatList; with Reanimated, worklet callbacks on the UI runtime, `ReanimatedSwipeable` and `ReanimatedDrawerLayout` |
 | [react-native-screens](https://github.com/software-mansion/react-native-screens) 4 | `@curiosity26/react-native-gtk4-screens` | React Navigation's native-stack on libadwaita: `RNSScreenStack` is an `AdwNavigationView` (slide transitions; back with the header's button, a swipe, Escape, Alt+Left, the mouse's back button), each screen a page with an `AdwHeaderBar` from its header options (title, colors, `headerLeft`/`headerTitle`/`headerRight`, hidden or transparent headers, a search bar); modals and form sheets as layers over the stack. Needs `libadwaita-1-dev` to build. Without it, Linux gets the libraries' web components ([below](#navigation-react-native-screens-and-react-navigation)) |
 | [react-native-worklets](https://github.com/software-mansion/react-native-reanimated/tree/main/packages/react-native-worklets) 0.13 | `@curiosity26/react-native-gtk4-worklets` | The library's shared C++ (built from the app's copy) with its UI runtime, a Hermes runtime of its own, on GTK's main thread: worklets, `runOnUI`/`runOnJS`, synchronizables, `requestAnimationFrame` on the window's frame clock. Add `react-native-worklets/plugin` to `babel.config.js` |
-| [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated) 4.7 | `@curiosity26/react-native-gtk4-reanimated` | The library's C++ engine (built from the app's copy, taking its iOS paths) and `ReanimatedModule`, on react-native-worklets' UI runtime (install that port too): shared values and animated styles with `withTiming`/`withSpring`/`withDecay` and the other animations on the window's frame clock, committed to Fabric from the main thread, so they keep running while JS is busy; `useAnimatedScrollHandler`, `useEvent`, `measure`, `scrollTo`, `useFrameCallback`; gesture-handler gestures with worklet callbacks. No sensors or keyboard events on the desktop |
+| [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated) 4.7 | `@curiosity26/react-native-gtk4-reanimated` | The library's C++ engine (built from the app's copy, taking its iOS paths) and `ReanimatedModule`, on react-native-worklets' UI runtime (install that port too): shared values and animated styles with `withTiming`/`withSpring`/`withDecay` and the other animations on the window's frame clock, committed to Fabric from the main thread, so they keep running while JS is busy; `useAnimatedScrollHandler`, `useEvent`, `measure`, `scrollTo`, `useFrameCallback`; gesture-handler gestures with worklet callbacks; layout animations (entering, exiting, layout transitions) and CSS animations and transitions. No sensors or keyboard events on the desktop |
 | [react-native-svg](https://github.com/software-mansion/react-native-svg) 15 | `@curiosity26/react-native-gtk4-svg` | The `RNSVG*` components: an `<Svg>` turns its elements back into an SVG document, which librsvg draws (shapes, paths, gradients, clip paths, masks, patterns, markers, text, filters, `<Use>`), and `RNSVGSvgViewModule` (`toDataURL`). Needs `librsvg2-dev` to build |
 | [react-native-webview](https://github.com/react-native-webview/react-native-webview) 13+ | `@curiosity26/react-native-gtk4-webview` | `RNCWebView` on WebKitGTK 6.0, driven by the library's iOS JS (the Metro config picks it when the port is installed): sources, injected JS, two-way messages, the loading and navigation events, `onShouldStartLoadWithRequest`, the commands. Needs `libwebkitgtk-6.0-dev` to build |
 | [@react-native-vector-icons/*](https://github.com/oblador/react-native-vector-icons) 11+, and `react-native-vector-icons` 10 | `@curiosity26/react-native-gtk4-vector-icons` | The icon fonts: copied from the app's `node_modules` next to the executable (`share/<app>/fonts` when installed) and registered with fontconfig at startup, with each font's PostScript name (what the library sets as `fontFamily`) as an alias |
@@ -69,6 +69,71 @@ screen and switches tabs, on the native components;
 bundle made with `RNGTK_IGNORE_PORTS=@curiosity26/react-native-gtk4-screens`,
 which has Metro act as if the port weren't installed).
 
+## Gestures and animations: gesture-handler, worklets and Reanimated
+
+The three Software Mansion libraries work together on Linux as on the
+other platforms, each with its port:
+
+```sh
+npm install react-native-gesture-handler react-native-worklets react-native-reanimated \
+  @curiosity26/react-native-gtk4-gesture-handler \
+  @curiosity26/react-native-gtk4-worklets \
+  @curiosity26/react-native-gtk4-reanimated
+```
+
+Add `react-native-worklets/plugin` to `babel.config.js`, and wrap the app
+in `GestureHandlerRootView`.
+
+- **Threads.** The UI runtime (worklets' second Hermes runtime) runs on
+  GTK's main thread, where input arrives, views are mounted and the
+  window's `GdkFrameClock` ticks. Gesture recognizers run there too, so a
+  gesture's worklet callbacks reach shared values in the same event, and
+  Reanimated commits each frame's props to Fabric from that thread:
+  animations keep running while JS is busy.
+- **gesture-handler** (C++ ports of the library's web recognizers, on the
+  host's mouse, touch and touchpad input): the hook API (`useTapGesture`,
+  `usePanGesture`, ...), the builder API (`Gesture.Pan()`, ...), relations,
+  `GestureDetector`, the buttons, the library's ScrollView and FlatList,
+  and with Reanimated, `ReanimatedSwipeable` and `ReanimatedDrawerLayout`.
+  Two-finger touchpad scrolling pans; a touchpad pinch pinches and
+  rotates. See its [README](../packages/gesture-handler/README.md).
+- **worklets**: `scheduleOnUI`/`runOnUI`, `runOnUISync`,
+  `scheduleOnRN`/`runOnJS`, shareables and synchronizables,
+  `createWorkletRuntime`; `requestAnimationFrame` on the UI runtime
+  follows the frame clock. Bundle mode isn't supported yet. See its
+  [README](../packages/worklets/README.md).
+- **Reanimated 4**: shared values, `useAnimatedStyle`/`useAnimatedProps`,
+  `withTiming`/`withSpring`/`withDecay` and the other animations,
+  `useAnimatedScrollHandler`, `useEvent`, `measure`, `scrollTo`,
+  `useFrameCallback`, layout animations (entering, exiting, layout
+  transitions, keyframes) and CSS animations and transitions
+  (`animationName` keyframes, `transitionProperty`, and their
+  `onCSSAnimation*`/`onCSSTransition*` callbacks). Reduced motion follows
+  GNOME's "Reduce animation" setting. Not on Linux: sensors, keyboard
+  events, `:hover`/`:active` in CSS animations, shared element
+  transitions. See its [README](../packages/reanimated/README.md).
+
+Two things behave as on iOS and Android, and can surprise code written for
+the web or without Reanimated:
+
+- With Reanimated installed, gesture-handler 3 turns gesture callbacks
+  into worklets that run on the UI runtime. Callbacks that set React state
+  need `runOnJS: true` (or call `scheduleOnRN`).
+- A view with an entering animation must not set `nativeID`: Reanimated
+  sets its own to find the animation, and yours replaces it (the view then
+  appears without animating). Put the ID on a child.
+
+The Showcase's Gestures, Worklets and Reanimated pages show each library.
+Their self-tests drive them with synthesized mouse and touchpad input:
+`gallery-gestures-self-test`, `gallery-worklets-self-test`,
+`gallery-reanimated-self-test` (animations frame by frame, an animation
+finishing while JS is blocked, scroll handlers, `measure`/`scrollTo`, a pan
+moving a box with worklets, frame times with 60 animated views) and
+`gallery-reanimated-layout-self-test` (layout animations, CSS animations
+and transitions, `ReanimatedSwipeable`, `ReanimatedDrawerLayout`). With 60
+views animating, frames take 16.7 ms at p95 on Wayland and X11 (the 60 Hz
+refresh), with about 3.6 ms of main-thread CPU per frame.
+
 ## In a Flatpak
 
 - **async-storage**: nothing to do. The data lives in the app's own data
@@ -86,9 +151,8 @@ which has Metro act as if the port weren't installed).
 
 ## Not ported yet
 
-[library-assessments.md](library-assessments.md) covers gesture-handler,
-reanimated and a native screens port: where they stand on Linux and what a
-port takes.
+[library-assessments.md](library-assessments.md) has the assessments the
+gesture-handler, Reanimated and screens ports started from.
 
 ## Web views on Ubuntu 24.04 and later
 
