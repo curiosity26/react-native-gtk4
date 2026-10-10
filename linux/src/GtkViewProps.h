@@ -2,6 +2,8 @@
 // RNView styles, transforms, pointerEvents and the cursor.
 #pragma once
 
+#include <optional>
+
 #include <gtk/gtk.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/LayoutMetrics.h>
@@ -18,5 +20,9 @@ void apply_view_style(GtkWidget *view, const facebook::react::ViewProps &props,
                       const facebook::react::LayoutMetrics &layout);
 
 GdkRGBA to_rgba(const facebook::react::SharedColor &color);
+// React Native 0.88 makes some color props optional (ImageProps::tintColor).
+inline GdkRGBA to_rgba(const std::optional<facebook::react::SharedColor> &color) {
+  return color ? to_rgba(*color) : GdkRGBA{0, 0, 0, 0};
+}
 
 }  // namespace rngtk

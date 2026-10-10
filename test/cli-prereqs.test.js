@@ -167,7 +167,7 @@ describe('run-linux helpers', () => {
 
   test('cache locations', () => {
     const rn = paths.reactNativeVersion();
-    assert.match(rn, /^\d+\.\d+\.\d+$/);
+    assert.match(rn, /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
     assert.equal(paths.cacheRoot({HOME: '/h', XDG_CACHE_HOME: '/x'}), '/x/react-native-gtk4');
     assert.equal(paths.cacheRoot({RNGTK_CACHE_DIR: '/c'}), '/c');
     assert.equal(paths.depsDir({RNGTK_CACHE_DIR: '/c'}), path.join('/c', rn, 'deps'));
