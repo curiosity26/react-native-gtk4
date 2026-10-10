@@ -101,3 +101,6 @@ out-of-tree platform like react-native-windows and react-native-macos.
   services packages share (worklets' UI runtime).
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
