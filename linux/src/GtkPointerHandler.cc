@@ -158,6 +158,9 @@ bool GtkPointerHandler::handleEvent(GdkEvent *event) {
   input.y = in_root.y;
   contextMenuShown_ = false;
   dispatch(input);
+  // The back button went to BackHandler: widgets under the pointer (a
+  // navigation view) mustn't go back too.
+  if ((type == GDK_BUTTON_PRESS || type == GDK_BUTTON_RELEASE) && input.button == 8) return true;
   // Let GTK carry on (cursors, the dev menu button...), except after our
   // context menu opened: a TextInput's own mustn't open too.
   return std::exchange(contextMenuShown_, false);

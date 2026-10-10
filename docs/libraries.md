@@ -11,6 +11,7 @@ GTK4, next to the library's own JavaScript. Install both; `run-linux` and
 | [@react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage) 3.x | `@curiosity26/react-native-gtk4-async-storage` | The `RNAsyncStorage` TurboModule: each database is a JSON file under `$XDG_DATA_HOME/<app id>/async-storage/` (`~/.local/share/...`; in a Flatpak, `~/.var/app/<app id>/data/...`), written atomically. The default `AsyncStorage` is the `legacy` database |
 | [@react-native-community/netinfo](https://github.com/react-native-netinfo/react-native-netinfo) 11+ | `@curiosity26/react-native-gtk4-netinfo` | The `RNCNetInfo` TurboModule on GIO's GNetworkMonitor: `isConnected`, `isInternetReachable` (connectivity FULL), `isConnectionExpensive` (metered), and change events. The type (`wifi`, `ethernet`, `cellular`, `vpn`, `bluetooth`), Wi-Fi SSID and IPv4 address come from NetworkManager over the system bus |
 | [react-native-safe-area-context](https://github.com/AppAndFlow/react-native-safe-area-context) 5.x | `@curiosity26/react-native-gtk4-safe-area-context` | The `RNCSafeAreaContext` TurboModule's `initialWindowMetrics`: zero insets (nothing covers a desktop window's content) and the window's content size. The components are the library's own pure-JS ones (its Windows variants), which the Metro config picks on Linux |
+| [react-native-screens](https://github.com/software-mansion/react-native-screens) 4 | `@curiosity26/react-native-gtk4-screens` | React Navigation's native-stack on libadwaita: `RNSScreenStack` is an `AdwNavigationView` (slide transitions; back with the header's button, a swipe, Escape, Alt+Left, the mouse's back button), each screen a page with an `AdwHeaderBar` from its header options (title, colors, `headerLeft`/`headerTitle`/`headerRight`, hidden or transparent headers, a search bar); modals and form sheets as layers over the stack. Needs `libadwaita-1-dev` to build. Without it, Linux gets the libraries' web components ([below](#navigation-react-native-screens-and-react-navigation)) |
 | [react-native-svg](https://github.com/software-mansion/react-native-svg) 15 | `@curiosity26/react-native-gtk4-svg` | The `RNSVG*` components: an `<Svg>` turns its elements back into an SVG document, which librsvg draws (shapes, paths, gradients, clip paths, masks, patterns, markers, text, filters, `<Use>`), and `RNSVGSvgViewModule` (`toDataURL`). Needs `librsvg2-dev` to build |
 | [react-native-webview](https://github.com/react-native-webview/react-native-webview) 13+ | `@curiosity26/react-native-gtk4-webview` | `RNCWebView` on WebKitGTK 6.0, driven by the library's iOS JS (the Metro config picks it when the port is installed): sources, injected JS, two-way messages, the loading and navigation events, `onShouldStartLoadWithRequest`, the commands. Needs `libwebkitgtk-6.0-dev` to build |
 | [@react-native-vector-icons/*](https://github.com/oblador/react-native-vector-icons) 11+, and `react-native-vector-icons` 10 | `@curiosity26/react-native-gtk4-vector-icons` | The icon fonts: copied from the app's `node_modules` next to the executable (`share/<app>/fonts` when installed) and registered with fontconfig at startup, with each font's PostScript name (what the library sets as `fontFamily`) as an alias |
@@ -30,27 +31,40 @@ autolink, and its pages say so.
 
 [React Navigation](https://reactnavigation.org) 7 works on Linux: its JS
 stack, tabs and drawer as they are, and `@react-navigation/native-stack`
-through react-native-screens 4's web components. The Metro config picks
-the web build of `react-native-screens` and `@react-navigation/native-stack`
-on Linux (a `Foo.web.tsx` where there is one, and the platform-less
-`Foo.tsx` over `Foo.native.tsx`), so native-stack draws its stack and
-header (`@react-navigation/elements`) as it does in a browser: header
-options (title, colors, `headerLeft`/`headerRight`, `headerShown`), `push`,
-`pop`, `popToTop`, modals, and nested tab navigators. There are no screen
-transitions, and `presentation: 'modal'` is a pushed screen, as on the web.
-Back works with the header's arrow, Alt+Left and the mouse's back button
-([BackHandler](apis.md#backhandler)). Nothing to install besides the
-libraries:
+in one of two ways:
+
+- **Native, with `@curiosity26/react-native-gtk4-screens`** (libadwaita
+  1.4+): GNOME's navigation view, header bars, slide transitions and back
+  gestures, modals and form sheets as layers. See the package's
+  [README](../packages/screens/README.md) for what's mapped.
+- **Without it**, the Metro config gives Linux the web build of
+  `react-native-screens` and `@react-navigation/native-stack` (a
+  `Foo.web.tsx` where there is one, and the platform-less `Foo.tsx` over
+  `Foo.native.tsx`), so native-stack draws its stack and header
+  (`@react-navigation/elements`) as it does in a browser: header options
+  (title, colors, `headerLeft`/`headerRight`, `headerShown`), `push`,
+  `pop`, `popToTop`, modals and nested tab navigators, without screen
+  transitions; `presentation: 'modal'` is a pushed screen, as on the web.
+
+Either way, back works with Alt+Left and the mouse's back button
+([BackHandler](apis.md#backhandler)), and the header's back button.
 
 ```sh
 npm install @react-navigation/native @react-navigation/native-stack \
-  react-native-screens react-native-safe-area-context
+  react-native-screens react-native-safe-area-context \
+  @curiosity26/react-native-gtk4-screens   # the native one
 ```
 
-The Showcase's Navigation page has a stack with header options, a modal
-and tabs; `rn-gtk-host --module GalleryNavigation --self-test` pushes and
-pops screens (buttons, the header's back button, Alt+Left, the mouse's back
-button), opens the modal and switches tabs.
+The Showcase's Navigation page has a stack with header options, a search
+bar, a modal with header buttons, a form sheet, a guarded screen
+(`usePreventRemove`) and tabs. `rn-gtk-host --module GalleryNavigation
+--self-test` pushes and pops screens (buttons, the header's back button,
+Alt+Left, the mouse's back button), types in the search bar, opens and
+dismisses the modal (and Escape) and the sheet, tries to leave the guarded
+screen and switches tabs, on the native components;
+`gallery-navigation-web-self-test` does the same on the web ones (a
+bundle made with `RNGTK_IGNORE_PORTS=@curiosity26/react-native-gtk4-screens`,
+which has Metro act as if the port weren't installed).
 
 ## In a Flatpak
 
@@ -63,8 +77,8 @@ button), opens the modal and switches tabs.
   to app.json's `linux` block for the type, SSID and address (Flathub
   reviews that permission).
 - **vector-icons**: the fonts are in the app (`/app/share/<app>/fonts`).
-- **svg** and **webview**: the GNOME runtime has librsvg and WebKitGTK
-  6.0. WebKit's web processes run in a sandbox of their own inside the
+- **svg**, **webview** and **screens**: the GNOME runtime has librsvg,
+  WebKitGTK 6.0 and libadwaita. WebKit's web processes run in a sandbox of their own inside the
   Flatpak's.
 
 ## Not ported yet

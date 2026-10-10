@@ -8,6 +8,10 @@ react-native-worklets 0.13.0) and react-native-screens 4.29.0, in October
 
 ## react-native-screens: use its web JS now; a native port is optional
 
+**Done (Phase 6):** both. Without a port, the Metro config gives Linux the
+web components; `packages/screens` is the native port on libadwaita's
+AdwNavigationView ([libraries.md](libraries.md#navigation-react-native-screens-and-react-navigation)).
+
 **Today.** `isNativePlatformSupported` is iOS, Android and Windows only
 (`src/core.ts`), so on Linux `screensEnabled()` is false and its `Screen`
 and `ScreenContainer` render plain views. React Navigation's JS stack

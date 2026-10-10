@@ -3,12 +3,14 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
-    "bundle": "react-native bundle --entry-file index.js --platform linux --dev false --minify false --bundle-output build/index.bundle.js --assets-dest build"
+    "bundle": "react-native bundle --entry-file index.js --platform linux --dev false --minify false --bundle-output build/index.bundle.js --assets-dest build && npm run bundle:web-screens",
+    "bundle:web-screens": "RNGTK_IGNORE_PORTS=@curiosity26/react-native-gtk4-screens react-native bundle --entry-file index.js --platform linux --dev false --minify false --bundle-output build/web-screens.bundle.js"
   },
   "dependencies": {
     "@curiosity26/react-native-gtk4-async-storage": "file:../../packages/async-storage",
     "@curiosity26/react-native-gtk4-netinfo": "file:../../packages/netinfo",
     "@curiosity26/react-native-gtk4-safe-area-context": "file:../../packages/safe-area-context",
+    "@curiosity26/react-native-gtk4-screens": "file:../../packages/screens",
     "@curiosity26/react-native-gtk4-svg": "file:../../packages/svg",
     "@curiosity26/react-native-gtk4-vector-icons": "file:../../packages/vector-icons",
     "@curiosity26/react-native-gtk4-webview": "file:../../packages/webview",

@@ -840,7 +840,12 @@ static bool is_react_widget(GtkWidget *widget) {
 
 static GtkWidget *pick(GtkWidget *widget, graphene_point_t p,
                        graphene_point_t *local) {
-  if (!gtk_widget_get_visible(widget)) return nullptr;
+  // Hidden, not taking input, or hidden by its parent (a navigation view's
+  // pages off screen).
+  if (!gtk_widget_get_visible(widget) || !gtk_widget_get_can_target(widget) ||
+      !gtk_widget_get_child_visible(widget)) {
+    return nullptr;
+  }
   RNPointerEvents mode = rn_widget_get_pointer_events(widget);
   if (mode == RN_POINTER_EVENTS_NONE) return nullptr;
   if (RN_IS_VIEW(widget) && priv(RN_VIEW(widget))->style.backface_hidden &&
