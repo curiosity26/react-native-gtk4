@@ -185,6 +185,7 @@ class RNGtkHost {
   class DeviceInfoModule;
   class AppearanceModule;
   class WindowsModule;
+  class PackageHost;
   struct AppWindow;
   // LogBox runs as its own React surface (AppRegistry "LogBox").
   static constexpr facebook::react::SurfaceId kLogBoxSurfaceId = 1001;
@@ -291,6 +292,8 @@ class RNGtkHost {
   gulong decorationLayoutHandler_{0};
   std::shared_ptr<LogBoxDelegate> logBox_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
+  // What packages' setUp get (rngtk::Host).
+  std::unique_ptr<PackageHost> packageHost_;
   std::thread loader_;
   std::shared_ptr<GtkImageLoader> imageLoader_;
   std::string bundleURL_;  // file:// URL of a release bundle
