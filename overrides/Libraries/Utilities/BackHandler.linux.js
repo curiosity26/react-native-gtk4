@@ -6,22 +6,18 @@
  * listeners run newest first until one returns true (React Navigation pops
  * its stack). Unhandled, nothing happens: a desktop app doesn't quit on
  * Alt+Left. exitApp() quits the app.
+ *
+ * React Native 0.83 calls the listeners without an argument (the
+ * HardwareBackPressEvent they get from 0.85 on doesn't exist yet).
  */
 import NativeDeviceEventManager from 'react-native-upstream/Libraries/NativeModules/specs/NativeDeviceEventManager';
 import RCTDeviceEventEmitter from 'react-native-upstream/Libraries/EventEmitter/RCTDeviceEventEmitter';
-import {setEventInitTimeStamp} from 'react-native-upstream/src/private/webapis/dom/events/internals/EventInternals';
-import {HardwareBackPressEvent} from 'react-native-upstream/Libraries/Utilities/HardwareBackPressEvent';
 
 const subscriptions = [];
 
-RCTDeviceEventEmitter.addListener('hardwareBackPress', nativeEvent => {
-  const options = {};
-  if (nativeEvent?.timeStamp != null) {
-    setEventInitTimeStamp(options, nativeEvent.timeStamp);
-  }
-  const event = new HardwareBackPressEvent(options);
+RCTDeviceEventEmitter.addListener('hardwareBackPress', () => {
   for (let i = subscriptions.length - 1; i >= 0; i--) {
-    if (subscriptions[i]?.(event)) return;
+    if (subscriptions[i]?.()) return;
   }
 });
 
