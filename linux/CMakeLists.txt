@@ -545,6 +545,13 @@ target_sources(rn-gtk-host PRIVATE
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExampleView.cc
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExamplePackage.cc)
 target_include_directories(rn-gtk-host PRIVATE ${RNGTK_TEMPLATE_LIBRARY}/src)
+# The react-native-gesture-handler port (packages/gesture-handler), for
+# GalleryGestures.
+target_sources(rn-gtk-host PRIVATE
+  ../packages/gesture-handler/linux/src/GestureHandler.cc
+  ../packages/gesture-handler/linux/src/Handlers.cc
+  ../packages/gesture-handler/linux/src/Orchestrator.cc
+  ../packages/gesture-handler/linux/src/GestureHandlerModule.cc)
 # The react-native-screens port (packages/screens), for GalleryNavigation:
 # the Showcase's bundle uses its native components. Needs libadwaita.
 pkg_check_modules(RNGTK_HARNESS_ADW QUIET IMPORTED_TARGET libadwaita-1>=1.4)
@@ -633,6 +640,9 @@ add_test(NAME gallery-navigation-web-self-test
          COMMAND rn-gtk-host
                  --bundle ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/build/web-screens.bundle.js
                  --module GalleryNavigation --width 940 --height 680 --self-test)
+add_test(NAME gallery-gestures-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryGestures --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)

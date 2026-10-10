@@ -89,7 +89,22 @@ whose views are GTK widgets:
 | `insertChild(parent, child, index)`, `removeChild(parent, child)` | a container: React's children of the component are handed to it in order instead of the host placing them. The host still creates, updates and destroys each child. packages/svg uses them for an `<Svg>`'s elements |
 
 They run on the main thread. A native component has no measure function:
-give it a size in JS (`style={{width: 320, height: 300}}`).
+give it a size in JS (`style={{width: 320, height: 300}}`). Without
+`create`, the host makes the component's view itself (an RNView, which
+lays out React children) and still calls `update`: packages/screens does
+that for `RNSScreen`.
+
+**The host.** A package's `setUp(rngtk::Host &host)` runs once the host is
+up, on the main thread, and may keep the `Host` (it lives until the app
+quits):
+
+| `rngtk::Host` | |
+| --- | --- |
+| `addPointerObserver(fn)` | every pointer event on the app's surfaces (`rngtk::PointerInput`: press, move, release, cancel, leave, scroll; mouse or touch, the pointer id, root coordinates, the React view under it), before the host turns it into touches; `fn` returning true keeps the host from handling it. packages/gesture-handler's recognizers run on it |
+| `cancelTouches(root)` | the JS responder (Pressable, ScrollView) loses the touches in progress on that surface (touchCancel), as when a native gesture takes over |
+| `viewForTag(tag)`, `tagForView(widget)`, `eventEmitterForView(widget)` | mounted views by React tag, and a view's event emitter (`emitter->dispatchEvent("onMyEvent", payload)` for a prop `onMyEvent`) |
+| `emitDeviceEvent(name, payload)` | `RCTDeviceEventEmitter` events |
+| `runAfterMounts(fn)` | `fn` on the main thread after the mount transactions committed so far (a TurboModule naming a view finds it mounted); any thread |
 
 ## Autolinking
 

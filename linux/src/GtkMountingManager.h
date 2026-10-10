@@ -126,6 +126,18 @@ class GtkMountingManager
   // The mounted view with this accessibilityLabel, for tests.
   GtkWidget *viewForAccessibilityLabel(const std::string &label) const;
 
+  // Libraries' pointer observers (rngtk::Host::addPointerObserver); true
+  // if one consumed the event.
+  void addPointerObserver(std::function<bool(const PointerInput &)> observer) {
+    pointerObservers_.push_back(std::move(observer));
+  }
+  bool observePointer(const PointerInput &event) {
+    bool consumed = false;
+    for (auto &observer : pointerObservers_) consumed = observer(event) || consumed;
+    return consumed;
+  }
+  bool hasPointerObservers() const { return !pointerObservers_.empty(); }
+
   // Back navigation the user asked for (Alt+Left, the Back key, the
   // mouse's back button): BackHandler's hardwareBackPress, as on
   // react-native-windows.
@@ -299,6 +311,7 @@ class GtkMountingManager
   std::unordered_map<facebook::react::Tag, ScrollTracking> scrolls_;
   std::function<void()> onUserScroll_;
   std::function<void()> onBackRequested_;
+  std::vector<std::function<bool(const PointerInput &)>> pointerObservers_;
   std::function<void()> onUIManagerChanged_;
   bool onMainThread() const {
     return std::this_thread::get_id() == mainThread_;

@@ -74,5 +74,12 @@ out-of-tree platform like react-native-windows and react-native-macos.
   `usePreventRemove`. Without the port, React Navigation's native-stack
   runs on react-native-screens' web components (the Metro config picks
   them on Linux).
+- react-native-gesture-handler port (`@curiosity26/react-native-gtk4-gesture-handler`):
+  `RNGestureHandlerModule` and `RNGestureHandlerDetector`, recognizers and
+  orchestrator ported from the library's web implementation, on the host's
+  pointer input (Tap, LongPress, Pan, Fling, Hover, Manual).
+- Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers,
+  cancelling the JS responder's touches, views and event emitters by tag,
+  device events, `runAfterMounts`.
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.
