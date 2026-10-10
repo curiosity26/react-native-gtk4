@@ -4,7 +4,7 @@ The three libraries most React Native apps add after the basics, and what
 it would take to have them on GTK4. Checked against
 react-native-gesture-handler 3.3.0, react-native-reanimated 4.7.1 (with
 react-native-worklets 0.13.0) and react-native-screens 4.29.0, in October
-2026. None of them has a Linux port yet.
+2026. None of them has a Linux port yet: they're the roadmap's Phase 6.
 
 ## react-native-screens: use its web JS now; a native port is optional
 

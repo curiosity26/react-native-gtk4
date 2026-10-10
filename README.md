@@ -154,4 +154,12 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    ([docs/packaging.md](docs/packaging.md)); prebuilt hosts and the npm
    release ([docs/releasing.md](docs/releasing.md)); ports of
    async-storage, netinfo, safe-area-context, vector-icons, svg and
-   webview ([docs/libraries.md](docs/libraries.md)). **In progress.**
+   webview ([docs/libraries.md](docs/libraries.md)); upgrading React
+   Native ([docs/upgrading.md](docs/upgrading.md)). **Done.**
+5. *(To be defined.)*
+6. Gesture handler, Reanimated and Screens: react-native-screens' web
+   variants (native-stack as on the web), then react-native-gesture-handler
+   on GTK's gesture controllers, then react-native-reanimated (and
+   react-native-worklets) on their shared C++, with the host API they need
+   (the UIManager, the runtime executor, direct prop updates). See
+   [docs/library-assessments.md](docs/library-assessments.md).
