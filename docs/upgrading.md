@@ -106,4 +106,5 @@ re-export Android's files), autolinking, and the six library ports.
   minutes for the dependencies and Hermes, plus about 6 for the host.
 - The Showcase gives SMOKE OK on Wayland and X11.
 - `npm test` passes.
-- See the branch's notes for the harness's self-tests.
+- The harness's 19 self-tests pass on Wayland and X11, built against 0.88
+  (and still against 0.87.1, with the compatibility fixes).
