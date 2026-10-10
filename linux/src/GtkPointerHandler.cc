@@ -23,11 +23,11 @@ namespace rngtk {
 
 namespace {
 
-// Events' timeStamp (React Native 0.84 on; 0.83's events have none).
+// Events' timeStamp (not in React Native 0.83's events).
 template <class Event>
 void set_time_stamp(Event &event) {
   if constexpr (requires { event.timeStamp; }) {
-    set_time_stamp(event);
+    event.timeStamp = HighResTimeStamp::now();
   }
 }
 
