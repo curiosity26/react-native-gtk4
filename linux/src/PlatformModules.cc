@@ -196,6 +196,23 @@ class VibrationModule : public NativeVibrationCxxSpec<VibrationModule> {
   void cancel(Runtime &) {}
 };
 
+// ---- DeviceEventManager -----------------------------------------------------
+
+// BackHandler.exitApp(): quits the app. (A back press no listener handles
+// doesn't come here on Linux: desktop apps don't quit on Alt+Left.)
+class DeviceEventManagerModule
+    : public NativeDeviceEventManagerCxxSpec<DeviceEventManagerModule> {
+ public:
+  explicit DeviceEventManagerModule(std::shared_ptr<CallInvoker> jsInvoker)
+      : NativeDeviceEventManagerCxxSpec(std::move(jsInvoker)) {}
+  void invokeDefaultBackPressHandler(Runtime &) {
+    g_main_context_invoke(nullptr, [](gpointer) -> gboolean {
+      if (GApplication *app = g_application_get_default()) g_application_quit(app);
+      return G_SOURCE_REMOVE;
+    }, nullptr);
+  }
+};
+
 // ---- I18nManager ------------------------------------------------------------
 
 class I18nModule : public NativeI18nManagerCxxSpec<I18nModule> {
@@ -344,6 +361,9 @@ std::shared_ptr<TurboModule> makePlatformModule(
   }
   if (name == VibrationModule::kModuleName) {
     return std::make_shared<VibrationModule>(jsInvoker);
+  }
+  if (name == DeviceEventManagerModule::kModuleName) {
+    return std::make_shared<DeviceEventManagerModule>(jsInvoker);
   }
   if (name == I18nModule::kModuleName) {
     return std::make_shared<I18nModule>(jsInvoker, state->i18n);

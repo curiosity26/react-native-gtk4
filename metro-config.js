@@ -32,8 +32,17 @@ const UPSTREAM_PREFIXES = ['react-native-upstream/', 'react-native/'];
 // modules come with autolinking, Phase 3), but which ship pure-JS
 // variants for another platform that work here. React Native's app
 // template uses react-native-safe-area-context.
+//
+// With 'web', the package's web build is used: Foo.web.tsx where it
+// exists, and the platform-less Foo.tsx instead of Foo.native.tsx (the
+// web never picks .native). react-native-screens' web components are
+// views, and @react-navigation/native-stack's web NativeStackView draws
+// the stack with @react-navigation/elements' header, so native-stack works
+// as it does on the web.
 const JS_FALLBACK_PLATFORMS = {
   'react-native-safe-area-context': 'windows',
+  'react-native-screens': 'web',
+  '@react-navigation/native-stack': 'web',
 };
 // Packages whose JS for another platform drives the native side a Linux
 // port (packages/ in this repository) adds: used when the app has the port.
@@ -112,7 +121,8 @@ function linuxReplacement(rnDir, modulePath, resolvedNormally) {
 
 /**
  * For a file in a package listed in JS_FALLBACK_PLATFORMS, its variant for
- * that platform (Foo.windows.tsx next to Foo.tsx), or null.
+ * that platform (Foo.windows.tsx next to Foo.tsx), or null. For 'web', a
+ * Foo.native.tsx gives way to Foo.web.tsx or else Foo.tsx.
  */
 function jsFallback(filePath, platforms = JS_FALLBACK_PLATFORMS) {
   const i = filePath.lastIndexOf(NM_SEGMENT);
@@ -121,11 +131,19 @@ function jsFallback(filePath, platforms = JS_FALLBACK_PLATFORMS) {
   const name = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
   const platform = platforms[name];
   if (!platform) return null;
-  const base = stripSourceExt(filePath);
-  if (base === filePath || /\.(linux|native)$/.test(base)) return null;
+  let base = stripSourceExt(filePath);
+  if (base === filePath || /\.linux$/.test(base)) return null;
+  const native = /\.native$/.test(base);
+  if (native && platform !== 'web') return null;
+  if (native) base = base.slice(0, -'.native'.length);
   for (const ext of SOURCE_EXTS) {
     const candidate = `${base}.${platform}${ext}`;
     if (isFile(candidate)) return candidate;
+  }
+  if (native) {
+    for (const ext of SOURCE_EXTS) {
+      if (isFile(base + ext)) return base + ext;
+    }
   }
   return null;
 }
@@ -207,8 +225,16 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
         : resolution;
     }
 
-    // Normal resolution failed: a react-native module that only exists as
-    // .ios.js/.android.js variants.
+    // Normal resolution failed. In a JS_FALLBACK_PLATFORMS package: a
+    // module that only exists as platform variants (Foo.ios.tsx,
+    // Foo.web.tsx).
+    if (moduleName.startsWith('.')) {
+      const modulePath = path.resolve(path.dirname(context.originModulePath), moduleName);
+      const fallback = jsFallback(`${modulePath}.js`, platforms);
+      if (fallback) return {type: 'sourceFile', filePath: fallback};
+    }
+    // A react-native module that only exists as .ios.js/.android.js
+    // variants.
     let target;
     if (moduleName.startsWith('.')) {
       const rnDir = reactNativeDirOf(context.originModulePath, knownRnDir);

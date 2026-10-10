@@ -87,7 +87,7 @@ React Native's dev Babel preset warns about each one at runtime.)
 | Override | Behaves like | Why |
 | --- | --- | --- |
 | `Utilities/Platform` | own | `OS: 'linux'`; `select()` checks `linux`, `native`, `default`; constants from the host |
-| `Utilities/BackHandler` | iOS | desktops have no hardware back button |
+| `Utilities/BackHandler` | own (Android's, like react-native-windows') | `hardwareBackPress` from Alt+Left, the Back key and the mouse's back button; an unhandled one doesn't quit ([apis.md](apis.md#backhandler)) |
 | `Components/DrawerAndroid/DrawerLayoutAndroid`, `Components/ToastAndroid/ToastAndroid` | iOS | Android-only APIs: the "unsupported" fallbacks |
 | `Components/AccessibilityInfo/legacySendAccessibilityEvent` | iOS | pre-Fabric only; the iOS one tolerates a missing module |
 | `Image/Image`, `Network/RCTNetworking`, `StyleSheet/PlatformColorValueTypes` | Android | what React Native's shared C++ core speaks |

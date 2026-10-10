@@ -614,6 +614,9 @@ add_test(NAME gallery-notifications-self-test
 add_test(NAME gallery-native-module-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryNativeModule --width 940 --height 680 --self-test)
+add_test(NAME gallery-navigation-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryNavigation --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)
