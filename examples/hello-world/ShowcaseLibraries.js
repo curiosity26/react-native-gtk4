@@ -28,6 +28,8 @@ function load(name) {
         return require('react-native-webview');
       case 'navigation':
         return require('./GalleryNavigation');
+      case 'gestures':
+        return {...require('react-native-gesture-handler'), ...require('./GalleryGestures')};
     }
   } catch (e) {
     return {error: e};
@@ -530,8 +532,43 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- Gestures: react-native-gesture-handler --------------------------------
+
+  function GesturesPage() {
+    const {Section, styles, useLog} = helpers();
+    const log = useLog();
+    const lib = load('gestures');
+    if (lib?.error || !lib?.GesturesDemo) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Gestures (react-native-gesture-handler)">
+            <Missing what="react-native-gesture-handler" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {GestureHandlerRootView, GesturesDemo, GesturesRelations} = lib;
+    return (
+      <GestureHandlerRootView style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section
+            title="Gestures (react-native-gesture-handler)"
+            hint="The library's own JS on its native side for Linux (packages/gesture-handler): recognizers ported from its web implementation, running on GTK's main thread. Tap, double tap, long press, pan, fling and hover on GestureDetectors (the hook API), the builder API; a pan over a Pressable cancels its press."
+          />
+          <GesturesDemo onLog={log} />
+          <Section
+            title="Relations, buttons, scrolling"
+            hint="Pinch and rotate together (a touchpad pinch, or two fingers on a touchscreen); a pan that waits for a double tap to fail; a manual gesture activated from JS; RectButton and Touchable (press feedback); the library's ScrollView, whose native gesture activates when it scrolls."
+          />
+          <GesturesRelations onLog={log} />
+        </ScrollView>
+      </GestureHandlerRootView>
+    );
+  }
+
   return [
     ['Navigation', NavigationPage],
+    ['Gestures', GesturesPage],
     ['SVG', SvgPage],
     ['WebView', WebViewPage],
     ['Storage', StoragePage],

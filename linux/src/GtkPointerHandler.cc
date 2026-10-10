@@ -108,6 +108,33 @@ bool GtkPointerHandler::handleEvent(GdkEvent *event) {
     case GDK_TOUCH_END: input.phase = Phase::Up; break;
     case GDK_TOUCH_CANCEL: input.phase = Phase::Cancel; break;
     case GDK_LEAVE_NOTIFY: input.phase = Phase::Leave; break;
+    case GDK_SCROLL: {
+      // GTK's scrolled windows handle real scrolling; observers (touchpad
+      // pans) see it too.
+      input.phase = Phase::Scroll;
+      input.observeOnly = true;
+      GdkScrollDirection direction = gdk_scroll_event_get_direction(event);
+      if (direction == GDK_SCROLL_SMOOTH) {
+        gdk_scroll_event_get_deltas(event, &input.dx, &input.dy);
+      } else {
+        input.dx = direction == GDK_SCROLL_LEFT ? -1 : direction == GDK_SCROLL_RIGHT ? 1 : 0;
+        input.dy = direction == GDK_SCROLL_UP ? -1 : direction == GDK_SCROLL_DOWN ? 1 : 0;
+      }
+      break;
+    }
+    case GDK_TOUCHPAD_PINCH: {
+      input.phase = Phase::Pinch;
+      switch (gdk_touchpad_event_get_gesture_phase(event)) {
+        case GDK_TOUCHPAD_GESTURE_PHASE_BEGIN: input.pinchPhase = 0; break;
+        case GDK_TOUCHPAD_GESTURE_PHASE_UPDATE: input.pinchPhase = 1; break;
+        case GDK_TOUCHPAD_GESTURE_PHASE_END: input.pinchPhase = 2; break;
+        default: input.pinchPhase = 3; break;
+      }
+      input.scale = gdk_touchpad_event_get_pinch_scale(event);
+      input.angleDelta = gdk_touchpad_event_get_pinch_angle_delta(event);
+      gdk_touchpad_event_get_deltas(event, &input.dx, &input.dy);
+      break;
+    }
     default: return false;
   }
   bool touch = type == GDK_TOUCH_BEGIN || type == GDK_TOUCH_UPDATE ||
@@ -234,10 +261,15 @@ void GtkPointerHandler::dispatch(const Input &input) {
     event.timeMs = input.timeMs;
     event.dx = input.dx;
     event.dy = input.dy;
+    event.pinchPhase = rngtk::PointerInput::PinchPhase(input.pinchPhase);
+    event.scale = input.scale;
+    event.angleDelta = input.angleDelta;
     event.root = root_;
     event.target = target.widget.get();
     if (mountingManager_.observePointer(event)) return;
   }
+  // React Native has no touchpad pinch events.
+  if (input.phase == Phase::Pinch || input.observeOnly) return;
 
   // A GtkSwitch handles its own clicks and drags, like a UISwitch: no React
   // touches or pointer presses that could start a parent's press.
@@ -326,6 +358,7 @@ void GtkPointerHandler::dispatch(const Input &input) {
       break;
     }
     case Phase::Leave:
+    case Phase::Pinch:
       break;
     case Phase::Scroll: {
       // The innermost scroll view under the pointer. Real wheel and

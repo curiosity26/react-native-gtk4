@@ -141,6 +141,11 @@ GtkWidget *GtkMountingManager::viewForNativeId(
   return nullptr;
 }
 
+std::string GtkMountingManager::componentNameForTag(Tag tag) const {
+  auto it = shadowViews_.find(tag);
+  return it == shadowViews_.end() || !it->second.componentName ? "" : it->second.componentName;
+}
+
 GtkWidget *GtkMountingManager::viewForAccessibilityLabel(
     const std::string &label) const {
   for (const auto &[tag, view] : shadowViews_) {

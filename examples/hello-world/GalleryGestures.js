@@ -1,6 +1,9 @@
 // react-native-gesture-handler on Linux (packages/gesture-handler): the
 // hook API's gestures (tap, double tap, long press, pan, fling, hover) on
-// GestureDetectors, and the builder API (Gesture.Tap(), Gesture.Pan()).
+// GestureDetectors, and the builder API (Gesture.Tap(), Gesture.Pan());
+// relations (pinch and rotation together, a pan that waits for a double
+// tap to fail), a manual gesture, the buttons (RectButton, Touchable) and
+// the library's ScrollView (in GesturesRelations, the second row).
 // The pan box holds a Pressable: a drag cancels its press (the JS
 // responder loses the touch when the pan activates), a click presses it.
 // rn-gtk-host --module GalleryGestures --self-test drives each with the
@@ -12,10 +15,18 @@ import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
+  GestureStateManager,
+  RectButton,
+  ScrollView as GHScrollView,
+  Touchable,
   useFlingGesture,
   useHoverGesture,
   useLongPressGesture,
+  useManualGesture,
   usePanGesture,
+  usePinchGesture,
+  useRotationGesture,
+  useSimultaneousGestures,
   useTapGesture,
 } from 'react-native-gesture-handler';
 
@@ -145,21 +156,143 @@ export function GesturesDemo({onLog}) {
   );
 }
 
+// Relations, buttons, the native gesture of a ScrollView, a manual gesture.
+export function GesturesRelations({onLog}) {
+  const log = msg => onLog?.(`gestures: ${msg}`);
+  const [transform, setTransform] = useState({scale: 1, rotation: 0, pinching: false, rotating: false});
+  const [box, setBox] = useState({x: 0, y: 0, doubles: 0});
+  const [manual, setManual] = useState('idle');
+  const [rect, rectPress] = useCounter();
+  const [touchables, touchablePress] = useCounter();
+  const [scrolled, setScrolled] = useState('no');
+
+  const pinch = usePinchGesture({
+    onActivate: () => setTransform(t => ({...t, pinching: true})),
+    onUpdate: e => setTransform(t => ({...t, scale: e.scale})),
+    onDeactivate: () => setTransform(t => ({...t, pinching: false})),
+  });
+  const rotation = useRotationGesture({
+    onActivate: () => setTransform(t => ({...t, rotating: true})),
+    onUpdate: e => setTransform(t => ({...t, rotation: e.rotation})),
+    onDeactivate: () => setTransform(t => ({...t, rotating: false})),
+  });
+  const pinchRotate = useSimultaneousGestures(pinch, rotation);
+
+  const doubleTap = useTapGesture({
+    numberOfTaps: 2,
+    maxDistance: 10,
+    onActivate: () => setBox(b => ({...b, doubles: b.doubles + 1})),
+  });
+  const waitingPan = usePanGesture({
+    requireToFail: doubleTap,
+    onUpdate: e => setBox(b => ({...b, x: Math.round(e.translationX), y: Math.round(e.translationY)})),
+  });
+  const tapOrPan = useSimultaneousGestures(doubleTap, waitingPan);
+
+  const manualGesture = useManualGesture({
+    onTouchesDown: e => {
+      setManual('down');
+      GestureStateManager.activate(e.handlerTag);
+    },
+    onActivate: () => setManual('active'),
+    onTouchesUp: e => GestureStateManager.deactivate(e.handlerTag),
+    onDeactivate: () => setManual('ended'),
+  });
+  const pct = n => n.toFixed(2);
+  return (
+    <View style={styles.root}>
+      <Text nativeID="gh-relations" style={styles.status}>
+        scale {pct(transform.scale)} rotation {pct(transform.rotation)}
+        {transform.pinching ? ' pinching' : ''}
+        {transform.rotating ? ' rotating' : ''} · double taps {box.doubles} · waiting pan {box.x},{box.y} · manual{' '}
+        {manual}
+      </Text>
+      <Text style={styles.status}>
+        RectButton presses {rect} · Touchable presses {touchables} · scrolled {scrolled}
+      </Text>
+      <View style={styles.row}>
+        <GestureDetector gesture={pinchRotate}>
+          <View nativeID="gh-pinch" style={styles.pinchArea}>
+            <View
+              style={[
+                styles.box,
+                {
+                  backgroundColor: '#E01B24',
+                  transform: [{scale: transform.scale}, {rotate: `${transform.rotation}rad`}],
+                },
+              ]}>
+              <Text style={styles.boxText}>Pinch & rotate</Text>
+            </View>
+          </View>
+        </GestureDetector>
+        <GestureDetector gesture={tapOrPan}>
+          <Box
+            id="gh-wait"
+            label="Pan (after double tap fails)"
+            color={box.doubles % 2 ? '#26A269' : '#1C71D8'}
+            style={{transform: [{translateX: box.x}, {translateY: box.y}]}}
+          />
+        </GestureDetector>
+        <GestureDetector gesture={manualGesture}>
+          <Box id="gh-manual" label={`Manual (${manual})`} color="#986A44" />
+        </GestureDetector>
+      </View>
+      <View style={styles.row}>
+        <RectButton
+          nativeID="gh-rect"
+          style={[styles.box, {backgroundColor: '#3D3846'}]}
+          onPress={() => {
+            rectPress();
+            log('RectButton');
+          }}>
+          <Text style={styles.boxText}>RectButton</Text>
+        </RectButton>
+        <Touchable
+          nativeID="gh-touchable"
+          style={[styles.box, {backgroundColor: '#813D9C'}]}
+          activeOpacity={0.5}
+          onPress={() => {
+            touchablePress();
+            log('Touchable');
+          }}>
+          <Text style={styles.boxText}>Touchable</Text>
+        </Touchable>
+        <GHScrollView
+          nativeID="gh-scroll"
+          style={styles.scroll}
+          onScroll={() => setScrolled(v => (v === 'no' ? 'yes' : v))}
+          onActivate={() => setScrolled('by its native gesture')}
+          scrollEventThrottle={16}>
+          {Array.from({length: 20}, (_, i) => (
+            <Text key={i} style={styles.item}>
+              Row {i + 1}
+            </Text>
+          ))}
+        </GHScrollView>
+      </View>
+    </View>
+  );
+}
+
 export default function GalleryGestures() {
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <GesturesDemo />
+      <GesturesRelations />
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, padding: 16, gap: 12},
+  root: {padding: 16, gap: 12},
   status: {fontFamily: 'monospace', fontSize: 13, color: '#6E6E73'},
   row: {flexDirection: 'row', flexWrap: 'wrap', gap: 12},
   box: {width: 120, height: 80, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 6},
   boxText: {color: '#FFFFFF', fontWeight: '600'},
-  panArea: {width: 360, height: 220, borderRadius: 12, borderWidth: 1, borderColor: '#C7C7CC', padding: 20},
+  panArea: {width: 360, height: 160, borderRadius: 12, borderWidth: 1, borderColor: '#C7C7CC', padding: 20},
   press: {backgroundColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6},
   pressText: {color: '#FFFFFF'},
+  pinchArea: {width: 200, height: 160, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#C7C7CC'},
+  scroll: {width: 160, height: 80, borderWidth: 1, borderColor: '#C7C7CC', borderRadius: 8},
+  item: {paddingVertical: 6, paddingHorizontal: 10, color: '#6E6E73'},
 });
