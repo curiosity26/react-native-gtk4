@@ -44,6 +44,22 @@ namespace rngtk {
 
 namespace {
 
+// The SourceCode module for release bundles: the bundle's URL as scriptURL.
+// (ReactCxxPlatform's SourceCodeModule takes the URL from 0.84 on, a
+// DevServerHelper in 0.83.)
+class BundleSourceCodeModule : public NativeSourceCodeCxxSpec<BundleSourceCodeModule> {
+ public:
+  BundleSourceCodeModule(std::shared_ptr<CallInvoker> jsInvoker, std::string scriptURL)
+      : NativeSourceCodeCxxSpec(std::move(jsInvoker)), scriptURL_(std::move(scriptURL)) {}
+
+  SourceCodeConstants getConstants(facebook::jsi::Runtime & /*rt*/) {
+    return SourceCodeConstants{.scriptURL = scriptURL_};
+  }
+
+ private:
+  std::string scriptURL_;
+};
+
 // A GSource whose prepare() runs each time the main loop is about to poll:
 // GLib's equivalent of a CFRunLoop "before waiting" observer, which is when
 // React Native's event beat expects RunLoopObserverManager::onRender().
@@ -494,7 +510,7 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
         // resolve to the assets/ folder next to it. (Dev mode keeps
         // ReactHost's SourceCode module, with Metro's URL.)
         if (name == SourceCodeModule::kModuleName && !options_.devMode) {
-          return std::make_shared<SourceCodeModule>(jsInvoker, bundleURL_);
+          return std::make_shared<BundleSourceCodeModule>(jsInvoker, bundleURL_);
         }
         return nullptr;
       },

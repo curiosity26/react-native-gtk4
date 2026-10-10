@@ -5,7 +5,7 @@
 #include <folly/dynamic.h>
 #include <rngtk/App.h>
 #include <gtk/gtk.h>
-#include <react/nativemodule/TurboModuleProvider.h>
+#include <rngtk/TurboModuleProviders.h>
 #include <react/renderer/core/LayoutConstraints.h>
 #include <react/renderer/core/LayoutContext.h>
 #include <react/renderer/core/ReactPrimitives.h>

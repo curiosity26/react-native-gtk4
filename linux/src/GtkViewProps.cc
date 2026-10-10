@@ -128,6 +128,17 @@ RNColorStop color_stop(const ColorStop &stop) {
 }
 
 // CSS angle for "to <corner>": perpendicular to the other diagonal.
+// A linear gradient's direction: an angle or a keyword (React Native 0.83
+// wraps that variant in a GradientDirection, as its `value`).
+template <class Direction>
+const auto &direction_value(const Direction &direction) {
+  if constexpr (requires { direction.value; }) {
+    return direction.value;
+  } else {
+    return direction;
+  }
+}
+
 float keyword_angle(GradientKeyword keyword, float w, float h) {
   float a = std::atan2(h, w) * 180 / float(M_PI);
   switch (keyword) {
@@ -158,10 +169,10 @@ void apply_gradients(RNView *view, const ViewProps &props, float w, float h) {
     RNGradient g{};
     const std::vector<ColorStop> *colorStops = nullptr;
     if (const auto *linear = std::get_if<LinearGradient>(&image)) {
-      if (const auto *angle = std::get_if<Float>(&linear->direction)) {
+      if (const auto *angle = std::get_if<Float>(&direction_value(linear->direction))) {
         g.angle = *angle;
       } else {
-        g.angle = keyword_angle(std::get<GradientKeyword>(linear->direction),
+        g.angle = keyword_angle(std::get<GradientKeyword>(direction_value(linear->direction)),
                                 w, h);
       }
       colorStops = &linear->colorStops;

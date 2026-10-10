@@ -2406,12 +2406,25 @@ void add_platform_steps() {
                scaled_before, scaled, unscaled_before, unscaled);
         return scaled > scaled_before * 1.3f && std::abs(unscaled - unscaled_before) < 1;
       }});
-  app.steps.push_back(Step{"  ...and back",
+  // React Native 0.83 doesn't relayout Text when the font scale goes back
+  // down (its SurfaceHandler dirties measurable nodes without propagating to
+  // their ancestors, and Yoga keeps a cached ancestor's layout); later
+  // versions fix that, along with adding LayoutMetrics::fontSizeMultiplier.
+  // There, only JS's fontScale is checked.
+  static constexpr bool kRelayoutsOnFontScaleDown =
+      []<class Metrics>(Metrics *) { return requires(Metrics m) { m.fontSizeMultiplier; }; }(
+          static_cast<LayoutMetrics *>(nullptr));
+  app.steps.push_back(Step{kRelayoutsOnFontScaleDown
+                               ? "  ...and back"
+                               : "  ...and back (fontScale; React Native 0.83 keeps Text's layout)",
                            [] {
                              g_object_set(gtk_settings_get_default(), "gtk-xft-dpi",
                                           dpi_before > 0 ? dpi_before : 96 * 1024, nullptr);
                            },
                            [] {
+                             if (!kRelayoutsOnFontScaleDown) {
+                               return has_text(app.root, "fontScale 1.00");
+                             }
                              return std::abs(text_height("scaled") - scaled_before) < 1;
                            }});
 }
