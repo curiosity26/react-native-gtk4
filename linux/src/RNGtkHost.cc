@@ -228,6 +228,42 @@ gboolean RNGtkHost::beforeWaiting(GSource *source, gint *timeout) {
   return FALSE;
 }
 
+// rngtk::Host for packages (Extensions.h): the host's services, main
+// thread.
+class RNGtkHost::PackageHost final : public rngtk::Host {
+ public:
+  explicit PackageHost(RNGtkHost &host) : host_(host) {}
+  void addPointerObserver(std::function<bool(const rngtk::PointerInput &)> observer) override {
+    host_.mountingManager_->addPointerObserver(std::move(observer));
+  }
+  void cancelTouches(GtkWidget *root) override {
+    if (root == host_.root_ && host_.pointerHandler_) host_.pointerHandler_->cancelTouches();
+    for (auto &[id, window] : host_.windows_) {
+      if (host_.rootFor(id) == root) {
+        if (GtkPointerHandler *handler = host_.pointerHandlerFor(id)) handler->cancelTouches();
+      }
+    }
+  }
+  GtkWidget *viewForTag(int tag) override { return host_.mountingManager_->viewForTag(tag); }
+  int tagForView(GtkWidget *view) override {
+    return view ? host_.mountingManager_->targetForView(view).tag : 0;
+  }
+  SharedEventEmitter eventEmitterForView(GtkWidget *view) override {
+    return view ? host_.mountingManager_->targetForView(view).emitter : nullptr;
+  }
+  void runAfterMounts(std::function<void()> fn) override {
+    host_.mountingManager_->afterPendingMounts(std::move(fn));
+  }
+  void emitDeviceEvent(const std::string &name, folly::dynamic payload) override {
+    if (host_.loaded_ && host_.reactHost_) {
+      host_.reactHost_->emitDeviceEvent(folly::dynamic::array(name, std::move(payload)));
+    }
+  }
+
+ private:
+  RNGtkHost &host_;
+};
+
 RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     : options_(std::move(options)), overlay_(overlay) {
   // Kept alive until the destructor disconnects from it.
@@ -336,6 +372,10 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
     turboModuleProviders.insert(turboModuleProviders.end(), package->turboModules.begin(),
                                 package->turboModules.end());
     mountingManager_->addNativeComponents(package->components);
+  }
+  packageHost_ = std::make_unique<PackageHost>(*this);
+  for (const auto &package : options_.packages) {
+    if (package && package->setUp) package->setUp(*packageHost_);
   }
   turboModuleProviders.insert(turboModuleProviders.end(), {
       [constants = collectPlatformConstants(gdk_display_get_default(),

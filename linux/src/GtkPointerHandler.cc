@@ -220,6 +220,25 @@ void GtkPointerHandler::dispatch(const Input &input) {
   int id = input.device == Device::Mouse ? 0 : input.sequence;
   bool primary = input.device == Device::Touch || input.button == 1;
 
+  // Libraries' observers (gesture recognizers) see it first.
+  if (mountingManager_.hasPointerObservers()) {
+    rngtk::PointerInput event;
+    event.phase = rngtk::PointerInput::Phase(int(input.phase));
+    event.device = input.device == Device::Touch ? rngtk::PointerInput::Device::Touch
+                                                 : rngtk::PointerInput::Device::Mouse;
+    event.pointerId = input.device == Device::Touch ? input.sequence + 1 : 0;
+    event.x = input.x;
+    event.y = input.y;
+    event.button = input.button;
+    event.modifiers = input.modifiers;
+    event.timeMs = input.timeMs;
+    event.dx = input.dx;
+    event.dy = input.dy;
+    event.root = root_;
+    event.target = target.widget.get();
+    if (mountingManager_.observePointer(event)) return;
+  }
+
   // A GtkSwitch handles its own clicks and drags, like a UISwitch: no React
   // touches or pointer presses that could start a parent's press.
   if (target.widget && GTK_IS_SWITCH(target.widget.get()) &&

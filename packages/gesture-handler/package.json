@@ -1,0 +1,23 @@
+{
+  "name": "@curiosity26/react-native-gtk4-gesture-handler",
+  "version": "0.1.0",
+  "description": "Linux (GTK4) native side of react-native-gesture-handler, for @curiosity26/react-native-gtk4",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/curiosity26/react-native-gtk4.git",
+    "directory": "packages/gesture-handler"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "linux/",
+    "react-native.config.js",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@curiosity26/react-native-gtk4": ">=0.1.0",
+    "react-native-gesture-handler": ">=3.0.0"
+  }
+}

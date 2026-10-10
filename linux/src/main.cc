@@ -75,6 +75,7 @@ using namespace facebook::react;
 
 // template-library/linux/src/ExamplePackage.cc
 std::shared_ptr<const rngtk::Package> example_package();
+std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package();
 #ifdef RNGTK_HARNESS_SCREENS
 std::shared_ptr<const rngtk::Package> rngtk_screens_package();
 #endif
@@ -4371,6 +4372,109 @@ void add_navigation_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryGestures checks (react-native-gesture-handler, packages/gesture-handler)
+
+bool is_gestures() { return opts.module == "GalleryGestures"; }
+
+// A press, moves of (dx, dy) in `n` steps `ms` apart, and (optionally) the
+// release, with the mouse, on the view `id`.
+void gh_drag(const char *id, double fx, double fy, double dx, double dy, int n, int ms, bool release = true) {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  GtkWidget *v = by_id(id);
+  if (!v) return;
+  graphene_rect_t b = bounds_in_root(v);
+  graphene_point_t p{float(b.origin.x + b.size.width * fx), float(b.origin.y + b.size.height * fy)};
+  mouse_ms += 1000;
+  mouse(Phase::Down, p);
+  for (int i = 1; i <= n; i++) {
+    mouse_ms += ms;
+    mouse(Phase::Move, graphene_point_t{float(p.x + dx * i / n), float(p.y + dy * i / n)});
+  }
+  if (release) {
+    mouse_ms += ms;
+    mouse(Phase::Up, graphene_point_t{float(p.x + dx), float(p.y + dy)});
+  }
+}
+
+bool gh_status(const std::string &needle) { return shown_text(app.root, needle, false) != nullptr; }
+
+void add_gestures_steps() {
+  using Phase = rngtk::GtkPointerHandler::Phase;
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{"a tap (useTapGesture on a GestureDetector)",
+                           [] { clicks(center_of(by_id("gh-tap")), 1); },
+                           [] { return gh_status("taps 1 ·"); }});
+  app.steps.push_back(Step{"a double tap (numberOfTaps: 2)",
+                           [] { clicks(center_of(by_id("gh-double")), 2); },
+                           [] { return gh_status("double taps 1 ·"); }});
+  app.steps.push_back(after_frames("  ...a single click isn't one", 40, [] {
+    static bool clicked = false;
+    if (!clicked) {
+      clicked = true;
+      clicks(center_of(by_id("gh-double")), 1);
+    }
+    return gh_status("double taps 1 ·");
+  }));
+  app.steps.push_back(Step{"a long press (minDuration 300 ms)",
+                           [] {
+                             mouse_ms += 1000;
+                             mouse(Phase::Down, center_of(by_id("gh-long")));
+                           },
+                           [] { return gh_status("long presses 1 ·"); }});
+  app.steps.push_back(Step{"  ...released", [] { mouse(Phase::Up, center_of(by_id("gh-long"))); },
+                           [] { return true; }});
+  // The pan box holds a Pressable: pressing on it and dragging pans, and
+  // the press is cancelled.
+  static float pan_x0 = 0;
+  // Translation counts from where the pan activated (past the 15 px touch
+  // slop: the second move, at 20,10), as on Android and the web.
+  app.steps.push_back(Step{"a pan (usePanGesture) moves the box, by translationX/Y",
+                           [] {
+                             pan_x0 = bounds_in_root(by_id("gh-pan")).origin.x;
+                             gh_drag("gh-press", 0.5, 0.5, 60, 30, 6, 16, false);
+                           },
+                           [] {
+                             return gh_status("pan 40,20 active") &&
+                                    std::abs(bounds_in_root(by_id("gh-pan")).origin.x - pan_x0 - 40) < 1;
+                           }});
+  app.steps.push_back(Step{"  ...released: it ends, and the Pressable under it wasn't pressed",
+                           [] {
+                             graphene_point_t c = center_of(by_id("gh-press"));
+                             mouse_ms += 16;
+                             mouse(Phase::Up, c);
+                           },
+                           [] { return gh_status("pan 40,20 ended") && gh_status("presses 0 ·"); }});
+  app.steps.push_back(Step{"a click on that Pressable presses it (the pan fails)",
+                           [] { clicks(center_of(by_id("gh-press")), 1); },
+                           [] { return gh_status("presses 1 ·") && gh_status("ended"); }});
+  app.steps.push_back(Step{"a fling to the right (useFlingGesture)",
+                           [] { gh_drag("gh-fling", 0.2, 0.5, 90, 0, 6, 8); },
+                           [] { return gh_status("flings 1 ·"); }});
+  app.steps.push_back(Step{"  ...a slow drag isn't one", [] { gh_drag("gh-fling", 0.2, 0.5, 60, 0, 6, 120); },
+                           [] { return gh_status("flings 1 ·"); }});
+  app.steps.push_back(Step{"hover (useHoverGesture): the mouse over it",
+                           [] {
+                             mouse_ms += 50;
+                             mouse(Phase::Move, center_of(by_id("gh-hover")));
+                           },
+                           [] { return gh_status("hover in"); }});
+  app.steps.push_back(Step{"  ...and away", [] {
+                             graphene_rect_t b = bounds_in_root(by_id("gh-hover"));
+                             mouse_ms += 50;
+                             mouse(Phase::Move, graphene_point_t{b.origin.x + b.size.width + 40, b.origin.y + 10});
+                           },
+                           [] { return gh_status("hover out"); }});
+  app.steps.push_back(Step{"the builder API: Gesture.Tap() (device events)",
+                           [] { clicks(center_of(by_id("gh-legacy-tap")), 1); },
+                           [] { return gh_status("legacy taps 1 ·"); }});
+  app.steps.push_back(Step{"  ...Gesture.Pan()", [] { gh_drag("gh-legacy-pan", 0.5, 0.5, 40, -20, 4, 16); },
+                           [] { return gh_status("legacy pan 20,-10"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -4469,6 +4573,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_gestures() && app.steps.empty()) {
+    add_gestures_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_navigation() && app.steps.empty()) {
     add_navigation_steps();
     enter(Phase::Steps);
@@ -4539,7 +4646,7 @@ void check_app(bool first) {
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
-               is_notifications() || is_native_module() || is_navigation()) {
+               is_notifications() || is_native_module() || is_navigation() || is_gestures()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -4767,7 +4874,8 @@ void activate(GtkApplication *gtk_app, gpointer) {
   };
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
-  host_options.packages = {example_package(), animated_probe::package()};
+  host_options.packages = {example_package(), animated_probe::package(),
+                           rngtk_gesture_handler_package()};
 #ifdef RNGTK_HARNESS_SCREENS
   host_options.packages.push_back(rngtk_screens_package());
 #endif
