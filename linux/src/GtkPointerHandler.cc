@@ -244,6 +244,8 @@ void GtkPointerHandler::dispatch(const Input &input) {
         auxButton_ = input.button;
       }
       dispatchPointer("pointerDown", target, input);
+      // GDK's button 8 is the mouse's back button.
+      if (input.device == Device::Mouse && input.button == 8) mountingManager_.requestBack();
       if (primary) {
         touches_[id] = ActiveTouch{target, input.x, input.y, input.timeMs};
         dispatchTouch("touchStart", id, input);

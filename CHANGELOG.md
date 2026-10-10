@@ -64,3 +64,11 @@ out-of-tree platform like react-native-windows and react-native-macos.
   ports, with container components in the library API
   (`NativeComponent::insertChild`/`removeChild`).
 - The app's command line takes `--initial-props JSON`.
+
+### Gestures, animations and navigation (Phase 6)
+
+- React Navigation's native-stack on react-native-screens' web components
+  (the Metro config picks them on Linux), with bottom tabs, modals and
+  header options.
+- `BackHandler`: Alt+Left, the Back key and the mouse's back button send
+  `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.

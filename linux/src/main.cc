@@ -4011,6 +4011,145 @@ void add_native_module_steps() {
       }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryNavigation checks (React Navigation's native-stack and bottom tabs
+// on react-native-screens)
+
+bool is_navigation() { return opts.module == "GalleryNavigation"; }
+
+// A Text showing `text` (exactly, or containing it), inside views that are
+// all visible: the stack keeps the screens below the top one mounted, with
+// display: none.
+GtkWidget *shown_text(GtkWidget *widget, const std::string &text, bool exact = true) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c;
+       c = gtk_widget_get_next_sibling(c)) {
+    if (!gtk_widget_get_visible(c)) continue;
+    if (RN_IS_TEXT(c)) {
+      std::string t = rn_text_get_text(RN_TEXT(c));
+      if (exact ? t == text : t.find(text) != std::string::npos) return c;
+    }
+    if (GtkWidget *found = shown_text(c, text, exact)) return found;
+  }
+  return nullptr;
+}
+
+bool shows(const std::string &text) { return shown_text(app.root, text) != nullptr; }
+
+bool stack_is(const std::string &stack) { return shows("Stack: " + stack); }
+
+void click_label(const char *label) {
+  GtkWidget *v = app.host->mountingManager().viewForAccessibilityLabel(label);
+  if (!v) return;
+  graphene_point_t c = center_of(v);
+  send(rngtk::GtkPointerHandler::Phase::Down, c);
+  send(rngtk::GtkPointerHandler::Phase::Up, c);
+}
+
+constexpr guint kLeft = 113;
+
+// Feed's red title is visible: shown, and not covered.
+bool feed_drawn() {
+  GtkWidget *title = shown_text(app.root, "Feed tab");
+  if (!title) return false;
+  GdkTexture *tex = rngtk::render_widget(app.root);
+  if (!tex) return true;
+  bool red = any_pixel(tex, bounds_in_root(title), [](rngtk::Rgba8 p) {
+    return p.r > 200 && p.g < 120 && p.b < 120;
+  });
+  pixels.tex = nullptr;
+  g_object_unref(tex);
+  return red;
+}
+
+void add_navigation_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  app.steps.push_back(Step{
+      "native-stack: the first screen, with its header title and button",
+      [] {},
+      [] { return shows("Home screen") && shows("Navigation") && by_id("nav-header-right") &&
+                  stack_is("Home"); }});
+  app.steps.push_back(Step{"  ...the header button works", [] { click("nav-header-right"); },
+                           [] { return shown_text(app.root, "header button", false); }});
+  app.steps.push_back(Step{
+      "push: the new screen shows (the one below hides), with its title and header color",
+      [] { click("nav-push"); },
+      [] {
+        GtkWidget *title = shown_text(app.root, "Details 1");
+        if (!title || shows("Home screen") || !shows("Details screen #1") ||
+            !stack_is("Home > Details 1")) {
+          return false;
+        }
+        GdkTexture *tex = rngtk::render_widget(app.root);
+        if (!tex) return false;
+        graphene_rect_t b = bounds_in_root(title);
+        auto p = px(tex, b.origin.x + b.size.width + 24, b.origin.y + 2);
+        pixels.tex = nullptr;
+        g_object_unref(tex);
+        return near_color(p, 0x35, 0x84, 0xE4);
+      }});
+  app.steps.push_back(Step{"  ...the screens' focus events", [] {},
+                           [] { return shown_text(app.root, "blur Home", false) &&
+                                       shown_text(app.root, "focus Details 1", false); }});
+  app.steps.push_back(Step{"push another (navigation.push)", [] { click("nav-push-more"); },
+                           [] { return shows("Details screen #2") && !shows("Details screen #1") &&
+                                       stack_is("Home > Details 1 > Details 2"); }});
+  app.steps.push_back(Step{"the header's back button pops", [] { click_label("Go back"); },
+                           [] { return shows("Details screen #1") && !shows("Details screen #2") &&
+                                       stack_is("Home > Details 1"); }});
+  app.steps.push_back(Step{
+      "Alt+Left pops (BackHandler's hardwareBackPress)",
+      [] { check(key(GDK_KEY_Left, kLeft, GDK_ALT_MASK), "  Alt+Left handled"); },
+      [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"  ...and does nothing on the first screen",
+                           [] { key(GDK_KEY_Left, kLeft, GDK_ALT_MASK); },
+                           [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"push, then the mouse's back button pops",
+                           [] { click("nav-push"); },
+                           [] { return shows("Details screen #1"); }});
+  app.steps.push_back(Step{"  ...(button 8)",
+                           [] {
+                             graphene_point_t c = center_of(by_id("nav-push-more"));
+                             mouse(rngtk::GtkPointerHandler::Phase::Down, c, 8);
+                             mouse(rngtk::GtkPointerHandler::Phase::Up, c, 8);
+                           },
+                           [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"pop to top", [] { click("nav-push"); },
+                           [] { return shows("Details screen #1"); }});
+  app.steps.push_back(Step{"  ...", [] { click("nav-push-more"); },
+                           [] { return shows("Details screen #2"); }});
+  app.steps.push_back(Step{"  ...popToTop()", [] { click("nav-pop-top"); },
+                           [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"a modal screen (presentation: 'modal')", [] { click("nav-modal"); },
+                           [] { return shows("Modal screen") && stack_is("Home > Modal"); }});
+  app.steps.push_back(Step{"  ...closes", [] { click("nav-close"); },
+                           [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"a screen without a header (headerShown: false)", [] { click("nav-bare"); },
+                           [] { return shows("Screen without a header") && !shows("Navigation") &&
+                                       stack_is("Home > Bare"); }});
+  app.steps.push_back(Step{"  ...back", [] { click("nav-bare-back"); },
+                           [] { return shows("Home screen"); }});
+  app.steps.push_back(Step{"bottom tabs inside the stack", [] { click("nav-tabs"); },
+                           [] { return feed_drawn() && stack_is("Home > Tabs / Feed"); }});
+  // Without native screens the inactive tab stays mounted under the
+  // active one (zIndex -1), as on the web: Feed's red title is covered.
+  app.steps.push_back(Step{"  ...switching tabs", [] { click_label("Settings tab button"); },
+                           [] { return shows("Settings tab") && !feed_drawn() &&
+                                       stack_is("Home > Tabs / Settings") &&
+                                       shown_text(app.root, "blur Feed", false) &&
+                                       shown_text(app.root, "focus Settings", false); }});
+  // Tabs' backBehavior 'firstRoute': back goes to the first tab, then
+  // leaves the tabs.
+  app.steps.push_back(Step{"  ...Alt+Left goes back to the first tab",
+                           [] { key(GDK_KEY_Left, kLeft, GDK_ALT_MASK); },
+                           [] { return feed_drawn() && stack_is("Home > Tabs / Feed"); }});
+  app.steps.push_back(Step{"  ...then leaves the tabs",
+                           [] { key(GDK_KEY_Left, kLeft, GDK_ALT_MASK); },
+                           [] { return shows("Home screen") && stack_is("Home"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -4109,6 +4248,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_navigation() && app.steps.empty()) {
+    add_navigation_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_native_module() && app.steps.empty()) {
     add_native_module_steps();
     enter(Phase::Steps);
@@ -4176,7 +4318,7 @@ void check_app(bool first) {
                is_mouse() || is_accessibility() || is_platform() || is_modal() ||
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
-               is_notifications() || is_native_module()) {
+               is_notifications() || is_native_module() || is_navigation()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);

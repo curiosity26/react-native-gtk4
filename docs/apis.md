@@ -136,6 +136,16 @@ The host's `LinkingManager` module (iOS's shape; `linux/src/PlatformModules.cc`)
 `change` events follow, and Android's `focus` / `blur` events fire when
 the window gains or loses activation. `memoryWarning` never fires.
 
+## BackHandler
+
+As on react-native-windows, the user can go back: Alt+Left, the Back key
+(`XF86Back`) and the mouse's back button send `hardwareBackPress`, and
+`BackHandler`'s listeners run newest first until one returns `true`.
+React Navigation listens, so they pop its stacks. A key the focused view
+handles (`keyDownEvents`) doesn't go back. Unhandled, nothing happens: a
+desktop app doesn't quit on Alt+Left. `BackHandler.exitApp()` quits the
+app.
+
 ## Clipboard
 
 `Clipboard.getString()` / `setString()` (React Native's deprecated core

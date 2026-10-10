@@ -123,6 +123,19 @@ class GtkMountingManager
   // The mounted view with this nativeID, for tests.
   GtkWidget *viewForNativeId(const std::string &nativeId) const;
 
+  // The mounted view with this accessibilityLabel, for tests.
+  GtkWidget *viewForAccessibilityLabel(const std::string &label) const;
+
+  // Back navigation the user asked for (Alt+Left, the Back key, the
+  // mouse's back button): BackHandler's hardwareBackPress, as on
+  // react-native-windows.
+  void setOnBackRequested(std::function<void()> callback) {
+    onBackRequested_ = std::move(callback);
+  }
+  void requestBack() {
+    if (onBackRequested_) onBackRequested_();
+  }
+
   // Called when the user scrolls a scroll view: like a native scroller
   // taking over a gesture, in-flight touches are cancelled.
   void setOnUserScroll(std::function<void()> callback) {
@@ -285,6 +298,7 @@ class GtkMountingManager
   std::shared_ptr<const facebook::react::ContextContainer> contextContainer_;
   std::unordered_map<facebook::react::Tag, ScrollTracking> scrolls_;
   std::function<void()> onUserScroll_;
+  std::function<void()> onBackRequested_;
   std::function<void()> onUIManagerChanged_;
   bool onMainThread() const {
     return std::this_thread::get_id() == mainThread_;

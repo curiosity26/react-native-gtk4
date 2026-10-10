@@ -9,6 +9,9 @@
 //   app (GApplication's open). openSettings rejects: no app settings.
 // - Clipboard: GDK's clipboard.
 // - Vibration: accepted, does nothing (desktops don't vibrate).
+// - DeviceEventManager: BackHandler.exitApp() quits the app. The host
+//   sends hardwareBackPress for Alt+Left, the Back key and the mouse's
+//   back button.
 // - I18nManager: right-to-left from the locale (GTK's default
 //   direction), with allowRTL / forceRTL / swapLeftAndRightInRTL kept in
 //   the user's config, applied when the app (re)starts, as on iOS.

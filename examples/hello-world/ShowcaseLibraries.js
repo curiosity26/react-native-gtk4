@@ -26,6 +26,8 @@ function load(name) {
         return require('react-native-svg');
       case 'webview':
         return require('react-native-webview');
+      case 'navigation':
+        return require('./GalleryNavigation');
     }
   } catch (e) {
     return {error: e};
@@ -501,7 +503,35 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- Navigation: react-native-screens + React Navigation ------------------
+
+  function NavigationPage() {
+    const {Section, styles, useLog} = helpers();
+    const log = useLog();
+    const lib = load('navigation');
+    if (lib?.error || !lib?.NavigationDemo) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Navigation (react-native-screens)">
+            <Missing what="React Navigation" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {NavigationDemo} = lib;
+    return (
+      <View style={[styles.page, {flex: 1}]}>
+        <Section
+          title="Navigation (@react-navigation/native-stack, bottom-tabs; react-native-screens)"
+          hint="A native stack with header options (title, colors, a header button, no header), a modal and tabs. On Linux react-native-screens' and native-stack's web components run (the Metro config picks them): no transitions yet. Back: the header's arrow, Alt+Left or the mouse's back button (BackHandler)."
+        />
+        <NavigationDemo onLog={log} style={{padding: 0}} />
+      </View>
+    );
+  }
+
   return [
+    ['Navigation', NavigationPage],
     ['SVG', SvgPage],
     ['WebView', WebViewPage],
     ['Storage', StoragePage],

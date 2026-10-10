@@ -196,14 +196,25 @@ void GtkKeyboardHandler::activate(const Target &target) {
 bool GtkKeyboardHandler::keyPressed(guint keyval, guint keycode,
                                     GdkModifierType state) {
   bool repeat = !held_.insert(keycode).second;
+  GdkModifierType mods = GdkModifierType(state & gtk_accelerator_get_default_mod_mask());
+  // Alt+Left and the Back key go back (BackHandler), unless the focused
+  // view handles them; with nothing focused too.
+  bool back = !repeat && ((keyval == GDK_KEY_Left && mods == GDK_ALT_MASK) ||
+                          keyval == GDK_KEY_Back);
   Target target = focusTarget();
-  if (target.tag == 0) return false;
+  if (target.tag == 0) {
+    if (back) mountingManager_.requestBack();
+    return back;
+  }
   std::string key = w3cKey(keyval), code = w3cCode(keycode);
   dispatchKey("keyDown", target, key, code, state, true, repeat);
   if (isHandled(target, key, code, state, true)) return true;
+  if (back) {
+    mountingManager_.requestBack();
+    return true;
+  }
   // The Menu key and Shift+F10 open the focused view's context menu (or
   // its nearest ancestor's), pointing at it.
-  GdkModifierType mods = GdkModifierType(state & gtk_accelerator_get_default_mod_mask());
   if (!repeat && ((keyval == GDK_KEY_Menu && mods == 0) ||
                   (keyval == GDK_KEY_F10 && mods == GDK_SHIFT_MASK))) {
     if (mountingManager_.showContextMenu(root_, target.widget, -1, -1)) return true;
