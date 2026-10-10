@@ -60,7 +60,11 @@ template=$(npm view @react-native-community/template versions --json | node -e '
   if (!m.length) process.exit(1);
   console.log(m[m.length - 1]);
 ' "$new") || { echo "no @react-native-community/template for $new" >&2; exit 1; }
-npm view "@react-native-community/template@$template" --json >"$work/template.json"
+# Its app's package.json is template/package.json in the tarball.
+rm -rf "$work/template" && mkdir -p "$work/template"
+tgz=$(cd "$work" && npm pack --silent "@react-native-community/template@$template")
+tar -xzf "$work/$tgz" -C "$work/template" --strip-components=1 && rm -f "$work/$tgz"
+cp "$work/template/template/package.json" "$work/template.json"
 read -r hermes react cli metro < <(node -e '
   const rn = require(process.argv[1]), t = require(process.argv[2]);
   const deps = {...t.dependencies, ...t.devDependencies};
