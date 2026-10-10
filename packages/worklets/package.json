@@ -1,0 +1,23 @@
+{
+  "name": "@curiosity26/react-native-gtk4-worklets",
+  "version": "0.1.0",
+  "description": "Linux (GTK4) native side of react-native-worklets, for @curiosity26/react-native-gtk4",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/curiosity26/react-native-gtk4.git",
+    "directory": "packages/worklets"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "linux/",
+    "react-native.config.js",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@curiosity26/react-native-gtk4": ">=0.1.0",
+    "react-native-worklets": "0.13.x"
+  }
+}

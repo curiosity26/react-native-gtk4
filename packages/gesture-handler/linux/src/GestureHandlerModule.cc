@@ -683,8 +683,29 @@ class Module final : public rngtk::CxxModule<Module> {
     post([tag = int(tag)] { rngtk_gh::dropGestureHandler(tag); });
   }
   void flushOperations(jsi::Runtime &) {}
-  // No UI runtime (react-native-worklets) yet.
-  bool installUIRuntimeBindings(jsi::Runtime &) { return false; }
+  // react-native-worklets' UI runtime (the host's "worklets.uiRuntime"
+  // service): _setGestureStateSync there, for GestureStateManager in
+  // worklets. The UI runtime runs on the main thread, as the handlers do.
+  bool installUIRuntimeBindings(jsi::Runtime &) {
+    using RunOnUI = std::function<void(std::function<void(jsi::Runtime &)>)>;
+    auto runOnUI = std::static_pointer_cast<RunOnUI>(host->service("worklets.uiRuntime"));
+    if (!runOnUI) return false;
+    (*runOnUI)([](jsi::Runtime &ui) {
+      ui.global().setProperty(
+          ui, "_setGestureStateSync",
+          jsi::Function::createFromHostFunction(
+              ui, jsi::PropNameID::forAscii(ui, "_setGestureStateSync"), 2,
+              [](jsi::Runtime &, const jsi::Value &, const jsi::Value *args, size_t count) -> jsi::Value {
+                if (count == 2 && args[0].isNumber() && args[1].isNumber()) {
+                  if (GestureHandler *h = handlerFor(int(args[0].asNumber()))) {
+                    h->setStateFromJS(State(int(args[1].asNumber())));
+                  }
+                }
+                return jsi::Value::undefined();
+              }));
+    });
+    return true;
+  }
 
  private:
   static void post(std::function<void()> fn) {

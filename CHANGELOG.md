@@ -80,12 +80,16 @@ out-of-tree platform like react-native-windows and react-native-macos.
   pointer input (Tap, LongPress, Pan, Fling, Hover, Manual, Pinch and
   Rotation with touchpad pinches, Native), `RNGestureHandlerButton`
   (RectButton, Touchable and its feedback) and the library's ScrollView.
+- react-native-worklets port (`@curiosity26/react-native-gtk4-worklets`):
+  the library's shared C++ with its UI runtime on GTK's main thread;
+  gesture-handler's bindings on it.
 - Library API: `Package::setUp` gets an `rngtk::Host`: pointer observers
   (with touchpad pinches and scrolling), cancelling the JS responder's
   touches, views, components and event emitters by tag, `setNativeProps`
   (native Animated's path), scroll observers, device events,
   `runAfterMounts`; and for libraries that drive Fabric (Reanimated): the
   main and JS threads, the RuntimeScheduler, Fabric's Scheduler (commit
-  hooks, event listeners), GdkFrameClock frames, props by tag, Hermes.
+  hooks, event listeners), GdkFrameClock frames, props by tag, Hermes;
+  services packages share (worklets' UI runtime).
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.

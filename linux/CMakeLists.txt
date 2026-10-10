@@ -545,13 +545,22 @@ target_sources(rn-gtk-host PRIVATE
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExampleView.cc
   ${RNGTK_TEMPLATE_LIBRARY}/src/ExamplePackage.cc)
 target_include_directories(rn-gtk-host PRIVATE ${RNGTK_TEMPLATE_LIBRARY}/src)
-# The react-native-gesture-handler port (packages/gesture-handler), for
-# GalleryGestures.
-target_sources(rn-gtk-host PRIVATE
-  ../packages/gesture-handler/linux/src/GestureHandler.cc
-  ../packages/gesture-handler/linux/src/Handlers.cc
-  ../packages/gesture-handler/linux/src/Orchestrator.cc
-  ../packages/gesture-handler/linux/src/GestureHandlerModule.cc)
+# The library ports the Showcase's bundle needs, built through their own
+# CMakeLists as an app's autolinking builds them, against an in-tree
+# ReactNativeGtk::sdk (the host's include directories and definitions).
+add_library(rngtk_repo_sdk INTERFACE)
+target_include_directories(rngtk_repo_sdk INTERFACE
+  $<TARGET_PROPERTY:rngtk_host_objs,INCLUDE_DIRECTORIES>)
+target_compile_definitions(rngtk_repo_sdk INTERFACE
+  $<TARGET_PROPERTY:rngtk_host_objs,COMPILE_DEFINITIONS>)
+target_compile_options(rngtk_repo_sdk INTERFACE
+  $<TARGET_PROPERTY:rngtk_host_objs,COMPILE_OPTIONS> -Wno-deprecated-declarations)
+add_library(ReactNativeGtk::sdk ALIAS rngtk_repo_sdk)
+set(RNGTK_WORKLETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-worklets)
+foreach(port gesture-handler worklets)
+  add_subdirectory(../packages/${port}/linux packages/${port})
+endforeach()
+target_link_libraries(rn-gtk-host PRIVATE rngtk_gesture_handler rngtk_worklets)
 # The react-native-screens port (packages/screens), for GalleryNavigation:
 # the Showcase's bundle uses its native components. Needs libadwaita.
 pkg_check_modules(RNGTK_HARNESS_ADW QUIET IMPORTED_TARGET libadwaita-1>=1.4)
@@ -646,6 +655,9 @@ add_test(NAME gallery-gestures-self-test
 add_test(NAME gallery-host-sdk-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryHostSdk --width 940 --height 680 --self-test)
+add_test(NAME gallery-worklets-self-test
+         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                 --module GalleryWorklets --width 940 --height 680 --self-test)
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)
