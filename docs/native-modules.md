@@ -112,6 +112,7 @@ quits):
 | `runOnScheduler(fn(scheduler))` | the JS instance's Fabric `Scheduler`: `getUIManager()` (commit and mount hooks, shadow trees) and `addEventListener` (every event before JS sees it). For libraries that drive Fabric themselves, as Reanimated does |
 | `requestFrame(fn(ms))`, `frameTime()` | a callback at the next frame of the main window's `GdkFrameClock` (requestAnimationFrame), and the current frame's time |
 | `setNativePropsForTag(tag, props)` | `setNativeProps` by React tag |
+| `provideService(name, ptr)`, `service(name)` | what packages share without linking each other: packages/worklets provides `"worklets.uiRuntime"`, which runs a job on its UI runtime (gesture-handler installs its bindings there) |
 
 `setNativeProps` values hold until a commit updates the view (its props or
 its layout) and applies the committed props: a library animating that way

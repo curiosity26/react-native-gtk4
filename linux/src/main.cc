@@ -80,6 +80,7 @@ using namespace facebook::react;
 // template-library/linux/src/ExamplePackage.cc
 std::shared_ptr<const rngtk::Package> example_package();
 std::shared_ptr<const rngtk::Package> rngtk_gesture_handler_package();
+std::shared_ptr<const rngtk::Package> rngtk_worklets_package();
 #ifdef RNGTK_HARNESS_SCREENS
 std::shared_ptr<const rngtk::Package> rngtk_screens_package();
 #endif
@@ -4775,6 +4776,34 @@ void add_host_sdk_steps() {
                            }});
 }
 
+// ---------------------------------------------------------------------------
+// GalleryWorklets checks (react-native-worklets, packages/worklets)
+
+bool is_worklets() { return opts.module == "GalleryWorklets"; }
+
+void add_worklets_steps() {
+  app.host->pointerHandler()->setRealInputEnabled(false);
+  auto says = [](std::string text) { return has_text(app.root, text); };
+  app.steps.push_back(Step{"scheduleOnUI: a worklet on the UI runtime, which calls back to JS (scheduleOnRN)",
+                           [] { click("wk-schedule"); },
+                           [says] { return says("on UI yes, 6 * 7 = 42"); }});
+  app.steps.push_back(Step{"runOnUISync: a worklet's result back, synchronously",
+                           [] { click("wk-sync"); },
+                           [says] { return says("sync 5 (on UI yes)"); }});
+  app.steps.push_back(Step{"a synchronizable written on the UI runtime, read on JS",
+                           [] { click("wk-synchronizable"); },
+                           [says] { return says("synchronizable 42"); }});
+  app.steps.push_back(Step{"requestAnimationFrame on the UI runtime (the GdkFrameClock)",
+                           [] { click("wk-frames"); },
+                           [says] { return says("UI frames 10 over time"); }});
+  app.steps.push_back(Step{"gesture-handler's bindings on the UI runtime (_setGestureStateSync)",
+                           [] { click("wk-gh"); },
+                           [says] { return says("_setGestureStateSync function"); }});
+  app.steps.push_back(Step{"no JS errors", [] {}, [] {
+                             return check(app.host->jsErrorCount() == 0, "  no JS errors");
+                           }});
+}
+
 gboolean on_timeout(gpointer);
 
 void restart_timeout() {
@@ -4873,6 +4902,9 @@ void next_check(Phase done) {
   } else if (done == Phase::Initial && is_accessibility() && app.steps.empty()) {
     add_accessibility_steps();
     enter(Phase::Steps);
+  } else if (done == Phase::Initial && is_worklets() && app.steps.empty()) {
+    add_worklets_steps();
+    enter(Phase::Steps);
   } else if (done == Phase::Initial && is_host_sdk() && app.steps.empty()) {
     add_host_sdk_steps();
     enter(Phase::Steps);
@@ -4950,7 +4982,7 @@ void check_app(bool first) {
                is_dialogs() || is_menus() || is_windows() || is_titlebar() ||
                is_dragdrop() ||
                is_notifications() || is_native_module() || is_navigation() || is_gestures() ||
-               is_host_sdk()) {
+               is_host_sdk() || is_worklets()) {
       check(app.host->jsErrorCount() == 0, "no JS errors");
     } else {
       verify_hello_world(tex);
@@ -5179,7 +5211,7 @@ void activate(GtkApplication *gtk_app, gpointer) {
   // The library template's package (template-library/linux), as an app's
   // autolinked libraries are.
   host_options.packages = {example_package(), animated_probe::package(), sdk_probe::package(),
-                           rngtk_gesture_handler_package()};
+                           rngtk_gesture_handler_package(), rngtk_worklets_package()};
 #ifdef RNGTK_HARNESS_SCREENS
   host_options.packages.push_back(rngtk_screens_package());
 #endif

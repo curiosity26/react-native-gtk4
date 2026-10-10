@@ -158,6 +158,14 @@ class Host {
   virtual double frameTime() = 0;
   // setNativeProps for a view by React tag.
   virtual void setNativePropsForTag(int tag, folly::dynamic props) = 0;
+
+  // Services packages share without linking each other, by name (any
+  // thread): react-native-worklets provides "worklets.uiRuntime", a
+  // std::function<void(std::function<void(facebook::jsi::Runtime &)>)>
+  // that runs a job on its UI runtime on the main thread (gesture-handler
+  // and Reanimated use it). Null if no package provides it.
+  virtual void provideService(const std::string &name, std::shared_ptr<void> service) = 0;
+  virtual std::shared_ptr<void> service(const std::string &name) = 0;
 };
 
 // What a library adds: TurboModules and native components, and code that
