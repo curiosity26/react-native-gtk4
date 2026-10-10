@@ -108,6 +108,17 @@ quits):
 | `viewForTag(tag)`, `tagForView(widget)`, `eventEmitterForView(widget)` | mounted views by React tag, and a view's event emitter (`emitter->dispatchEvent("onMyEvent", payload)` for a prop `onMyEvent`) |
 | `emitDeviceEvent(name, payload)` | `RCTDeviceEventEmitter` events |
 | `runAfterMounts(fn)` | `fn` on the main thread after the mount transactions committed so far (a TurboModule naming a view finds it mounted); any thread |
+| `isMainThread()`, `isJSThread()`, `runOnMainThread(fn)`, `runOnJSThread(fn(runtime))` | the GTK main thread and the JS thread (React Native's RuntimeScheduler); any thread |
+| `runOnScheduler(fn(scheduler))` | the JS instance's Fabric `Scheduler`: `getUIManager()` (commit and mount hooks, shadow trees) and `addEventListener` (every event before JS sees it). For libraries that drive Fabric themselves, as Reanimated does |
+| `requestFrame(fn(ms))`, `frameTime()` | a callback at the next frame of the main window's `GdkFrameClock` (requestAnimationFrame), and the current frame's time |
+| `setNativePropsForTag(tag, props)` | `setNativeProps` by React tag |
+
+`setNativeProps` values hold until a commit updates the view (its props or
+its layout) and applies the committed props: a library animating that way
+keeps its values in the shadow tree too (Reanimated does, with a commit
+hook). Libraries link Hermes (`ReactNativeGtk::sdk` carries libhermesvm), so
+they can make runtimes of their own (`facebook::hermes::makeHermesRuntime`).
+`rn-gtk-host --module GalleryHostSdk --self-test` checks all of these.
 
 ## Autolinking
 
