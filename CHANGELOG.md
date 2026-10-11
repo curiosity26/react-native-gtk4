@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.86.0 (unreleased)
+
+The React Native 0.86 line: React Native 0.86.3, branched from 0.85.0.
+
+- React Native 0.86.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.17).
+- Reanimated and Worklets are back (`@curiosity26/react-native-gtk4-reanimated`
+  and `-worklets` at 0.86.0), with their Showcase pages and Babel plugin.
+- `BackHandler` sends `HardwareBackPressEvent` again (React Native 0.86 has it).
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
+
 ## 0.85.1 (unreleased)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland

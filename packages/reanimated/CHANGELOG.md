@@ -1,5 +1,5 @@
 # Changelog
 
-## 0.87.0 (2026-10-11)
+## 0.86.0 (unreleased)
 
-The first release: Linux (GTK4) native side of react-native-reanimated, on React Native 0.87.
+The first release on React Native 0.86: Linux (GTK4) native side of react-native-reanimated, as on the 0.87 line.
