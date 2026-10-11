@@ -49,14 +49,15 @@ jobs:
       core: ${{ steps.plan.outputs.core }}
       version: ${{ steps.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the release tags
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: '@curiosity26'
+          package-manager-cache: false
       - name: Every package on React Native's major.minor
         run: scripts/release.js check
       - name: What a release would publish
@@ -95,8 +96,8 @@ jobs:
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Install the build dependencies
@@ -110,7 +111,7 @@ jobs:
         run: |
           scripts/prebuilt-host.js build dist
           scripts/prebuilt-host.js build dist --release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: host-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -129,14 +130,15 @@ jobs:
       DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish) && ' ' || '--dry-run' }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the release tags
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: '@curiosity26'
+          package-manager-cache: false
       - name: The release commit (versions and changelogs)
         run: |
           message=$(scripts/release.js version)
@@ -149,7 +151,7 @@ jobs:
           fi
       - name: Test
         run: npm test
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.host.result == 'success'
         with:
           pattern: host-*
