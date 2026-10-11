@@ -6,6 +6,14 @@ ports in [packages/](../packages): a package of their native code for
 GTK4, next to the library's own JavaScript. Install both; `run-linux` and
 `package-linux` autolink the port (see [native-modules.md](native-modules.md)).
 
+**On the React Native 0.83 line**, the worklets and Reanimated ports
+aren't available: react-native-worklets 0.13 and react-native-reanimated
+4.7 need React Native 0.86 or later. Their rows and sections below are for
+the 0.86+ lines. gesture-handler works without them (callbacks run on JS).
+React Navigation's native-stack needs react-native-screens 4.26 or earlier
+on 0.83 (4.27's codegen specs use `React.ComponentRef`, which 0.83's codegen
+rejects).
+
 | Library | Linux package | What the port does |
 | --- | --- | --- |
 | [@react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage) 3.x | `@curiosity26/react-native-gtk4-async-storage` | The `RNAsyncStorage` TurboModule: each database is a JSON file under `$XDG_DATA_HOME/<app id>/async-storage/` (`~/.local/share/...`; in a Flatpak, `~/.var/app/<app id>/data/...`), written atomically. The default `AsyncStorage` is the `legacy` database |
@@ -70,6 +78,9 @@ bundle made with `RNGTK_IGNORE_PORTS=@curiosity26/react-native-gtk4-screens`,
 which has Metro act as if the port weren't installed).
 
 ## Gestures and animations: gesture-handler, worklets and Reanimated
+
+(worklets and Reanimated: React Native 0.86 and later; not on the 0.83
+line.)
 
 The three Software Mansion libraries work together on Linux as on the
 other platforms, each with its port:

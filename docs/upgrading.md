@@ -108,3 +108,82 @@ re-export Android's files), autolinking, and the six library ports.
 - `npm test` passes.
 - The harness's 19 self-tests pass on Wayland and X11, built against 0.88
   (and still against 0.87.1, with the compatibility fixes).
+
+## Trial: React Native 0.83.10 (October 2026)
+
+A release line going back a version, for apps that can't move past React
+Native 0.83 yet (react-native-macos 0.83.0 peers on 0.83.10;
+react-native-windows has a 0.83 line too). It's on its own branch: React
+Native 0.83.10, legacy Hermes (hermes-v0.14.1, react-native's
+`hermes-compiler` 0.14.1, the same commit as its `sdks/.hermesversion`),
+React 19.2.0, CLI 20.0.0, Metro 0.83.
+
+**The script** went down a version as it goes up: 23 changed upstream
+files under the overrides (mostly 0.87's refactors, reversed), no new
+platform splits. Legacy Hermes has the same `hermesvm` target, so
+`build-hermes.sh` and `fetch-rn-deps.py` needed no changes. The script
+itself got two fixes: it rewrote the 0.88 trial's versions in this file,
+and it skipped `scripts/test-new-app.sh`, which names only the CLI's
+version.
+
+**Not on this line:** the worklets and Reanimated ports
+(react-native-worklets 0.13 and react-native-reanimated 4.7 need React
+Native 0.86+). `packages/worklets` and `packages/reanimated` are removed,
+with the Showcase's pages for them. rn-gtk-host builds them and their
+self-tests only when `packages/reanimated` exists. The other ports
+(async-storage, netinfo, safe-area-context, vector-icons, svg, webview,
+gesture-handler, screens) work.
+
+**What broke, and the fixes:**
+
+1. **Metro: an override's package imports resolved from the app.** npm
+   nested `@react-native/virtualized-lists` inside react-native, so the
+   Modal override's import of it failed. Overrides' bare imports now
+   resolve from react-native, as the file they replace would. Fixes a bug
+   that any version could hit.
+2. **JS: `Libraries/Utilities/HardwareBackPressEvent` doesn't exist.**
+   0.83's BackHandler calls its listeners without an argument, and so does
+   Linux's on this line.
+3. **JS: no `colorAttribute` in `ReactNativeStyleAttributes`.**
+   ImageViewNativeComponent uses `{process: processColor}`, which is what
+   it is.
+4. **JS: no `topKeyDown`/`topKeyUp` in Android's view config.** Every key
+   raised "Unsupported top level event type". Linux's config lists them
+   itself.
+5. **react-native-screens 4.27+**: its codegen specs use
+   `React.ComponentRef`, which 0.83's codegen rejects. The Showcase pins
+   4.26.2 (same native props as 4.29 for the port).
+6. **C++: no `react/nativemodule/TurboModuleProvider.h`.** 0.83 has the
+   same type as `TurboModuleManagerDelegate(s)`;
+   `rngtk/TurboModuleProviders.h` picks whichever exists.
+7. **C++: no viewtransition modules.** Optional in the host's
+   CMakeLists.txt, like 0.88's additions. (Fantom's tester CMakeLists.txt
+   differs from 0.87's only there.)
+8. **C++: smaller API differences**, each handled by a template helper
+   with `if constexpr (requires ...)` that compiles against both versions:
+   the linear gradient direction (wrapped in `GradientDirection`),
+   `TextMeasureCacheKey::pointScaleFactor`, `TextAlignment::End`,
+   `TextDecorationStyle::Wavy`, events' `timeStamp`, and
+   `ImageResponseObserverCoordinator` taking observers by reference.
+   `SourceCodeModule` takes a `DevServerHelper` in 0.83, so release
+   bundles get a small SourceCode module of the host's own.
+
+9. **Text kept its size when the font scale went back down** (GNOME's text
+   scaling from 1.5 to 1.0). 0.83 dirties text nodes only in the commit
+   where the scale changes; later commits bring back React's nodes laid out
+   at the old scale, and Yoga reuses their layout. Upstream fixed it after
+   0.83 (facebook/react-native#57246, which adds
+   `LayoutMetrics::fontSizeMultiplier`). Without that, the host registers a
+   commit hook (`FontScaleCommitHook`) that, once the font scale has
+   changed, dirties every laid-out Text or TextInput not yet committed at
+   the current scale, in each commit.
+
+**Results:**
+- `npm test` passes.
+- The harness's 24 self-tests pass on Wayland and X11.
+- The Showcase gives SMOKE OK on Wayland and X11 (the Release host built
+  in 4.5 minutes, the app in 1).
+- `scripts/test-new-app.sh` passes: apps from the 0.83.10 community
+  template, Debug from Metro and Release on Wayland and X11, package-linux,
+  and a native library from init-linux-library autolinked.
+- The same host sources still build against 0.87.1.

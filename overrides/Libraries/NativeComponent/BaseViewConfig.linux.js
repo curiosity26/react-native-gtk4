@@ -3,9 +3,10 @@
  *
  * Follows Android: the GTK host runs React Native's shared C++ view props,
  * which accept Android's view config (event names, accessibility props).
- * Android's already has focusable and the focus, blur, keyDown and keyUp
- * events; this adds the host's keyboard and desktop mouse props, spelled
- * as in react-native-windows and react-native-macos.
+ * Android's already has focusable and the focus and blur events (and
+ * keyDown and keyUp after 0.83, whose config lacks them: added here);
+ * this adds the host's keyboard and desktop mouse props, spelled as in
+ * react-native-windows and react-native-macos.
  *
  * @flow strict-local
  * @format
@@ -19,6 +20,18 @@ const PlatformBaseViewConfigLinux: PartialViewConfigWithoutName = {
   ...AndroidConfig,
   bubblingEventTypes: {
     ...AndroidConfig.bubblingEventTypes,
+    topKeyDown: {
+      phasedRegistrationNames: {
+        captured: 'onKeyDownCapture',
+        bubbled: 'onKeyDown',
+      },
+    },
+    topKeyUp: {
+      phasedRegistrationNames: {
+        captured: 'onKeyUpCapture',
+        bubbled: 'onKeyUp',
+      },
+    },
     // A middle or right click (W3C auxclick).
     topAuxClick: {
       phasedRegistrationNames: {

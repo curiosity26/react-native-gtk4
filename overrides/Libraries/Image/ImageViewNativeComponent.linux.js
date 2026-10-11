@@ -30,11 +30,14 @@ import type {ResolvedAssetSource} from 'react-native-upstream/Libraries/Image/As
 import type {ImageProps} from 'react-native-upstream/Libraries/Image/ImageProps';
 import type {ImageSource} from 'react-native-upstream/Libraries/Image/ImageSource';
 
-import {colorAttribute} from 'react-native-upstream/Libraries/Components/View/ReactNativeStyleAttributes';
 import * as NativeComponentRegistry from 'react-native-upstream/Libraries/NativeComponent/NativeComponentRegistry';
 import {ConditionallyIgnoredEventHandlers} from 'react-native-upstream/Libraries/NativeComponent/ViewConfigIgnore';
 import codegenNativeCommands from 'react-native-upstream/Libraries/Utilities/codegenNativeCommands';
 import Platform from 'react-native-upstream/Libraries/Utilities/Platform';
+import processColor from 'react-native-upstream/Libraries/StyleSheet/processColor';
+
+// React Native 0.83 has no colorAttribute export (0.87's is this).
+const colorAttribute = {process: processColor};
 
 type ImageHostComponentProps = Readonly<{
   ...ImageProps,
@@ -54,7 +57,7 @@ type ImageHostComponentProps = Readonly<{
 }>;
 
 interface NativeCommands {
-  readonly setIsVisible_EXPERIMENTAL: (
+  +setIsVisible_EXPERIMENTAL: (
     viewRef: HostInstance,
     isVisible: boolean,
     time: number,

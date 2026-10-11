@@ -254,7 +254,9 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
     // inside the app's react-native, since its "exports" map hides
     // src/private. Resolve other packages from the app: when this package
     // is linked (npm `file:` dependency) its real path has no node_modules
-    // above it.
+    // above it. An override's other packages resolve from react-native, as
+    // the file it replaces would: npm may nest react-native's dependencies
+    // (@react-native/virtualized-lists) in its own node_modules.
     if (
       projectRoot &&
       SOURCE_DIRS.some(dir => isInside(context.originModulePath, dir)) &&
@@ -269,9 +271,10 @@ function createLinuxResolver({projectRoot, resolveRequest: upstream} = {}) {
         };
         moduleName = `./${moduleName.slice(prefix.length)}`;
       } else {
+        const fromRn = knownRnDir && isInside(context.originModulePath, OVERRIDES_DIR);
         context = {
           ...context,
-          originModulePath: path.join(projectRoot, 'package.json'),
+          originModulePath: path.join(fromRn ? knownRnDir : projectRoot, 'package.json'),
         };
       }
     }

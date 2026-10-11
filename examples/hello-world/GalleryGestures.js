@@ -6,7 +6,7 @@
 // the library's ScrollView (in GesturesRelations, the second row).
 // The callbacks set React state, so they run on JS (runOnJS: with
 // react-native-reanimated installed, gesture callbacks are worklets on the
-// UI runtime otherwise; GalleryReanimated has those).
+// UI runtime otherwise; the 0.83 line has no Reanimated).
 // The pan box holds a Pressable: a drag cancels its press (the JS
 // responder loses the touch when the pan activates), a click presses it.
 // rn-gtk-host --module GalleryGestures --self-test drives each with the

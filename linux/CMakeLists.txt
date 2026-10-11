@@ -131,7 +131,6 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   react/nativemodule/intersectionobserver
   react/nativemodule/microtasks
   react/nativemodule/mutationobserver
-  react/nativemodule/viewtransition
   react/nativemodule/webperformance
   react/performance/cdpmetrics
   react/performance/timeline
@@ -165,7 +164,6 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   react/renderer/scheduler
   react/renderer/telemetry
   react/renderer/uimanager
-  react/renderer/viewtransition
   react/renderer/uimanager/consistency
   react/runtime
   react/runtime/hermes
@@ -174,9 +172,12 @@ set(RNGTK_REACT_COMMON_SUBDIRS
   reactperflogger
   runtimeexecutor
   yoga)
-# Newer React Native versions' additions (0.88: the stable C++ API guard,
-# ResizeObserver), when the sources have them.
+# Modules some React Native versions don't have, when the sources have
+# them: view transitions (not in 0.83), and 0.88's stable C++ API guard and
+# ResizeObserver.
 set(RNGTK_REACT_COMMON_OPTIONAL_SUBDIRS
+  react/nativemodule/viewtransition
+  react/renderer/viewtransition
   react/cxxstableapi
   react/nativemodule/resizeobserver
   react/renderer/observers/resize)
@@ -323,6 +324,7 @@ add_library(rngtk_host_objs OBJECT
   src/DevUI.cc
   src/Dialogs.cc
   src/FeatureFlags.cc
+  src/FontScaleCommitHook.cc
   src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/GtkModals.cc
@@ -414,7 +416,7 @@ set(RNGTK_REACT_NATIVE_LIBS
     $<$<TARGET_EXISTS:react_nativemodule_resizeobserver>:react_nativemodule_resizeobserver>
     react_nativemodule_microtasks
     react_nativemodule_mutationobserver
-    react_nativemodule_viewtransition
+    $<$<TARGET_EXISTS:react_nativemodule_viewtransition>:react_nativemodule_viewtransition>
     react_nativemodule_webperformance
     react_performance_cdpmetrics
     react_performance_timeline
@@ -556,12 +558,22 @@ target_compile_definitions(rngtk_repo_sdk INTERFACE
 target_compile_options(rngtk_repo_sdk INTERFACE
   $<TARGET_PROPERTY:rngtk_host_objs,COMPILE_OPTIONS> -Wno-deprecated-declarations)
 add_library(ReactNativeGtk::sdk ALIAS rngtk_repo_sdk)
-set(RNGTK_WORKLETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-worklets)
-set(RNGTK_REANIMATED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-reanimated)
-foreach(port gesture-handler worklets reanimated)
-  add_subdirectory(../packages/${port}/linux packages/${port})
-endforeach()
-target_link_libraries(rn-gtk-host PRIVATE rngtk_gesture_handler rngtk_worklets rngtk_reanimated)
+add_subdirectory(../packages/gesture-handler/linux packages/gesture-handler)
+target_link_libraries(rn-gtk-host PRIVATE rngtk_gesture_handler)
+# Worklets and Reanimated, on release lines that have them (React Native
+# 0.86 and later; the 0.83 line leaves packages/worklets and
+# packages/reanimated out).
+set(RNGTK_HARNESS_REANIMATED OFF)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../packages/reanimated/linux/CMakeLists.txt)
+  set(RNGTK_HARNESS_REANIMATED ON)
+  set(RNGTK_WORKLETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-worklets)
+  set(RNGTK_REANIMATED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../examples/hello-world/node_modules/react-native-reanimated)
+  foreach(port worklets reanimated)
+    add_subdirectory(../packages/${port}/linux packages/${port})
+  endforeach()
+  target_link_libraries(rn-gtk-host PRIVATE rngtk_worklets rngtk_reanimated)
+  target_compile_definitions(rn-gtk-host PRIVATE RNGTK_HARNESS_REANIMATED)
+endif()
 # The react-native-screens port (packages/screens), for GalleryNavigation:
 # the Showcase's bundle uses its native components. Needs libadwaita.
 pkg_check_modules(RNGTK_HARNESS_ADW QUIET IMPORTED_TARGET libadwaita-1>=1.4)
@@ -656,15 +668,17 @@ add_test(NAME gallery-gestures-self-test
 add_test(NAME gallery-host-sdk-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryHostSdk --width 940 --height 680 --self-test)
-add_test(NAME gallery-worklets-self-test
-         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
-                 --module GalleryWorklets --width 940 --height 680 --self-test)
-add_test(NAME gallery-reanimated-self-test
-         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
-                 --module GalleryReanimated --width 940 --height 760 --self-test)
-add_test(NAME gallery-reanimated-layout-self-test
-         COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
-                 --module GalleryReanimatedLayout --width 940 --height 680 --self-test)
+if(RNGTK_HARNESS_REANIMATED)
+  add_test(NAME gallery-worklets-self-test
+           COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                   --module GalleryWorklets --width 940 --height 680 --self-test)
+  add_test(NAME gallery-reanimated-self-test
+           COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                   --module GalleryReanimated --width 940 --height 760 --self-test)
+  add_test(NAME gallery-reanimated-layout-self-test
+           COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
+                   --module GalleryReanimatedLayout --width 940 --height 680 --self-test)
+endif()
 add_test(NAME gallery-images-self-test
          COMMAND rn-gtk-host --bundle ${RNGTK_HELLO_BUNDLE}
                  --module GalleryImages --width 940 --height 680 --self-test)
