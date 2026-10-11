@@ -6,7 +6,7 @@ and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
 **Status: Phases 1 (core), 2 (desktop) and 3 (desktop parity) complete.** The GTK host runs React Native
-0.85.3 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
+0.86.3 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
 and Pango: borders, radii, shadows, transforms, filters, gradients, nested
 text. Mouse and touch input drive Pressable, the Touchables, Button and
 hover. ScrollView scrolls with GTK's kinetic scrolling, FlatList and
@@ -58,7 +58,7 @@ folder, and `run-linux` autolinks it
 ## Quick start
 
 ```sh
-npx @react-native-community/cli@20.1.0 init MyApp --version 0.85.3
+npx @react-native-community/cli@20.1.0 init MyApp --version 0.86.3
 cd MyApp
 npm install @curiosity26/react-native-gtk4    # from GitHub Packages (see below)
 npx react-native init-linux                   # adds linux/, Metro's linux platform, "npm run linux"

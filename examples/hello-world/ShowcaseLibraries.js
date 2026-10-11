@@ -28,6 +28,14 @@ function load(name) {
         return require('react-native-webview');
       case 'navigation':
         return require('./GalleryNavigation');
+      case 'worklets':
+        return require('./GalleryWorklets');
+      case 'reanimated':
+        return {
+          ...require('react-native-gesture-handler'),
+          ...require('./GalleryReanimated'),
+          ...require('./GalleryReanimatedLayout'),
+        };
       case 'gestures':
         return {...require('react-native-gesture-handler'), ...require('./GalleryGestures')};
     }
@@ -566,9 +574,95 @@ export function makeLibraryPages(helpers) {
     );
   }
 
+  // ---- Worklets: react-native-worklets ---------------------------------------
+
+  function WorkletsPage() {
+    const {Section, styles} = helpers();
+    const lib = load('worklets');
+    if (lib?.error || !lib?.WorkletsDemo) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Worklets (react-native-worklets)">
+            <Missing what="react-native-worklets" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {WorkletsDemo} = lib;
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <Section
+          title="Worklets (react-native-worklets)"
+          hint="The library's shared C++ on Linux (packages/worklets): 'worklet' functions (its Babel plugin) run on its UI runtime, a Hermes runtime of its own on GTK's main thread, and call back to JS; synchronizables are shared between them; requestAnimationFrame on the UI runtime follows the window's frame clock."
+        />
+        <WorkletsDemo />
+      </ScrollView>
+    );
+  }
+
+  // ---- Reanimated: react-native-reanimated ------------------------------------
+
+  function ReanimatedPage() {
+    const {Section, styles} = helpers();
+    const lib = load('reanimated');
+    if (lib?.error || !lib?.ReanimatedAnimations) {
+      return (
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section title="Reanimated (react-native-reanimated)">
+            <Missing what="react-native-reanimated" error={lib?.error || 'no module'} />
+          </Section>
+        </ScrollView>
+      );
+    }
+    const {
+      GestureHandlerRootView,
+      ReanimatedAnimations,
+      ReanimatedInteraction,
+      ReanimatedBench,
+      ReanimatedLayoutDemo,
+      ReanimatedCSSDemo,
+      ReanimatedSwipeDrawerDemo,
+    } = lib;
+    return (
+      <GestureHandlerRootView style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <Section
+            title="Reanimated (react-native-reanimated)"
+            hint="The library's C++ engine on Linux (packages/reanimated), on react-native-worklets' UI runtime: shared values and animated styles run on GTK's main thread, frame by frame on the window's frame clock. The last box keeps moving while the JS thread is blocked."
+          />
+          <ReanimatedAnimations />
+          <Section
+            title="Scrolling, measuring, gestures"
+            hint="useAnimatedScrollHandler drives the bar; measure and scrollTo run on the UI runtime; the red box follows a pan with worklets only, and springs back."
+          />
+          <ReanimatedInteraction />
+          <Section title="Many views" hint="Each box has its own animated style; the frame rate is what the UI runtime's useFrameCallback sees." />
+          <ReanimatedBench />
+          <Section
+            title="Layout animations"
+            hint="Items fade or slide in (entering), fade or zoom out (exiting), and the others move to make room (layout transitions)."
+          />
+          <ReanimatedLayoutDemo />
+          <Section
+            title="CSS animations and transitions"
+            hint="Keyframes with an iteration count and direction; width and opacity transitioning when the style changes."
+          />
+          <ReanimatedCSSDemo />
+          <Section
+            title="Swipeable and drawer"
+            hint="gesture-handler's ReanimatedSwipeable (swipe the row left) and ReanimatedDrawerLayout."
+          />
+          <ReanimatedSwipeDrawerDemo />
+        </ScrollView>
+      </GestureHandlerRootView>
+    );
+  }
+
   return [
     ['Navigation', NavigationPage],
     ['Gestures', GesturesPage],
+    ['Worklets', WorkletsPage],
+    ['Reanimated', ReanimatedPage],
     ['SVG', SvgPage],
     ['WebView', WebViewPage],
     ['Storage', StoragePage],

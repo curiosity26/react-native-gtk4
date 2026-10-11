@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.86.0 (unreleased)
+
+The React Native 0.86 line: React Native 0.86.3, branched from 0.85.0.
+
+- React Native 0.86.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.17).
+- Reanimated and Worklets are back (`@curiosity26/react-native-gtk4-reanimated`
+  and `-worklets` at 0.86.0), with their Showcase pages and Babel plugin.
+- `BackHandler` sends `HardwareBackPressEvent` again (React Native 0.86 has it).
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
+
+## 0.85.1 (unreleased)
+
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
+
 ## 0.85.0 (2026-10-11)
 
 The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
@@ -7,6 +25,12 @@ The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
 - React Native 0.85.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.10), Metro 0.84.
 - No host changes: the 0.84 fixes (font-scale commit hook, Native Animated mount props) carry over.
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.84.1 (unreleased)
+
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
 
 ## 0.84.0 (2026-10-11)
 
@@ -18,6 +42,12 @@ The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
   mount (a held TouchableOpacity went back to full opacity).
 - Builds with libstdc++ 14 (React Native's TimerManager.cpp lacks `<algorithm>`).
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.83.1 (unreleased)
+
+- Fix: `setSize` on a window that's already shown resizes it on Wayland
+  too (GDK only computed the new size on the compositor's next configure,
+  which might not come).
 
 ## 0.83.0 (2026-10-11)
 

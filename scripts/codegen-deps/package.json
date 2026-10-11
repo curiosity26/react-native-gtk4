@@ -3,7 +3,7 @@
   "private": true,
   "description": "What scripts/fetch-rn-deps.py runs React Native's codegen with (npm ci). The lock pins it, and lets Flatpak builds install it offline.",
   "dependencies": {
-    "@react-native/codegen": "^0.85.3",
-    "react-native": "^0.85.3"
+    "@react-native/codegen": "^0.86.3",
+    "react-native": "^0.86.3"
   }
 }
