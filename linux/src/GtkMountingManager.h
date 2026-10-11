@@ -75,6 +75,9 @@ class GtkMountingManager
   void setOnUIManagerChanged(std::function<void()> callback) {
     onUIManagerChanged_ = std::move(callback);
   }
+  // The current instance's UIManager (null before the first, or once it's
+  // gone).
+  std::shared_ptr<facebook::react::UIManager> uiManager() const { return uiManager_.lock(); }
   // No transactions or commands waiting for the main thread.
   bool isIdle();
   // Main thread: runs `fn` once the transactions queued so far are applied
@@ -319,6 +322,7 @@ class GtkMountingManager
   std::vector<std::function<bool(const PointerInput &)>> pointerObservers_;
   std::vector<std::function<void(GtkWidget *)>> scrollObservers_;
   std::function<void()> onUIManagerChanged_;
+  std::weak_ptr<facebook::react::UIManager> uiManager_;
   bool onMainThread() const {
     return std::this_thread::get_id() == mainThread_;
   }

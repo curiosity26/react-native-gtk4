@@ -1,5 +1,7 @@
 #include "RNGtkHost.h"
 
+#include "FontScaleCommitHook.h"
+
 #include "AccessibilityInfo.h"
 #include "Appearance.h"
 #include "DevUI.h"
@@ -416,10 +418,18 @@ RNGtkHost::RNGtkHost(RNGtkHostOptions options, GtkOverlay *overlay)
                              instances_++;
                              return queue;
                            }));
+  if constexpr (FontScaleCommitHook::kNeeded) {
+    fontScaleHook_ = std::make_unique<FontScaleCommitHook>();
+  }
   mountingManager_->setOnUIManagerChanged([this] {
     {
       std::lock_guard<std::mutex> lock(beatMutex_);
       creatingInstance_ = false;
+    }
+    // Each instance's UIManager: Text re-measured when the font scale
+    // changes, where React Native doesn't (FontScaleCommitHook.h).
+    if (auto uiManager = mountingManager_->uiManager(); uiManager && fontScaleHook_) {
+      uiManager->registerCommitHook(*fontScaleHook_);
     }
     // A reload applies RTL settings I18nManager changed.
     on_main([this] { refreshLayout(); });

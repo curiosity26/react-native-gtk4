@@ -31,6 +31,7 @@ class SurfaceDelegate;
 namespace rngtk {
 
 class AccessibilityStatus;
+class FontScaleCommitHook;
 struct PlatformState;
 class Appearance;
 class DevUI;
@@ -291,6 +292,8 @@ class RNGtkHost {
   gulong fontDpiHandler_{0};
   gulong decorationLayoutHandler_{0};
   std::shared_ptr<LogBoxDelegate> logBox_;
+  // Before reactHost_: outlives the UIManagers it's registered on.
+  std::unique_ptr<FontScaleCommitHook> fontScaleHook_;
   std::unique_ptr<facebook::react::ReactHost> reactHost_;
   // What packages' setUp get (rngtk::Host).
   std::unique_ptr<PackageHost> packageHost_;
