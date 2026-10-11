@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-screens",
-  "version": "0.84.0",
+  "version": "0.85.0",
   "description": "Linux (GTK4, libadwaita) native components for react-native-screens (React Navigation's native-stack), for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@curiosity26/react-native-gtk4": "0.84.x",
+    "@curiosity26/react-native-gtk4": "0.85.x",
     "react-native-screens": ">=4.0.0"
   }
 }
