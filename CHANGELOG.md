@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.83.1 (unreleased)
+## 0.83.1 (2026-10-11)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland
   too (GDK only computed the new size on the compositor's next configure,
