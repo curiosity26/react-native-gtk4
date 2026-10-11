@@ -1,5 +1,5 @@
 # Changelog
 
-## 0.86.0 (unreleased)
+## 0.86.0 (2026-10-11)
 
 The first release on React Native 0.86: Linux (GTK4) native side of react-native-reanimated, as on the 0.87 line.
