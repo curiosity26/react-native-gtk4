@@ -10,11 +10,13 @@
     "@curiosity26/react-native-gtk4-async-storage": "file:../../packages/async-storage",
     "@curiosity26/react-native-gtk4-gesture-handler": "file:../../packages/gesture-handler",
     "@curiosity26/react-native-gtk4-netinfo": "file:../../packages/netinfo",
+    "@curiosity26/react-native-gtk4-reanimated": "file:../../packages/reanimated",
     "@curiosity26/react-native-gtk4-safe-area-context": "file:../../packages/safe-area-context",
     "@curiosity26/react-native-gtk4-screens": "file:../../packages/screens",
     "@curiosity26/react-native-gtk4-svg": "file:../../packages/svg",
     "@curiosity26/react-native-gtk4-vector-icons": "file:../../packages/vector-icons",
     "@curiosity26/react-native-gtk4-webview": "file:../../packages/webview",
+    "@curiosity26/react-native-gtk4-worklets": "file:../../packages/worklets",
     "@react-native-async-storage/async-storage": "3.1.1",
     "@react-native-community/netinfo": "12.0.1",
     "@react-native-vector-icons/fontawesome6": "13.1.4",
@@ -23,17 +25,19 @@
     "@react-navigation/native": "7.5.0",
     "@react-navigation/native-stack": "7.20.0",
     "react": "19.2.3",
-    "react-native": "0.85.3",
+    "react-native": "0.86.3",
     "react-native-gesture-handler": "3.3.0",
+    "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "5.10.1",
     "react-native-screens": "4.29.0",
     "react-native-svg": "15.15.5",
-    "react-native-webview": "14.0.1"
+    "react-native-webview": "14.0.1",
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@react-native-community/cli": "20.1.0",
-    "@react-native/babel-preset": "0.85.3",
-    "@react-native/metro-config": "0.85.3",
+    "@react-native/babel-preset": "0.86.3",
+    "@react-native/metro-config": "0.86.3",
     "metro": "^0.84.3"
   },
   "engines": {
