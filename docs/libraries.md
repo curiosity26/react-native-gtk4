@@ -33,7 +33,11 @@ npm install @react-native-async-storage/async-storage \
 npx react-native run-linux
 ```
 
-The ports' versions follow this package's. The Showcase has a page for each
+Each port's version starts with React Native's major.minor, like this
+package's: on React Native 0.87, install 0.87.x of both (`npm install`
+picks it: a port's peer range on this package is `0.87.x`). Their patches
+move separately, so a port can be at 0.87.3 next to this package at 0.87.1.
+The Showcase has a page for each
 (Storage, NetInfo, Safe Area, Icons): `cd examples/hello-world && npx
 react-native run-linux`. The repository's `rn-gtk-host` harness doesn't
 autolink, and its pages say so.
