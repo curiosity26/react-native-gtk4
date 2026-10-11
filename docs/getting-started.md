@@ -47,7 +47,18 @@ The package is published on GitHub Packages; tell npm where to find the
 
 ```
 @curiosity26:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=<a GitHub token with read:packages>
 ```
+
+GitHub Packages wants a token even to install public packages: a
+[personal access token (classic)](https://github.com/settings/tokens/new?scopes=read:packages)
+with `read:packages` is enough.
+
+The package's version is React Native's major.minor plus a patch of its
+own (0.87.x for React Native 0.87). `latest` is the newest React Native
+line; older lines are on `v<major>.<minor>-stable`, for example
+`npm install @curiosity26/react-native-gtk4@v0.83-stable` in an app on
+React Native 0.83.
 
 ### What `init-linux` does
 

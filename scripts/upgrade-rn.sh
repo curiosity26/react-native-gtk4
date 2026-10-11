@@ -11,6 +11,8 @@
 #   rn-version.properties        reactNative, and hermes (react-native's
 #                                hermes-compiler version, as a tag)
 #   package.json                 the react-native peerDependency
+#   package.json, packages/*     on a new minor, every package's version
+#                                (<major>.<minor>.0: scripts/release.js line)
 #   examples/hello-world         react-native, react, @react-native/*, metro,
 #                                the community CLI (npm install)
 #   scripts/codegen-deps         react-native and @react-native/codegen
@@ -98,6 +100,8 @@ node -e '
     p.dependencies["@react-native/codegen"] = `^${rn}`;
   });
 ' "$repo" "$new" "$react" "$cli" "$metro"
+# A new minor is a new release line: every package starts at its .0.
+"$here/release.js" line >/dev/null
 echo "== npm install (the example, the codegen's lock)"
 (cd "$repo/examples/hello-world" && npm install --no-audit --no-fund >/dev/null)
 (cd "$repo/scripts/codegen-deps" && rm -f package-lock.json &&

@@ -72,7 +72,10 @@ builds in seconds. Prerequisites per distribution, what each command does,
 and troubleshooting: [docs/getting-started.md](docs/getting-started.md).
 
 The package is on GitHub Packages: add
-`@curiosity26:registry=https://npm.pkg.github.com` to `~/.npmrc`.
+`@curiosity26:registry=https://npm.pkg.github.com` and a token with
+`read:packages` to `~/.npmrc` ([docs/getting-started.md](docs/getting-started.md#create-an-app)).
+Its version follows React Native's: 0.87.x for React Native 0.87, with
+older lines on `v0.83-stable` and so on.
 
 ![A new React Native app on GTK4 (Release build, Wayland)](docs/images/new-app-release-wayland.png)
 
@@ -171,3 +174,7 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    react-native-worklets) on their shared C++, with the host API they need
    (the UIManager, the runtime executor, direct prop updates). See
    [docs/library-assessments.md](docs/library-assessments.md).
+7. Releases: the package and the ports published to GitHub Packages from
+   `main` and each release line (`release/0.83`), versioned on React
+   Native's major.minor with their own patches
+   ([docs/releasing.md](docs/releasing.md)).

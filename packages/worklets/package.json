@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-worklets",
-  "version": "0.1.0",
+  "version": "0.87.0",
   "description": "Linux (GTK4) native side of react-native-worklets, for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {
@@ -14,10 +14,11 @@
   "files": [
     "linux/",
     "react-native.config.js",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@curiosity26/react-native-gtk4": ">=0.1.0",
+    "@curiosity26/react-native-gtk4": "0.87.x",
     "react-native-worklets": "0.13.x"
   }
 }
