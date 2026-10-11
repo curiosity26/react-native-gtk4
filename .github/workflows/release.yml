@@ -1,19 +1,25 @@
 name: Release
 
-# Publishes the package and the library ports in packages/ to GitHub
-# Packages: every version there that GitHub Packages doesn't have yet
-# (scripts/release.js plan), from main (dist-tags latest and vX.Y-stable)
-# or a release line, release/X.Y (vX.Y-stable). See docs/releasing.md.
+# Releases the package and the library ports in packages/ to GitHub
+# Packages, from main (dist-tags latest and vX.Y-stable) or a release line,
+# release/X.Y (vX.Y-stable). See docs/releasing.md.
+#
+# Pull requests don't change versions; a release does. Each package whose
+# files changed since its last release tag on this line gets the next patch
+# (scripts/release.js plan), and the run commits those versions and their
+# changelog sections to the branch ("Release: ..."), then publishes them.
 #
 # Run it by hand on the branch (Actions, Release, Run workflow). With
-# "publish" ticked it publishes: for the package, prebuilt host libraries
+# "publish" ticked it releases: for the package, prebuilt host libraries
 # for x86_64 and aarch64 (Debug for run-linux, Release for package-linux)
 # and a GitHub release, v<version>, with them attached, which the package
 # lists with their checksums (prebuilt-hosts.json); for each port, a tag,
 # <name>@<version>. Unticked it's a dry run: it builds and packs
-# everything, runs `npm publish --dry-run`, and publishes nothing.
+# everything, runs `npm publish --dry-run`, and commits and publishes
+# nothing.
 #
-# Pull requests that change a version run the dry run, without the hosts.
+# Pull requests that touch the release machinery run the dry run, without
+# the hosts.
 on:
   workflow_dispatch:
     inputs:
@@ -25,8 +31,6 @@ on:
     paths:
       - package.json
       - packages/*/package.json
-      - CHANGELOG.md
-      - packages/*/CHANGELOG.md
       - rn-version.properties
       - scripts/release.js
       - .github/workflows/release.yml
@@ -46,6 +50,8 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release tags
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -53,7 +59,7 @@ jobs:
           scope: '@curiosity26'
       - name: Every package on React Native's major.minor
         run: scripts/release.js check
-      - name: What GitHub Packages doesn't have yet
+      - name: What a release would publish
         id: plan
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
@@ -63,15 +69,16 @@ jobs:
           node -e '
             const p = JSON.parse(require("fs").readFileSync("plan.json", "utf8"));
             const core = p.packages.find(q => q.id === "core");
-            const rows = p.packages.map(q => `| ${q.name} | ${q.version} | ${q.published ? "published" : "to publish"} |`);
+            const rows = p.packages.map(q =>
+              `| ${q.name} | ${q.release ? `**${q.version}**` : "no release"} | ${q.last || "first on this line"} | ${q.changes.join("<br>")} |`);
             const tags = p.distTags ? p.distTags.join(", ") : "none (not main or a release/X.Y branch: dry run only)";
             console.log([
-              `### ${process.env.PUBLISH === "true" ? "Publishing" : "Dry run"}: ${p.branch}, React Native ${p.line}`,
-              "", `dist-tags: ${tags}`, "", "| package | version | |", "|---|---|---|", ...rows,
+              `### ${process.env.PUBLISH === "true" ? "Releasing" : "Dry run"}: ${p.branch}, React Native ${p.line}`,
+              "", `dist-tags: ${tags}`, "", "| package | release | since | changes |", "|---|---|---|---|", ...rows,
             ].join("\n"));
-            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `core=${!core.published}\nversion=${core.version}\n`);
+            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `core=${core.release}\nversion=${core.version}\n`);
             if (process.env.PUBLISH === "true" && !p.distTags) {
-              console.error(`::error::publish from main or release/${p.line}, not ${p.branch}`);
+              console.error(`::error::release from main or release/${p.line}, not ${p.branch}`);
               process.exit(1);
             }
           ' | tee -a "$GITHUB_STEP_SUMMARY"
@@ -97,6 +104,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang cmake ninja-build \
             pkg-config python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev
+      - name: The release's version
+        run: npm pkg set version=${{ needs.plan.outputs.version }}
       - name: Build the hosts (Debug and Release)
         run: |
           scripts/prebuilt-host.js build dist
@@ -121,11 +130,23 @@ jobs:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release tags
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: '@curiosity26'
+      - name: The release commit (versions and changelogs)
+        run: |
+          message=$(scripts/release.js version)
+          git diff --stat
+          if [[ -n $message && $DRY_RUN != --dry-run ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -qam "$message"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
       - name: Test
         run: npm test
       - uses: actions/download-artifact@v4
@@ -154,7 +175,7 @@ jobs:
             # A run that stopped before publishing the package: this run's hosts.
             gh release upload "v$VERSION" dist/*.tar.gz --clobber
           else
-            gh release create "v$VERSION" dist/*.tar.gz --target "$GITHUB_SHA" \
+            gh release create "v$VERSION" dist/*.tar.gz --target "$(git rev-parse HEAD)" \
               --title "v$VERSION" --notes-file notes.md --latest="$LATEST"
           fi
       - name: Publish the package

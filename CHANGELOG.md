@@ -112,6 +112,7 @@ out-of-tree platform like react-native-windows and react-native-macos.
   ports' peer range on this package is `0.87.x`. Older React Native
   lines are release branches (`release/0.83`) published under
   `v0.83-stable`.
-- The release workflow publishes, from `main` or a release line, each
-  version GitHub Packages doesn't have yet; `scripts/release.js` checks,
-  bumps and plans versions.
+- The release workflow, run by hand on `main` or a release line, gives
+  each package that changed since its last release the next patch,
+  commits the versions and changelogs, and publishes them. Pull requests
+  don't change versions.

@@ -24,31 +24,34 @@ packages to all of this.
 
 Each release line is branched from the one before it (`release/0.84` from
 `release/0.83`) and moved up with `scripts/upgrade-rn.sh`, which also runs
-`scripts/release.js line`: every package to <major>.<minor>.0 with a
-changelog section for it. Fixes from `main` are cherry-picked into the
-lines; each line releases its own patches.
+`scripts/release.js line`: every package to <major>.<minor>.0. Fixes from
+`main` are cherry-picked into the lines; each line releases its own
+patches.
 
-## Releasing a version
+## Releasing
 
-1. Bump the packages that changed, on the branch:
-   `scripts/release.js bump svg` (a folder in `packages/`, `core` for this
-   package, or `all`). It raises the patch and adds
-   `## <version> (unreleased)` to that package's CHANGELOG.md: write what
-   changed there, and turn `(unreleased)` into the date.
-2. Merge that (a pull request that changes a version dry-runs the
-   workflow).
-3. Run the workflow on the branch: Actions, Release, Run workflow, pick
-   `main` or `release/X.Y`, tick "publish". Unticked, it's a dry run.
+Pull requests don't change versions: a release picks them. Each package
+has release tags (`v0.87.1` for this package, `react-native-gtk4-svg@0.87.0`
+for a port). A package whose files changed since its last tag on the
+branch's line gets the next patch, and its changelog section lists the pull
+requests that changed it. Two pull requests can't claim the same version,
+and none is left out of a release: whatever merged since the last tag goes
+into the next one. A package with no tag yet on the line (a new line, or
+the first release) goes out at the version it has.
 
-`scripts/release.js plan` shows which versions GitHub Packages doesn't
-have yet; the workflow publishes those, and only those, so a run with
-nothing new publishes nothing and a run that stopped halfway can be run
-again.
+What counts as a package's files: a port's folder; for this package, its
+`files` in package.json and package.json itself (not docs/, examples/ or
+test/).
+
+To release: Actions, Release, Run workflow, pick `main` or `release/X.Y`,
+tick "publish". Unticked, it's a dry run. The run's summary shows each
+package's new version and changes; `scripts/release.js plan` shows the
+same locally.
 
 The workflow:
 
-- **plan**: `scripts/release.js check`, then which versions to publish
-  (in the run's summary).
+- **plan**: `scripts/release.js check`, then what a release would
+  publish.
 - **host**, when this package has a new version (x86_64 on
   `ubuntu-24.04`, aarch64 on `ubuntu-24.04-arm`):
   `scripts/prebuilt-host.js build` builds React Native's dependencies,
@@ -57,20 +60,27 @@ The workflow:
   `react-native-gtk4-host-<version>-ubuntu24.04-<arch>-<debug|release>.tar.gz`.
   The absolute paths in its SDK file become tokens that unpacking fills
   in.
-- **publish**: runs the tests; for this package, writes
-  `prebuilt-hosts.json` (the four tarballs' sha256, the package's host
-  source id, the release's download URL), creates the GitHub release
-  `v<version>` with the tarballs and the CHANGELOG.md section as notes
-  (the repository's latest release only from `main`), and publishes it;
-  then publishes each port with a new version and tags it
-  `<name>@<version>` (`react-native-gtk4-svg@0.87.1`). Each goes out under
-  the branch's dist-tags.
+- **publish**: `scripts/release.js version` writes the new versions and
+  dated changelog sections, and the run commits them to the branch
+  (`Release: core 0.87.1, svg 0.87.3`) and pushes; runs the tests; for
+  this package, writes `prebuilt-hosts.json` (the four tarballs' sha256,
+  the package's host source id, the release's download URL), creates the
+  GitHub release `v<version>` on the release commit with the tarballs and
+  the CHANGELOG.md section as notes (the repository's latest release only
+  from `main`), and publishes it; then publishes each port with a new
+  version and tags it `<name>@<version>`. Each goes out under the branch's
+  dist-tags.
+
+A package's tag is made once it's published, so a run that stops halfway
+can be run again: a release commit without its tags goes out at its
+versions, and what's already on GitHub Packages is skipped. The run pushes
+to the branch, so the branch has to accept pushes from GitHub Actions.
 
 Locally:
 
 ```sh
 scripts/release.js check    # the versioning rule
-scripts/release.js plan     # what GitHub Packages doesn't have yet
+scripts/release.js plan     # what a release from here would publish
 npm pack --dry-run          # what the package contains
 ```
 
