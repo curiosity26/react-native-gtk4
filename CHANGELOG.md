@@ -1,13 +1,13 @@
 # Changelog
 
-## 0.87.0 (unreleased)
+## 0.83.0 (unreleased)
 
-The first release: React Native 0.87.1 for Linux on GTK4, as an
+The first release: React Native 0.83.10 for Linux on GTK4, as an
 out-of-tree platform like react-native-windows and react-native-macos.
 
 ### Core (Phase 1)
 
-- A GTK4 host for React Native 0.87.1: Hermes, Fabric and TurboModules,
+- A GTK4 host for React Native 0.83.10: Hermes, Fabric and TurboModules,
   React Native's C++ core built from source (ReactCxxPlatform, as React
   Native's Fantom tester).
 - `<View>` and `<Text>` drawn with GSK and Pango: borders, radii, shadows,
