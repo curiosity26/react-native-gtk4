@@ -512,6 +512,52 @@ void RNGtkHost::setWindowSize(SurfaceId id, int width, int height) {
   gtk_window_set_default_size(window, width + std::max(0, extraW), height + std::max(0, extraH));
   // A maximized or tiled window keeps the size the desktop gave it.
   if (gtk_window_is_maximized(window)) gtk_window_unmaximize(window);
+  // On Wayland, GDK computes a shown window's size again (from the default
+  // size) only on the compositor's next configure, which may never come,
+  // or may come with the size the compositor knew before (just after the
+  // window opened). Presenting the toplevel again (a layout with no state
+  // changes: no raise, no focus) has GDK compute it now; it's done on
+  // frames until the window has the size (for up to a second). X11
+  // resizes on the resize queued above.
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(window));
+  if (surface && GDK_IS_TOPLEVEL(surface) &&
+      g_strcmp0(G_OBJECT_TYPE_NAME(gdk_surface_get_display(surface)), "GdkWaylandDisplay") == 0) {
+    struct Resize {
+      int width, height;  // the default size asked for
+      gint64 until, last = 0;
+    };
+    int dw = 0, dh = 0;
+    gtk_window_get_default_size(window, &dw, &dh);
+    auto *resize = new Resize{dw, dh, g_get_monotonic_time() + G_USEC_PER_SEC};
+    guint previous = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(window), "rngtk-resize-tick"));
+    if (previous) gtk_widget_remove_tick_callback(GTK_WIDGET(window), previous);
+    guint tick = gtk_widget_add_tick_callback(
+        GTK_WIDGET(window),
+        [](GtkWidget *widget, GdkFrameClock *, gpointer data) -> gboolean {
+          auto *r = static_cast<Resize *>(data);
+          GtkWindow *w = GTK_WINDOW(widget);
+          int dw = 0, dh = 0;
+          gtk_window_get_default_size(w, &dw, &dh);
+          gint64 now = g_get_monotonic_time();
+          bool done = now > r->until || (dw != r->width || dh != r->height) ||  // timed out, or asked again
+                      (gtk_widget_get_width(widget) == r->width && gtk_widget_get_height(widget) == r->height);
+          if (done || gtk_window_is_maximized(w)) {
+            g_object_set_data(G_OBJECT(widget), "rngtk-resize-tick", nullptr);
+            return G_SOURCE_REMOVE;
+          }
+          GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(w));
+          if (surface && now - r->last > G_USEC_PER_SEC / 10) {
+            r->last = now;
+            GdkToplevelLayout *layout = gdk_toplevel_layout_new();
+            gdk_toplevel_layout_set_resizable(layout, gtk_window_get_resizable(w));
+            gdk_toplevel_present(GDK_TOPLEVEL(surface), layout);
+            gdk_toplevel_layout_unref(layout);
+          }
+          return G_SOURCE_CONTINUE;
+        },
+        resize, [](gpointer data) { delete static_cast<Resize *>(data); });
+    g_object_set_data(G_OBJECT(window), "rngtk-resize-tick", GUINT_TO_POINTER(tick));
+  }
 }
 
 void RNGtkHost::setWindowMinSize(SurfaceId id, int width, int height) {
