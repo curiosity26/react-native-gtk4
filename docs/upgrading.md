@@ -168,12 +168,15 @@ gesture-handler, screens) work.
    `SourceCodeModule` takes a `DevServerHelper` in 0.83, so release
    bundles get a small SourceCode module of the host's own.
 
-**Known limitation:** 0.83 doesn't relayout Text when the font scale goes
-back down (GNOME's text scaling from 1.5 to 1.0): its SurfaceHandler
-dirties text nodes without propagating, and Yoga keeps a cached
-ancestor's layout. Later versions fix it upstream. Going up works.
-gallery-platform-self-test checks only JS's `fontScale` for that step on
-0.83.
+9. **Text kept its size when the font scale went back down** (GNOME's text
+   scaling from 1.5 to 1.0). 0.83 dirties text nodes only in the commit
+   where the scale changes; later commits bring back React's nodes laid out
+   at the old scale, and Yoga reuses their layout. Upstream fixed it after
+   0.83 (facebook/react-native#57246, which adds
+   `LayoutMetrics::fontSizeMultiplier`). Without that, the host registers a
+   commit hook (`FontScaleCommitHook`) that, once the font scale has
+   changed, dirties every laid-out Text or TextInput not yet committed at
+   the current scale, in each commit.
 
 **Results:**
 - `npm test` passes.

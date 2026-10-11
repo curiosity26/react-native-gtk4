@@ -210,7 +210,8 @@ bool GtkMountingManager::isIdle() {
 }
 
 void GtkMountingManager::setUIManager(
-    std::weak_ptr<UIManager> /*uiManager*/) noexcept {
+    std::weak_ptr<UIManager> uiManager) noexcept {
+  uiManager_ = std::move(uiManager);
   if (onUIManagerChanged_) onUIManagerChanged_();
 }
 

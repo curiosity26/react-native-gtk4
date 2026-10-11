@@ -324,6 +324,7 @@ add_library(rngtk_host_objs OBJECT
   src/DevUI.cc
   src/Dialogs.cc
   src/FeatureFlags.cc
+  src/FontScaleCommitHook.cc
   src/JsMessageQueueThread.cc
   src/GtkMountingManager.cc
   src/GtkModals.cc
