@@ -1,6 +1,25 @@
 # Changelog
 
-## 0.83.0 (unreleased)
+## 0.85.0 (unreleased)
+
+The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
+
+- React Native 0.85.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.10), Metro 0.84.
+- No host changes: the 0.84 fixes (font-scale commit hook, Native Animated mount props) carry over.
+- Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.84.0 (2026-10-11)
+
+The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
+
+- React Native 0.84.1, React 19.2.3, Hermes V1 (hermes-v250829098.0.9).
+- The host builds against Hermes V1 (`HERMES_V1_ENABLED`).
+- Native Animated: an animation's final value no longer reverts on the next
+  mount (a held TouchableOpacity went back to full opacity).
+- Builds with libstdc++ 14 (React Native's TimerManager.cpp lacks `<algorithm>`).
+- Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.83.0 (2026-10-11)
 
 The first release: React Native 0.83.10 for Linux on GTK4, as an
 out-of-tree platform like react-native-windows and react-native-macos.
