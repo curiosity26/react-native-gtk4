@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-webview",
-  "version": "0.83.0",
+  "version": "0.84.0",
   "description": "Linux (GTK4) component for react-native-webview, on WebKitGTK 6.0, for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {
@@ -18,7 +18,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@curiosity26/react-native-gtk4": "0.83.x",
+    "@curiosity26/react-native-gtk4": "0.84.x",
     "react-native-webview": ">=13.0.0"
   }
 }
