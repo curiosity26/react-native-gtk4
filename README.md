@@ -6,7 +6,7 @@ and [react-native-macos](https://github.com/microsoft/react-native-macos),
 published as `@curiosity26/react-native-gtk4` on GitHub Packages.
 
 **Status: Phases 1 (core), 2 (desktop) and 3 (desktop parity) complete.** The GTK host runs React Native
-0.83.10 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
+0.84.1 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
 and Pango: borders, radii, shadows, transforms, filters, gradients, nested
 text. Mouse and touch input drive Pressable, the Touchables, Button and
 hover. ScrollView scrolls with GTK's kinetic scrolling, FlatList and
@@ -58,7 +58,7 @@ folder, and `run-linux` autolinks it
 ## Quick start
 
 ```sh
-npx @react-native-community/cli@20.0.0 init MyApp --version 0.83.10
+npx @react-native-community/cli@20.1.0 init MyApp --version 0.84.1
 cd MyApp
 npm install @curiosity26/react-native-gtk4    # from GitHub Packages (see below)
 npx react-native init-linux                   # adds linux/, Metro's linux platform, "npm run linux"
@@ -72,7 +72,10 @@ builds in seconds. Prerequisites per distribution, what each command does,
 and troubleshooting: [docs/getting-started.md](docs/getting-started.md).
 
 The package is on GitHub Packages: add
-`@curiosity26:registry=https://npm.pkg.github.com` to `~/.npmrc`.
+`@curiosity26:registry=https://npm.pkg.github.com` and a token with
+`read:packages` to `~/.npmrc` ([docs/getting-started.md](docs/getting-started.md#create-an-app)).
+Its version follows React Native's: 0.87.x for React Native 0.87, with
+older lines on `v0.83-stable` and so on.
 
 ![A new React Native app on GTK4 (Release build, Wayland)](docs/images/new-app-release-wayland.png)
 
@@ -171,3 +174,7 @@ BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
    react-native-worklets) on their shared C++, with the host API they need
    (the UIManager, the runtime executor, direct prop updates). See
    [docs/library-assessments.md](docs/library-assessments.md).
+7. Releases: the package and the ports published to GitHub Packages from
+   `main` and each release line (`release/0.83`), versioned on React
+   Native's major.minor with their own patches
+   ([docs/releasing.md](docs/releasing.md)).

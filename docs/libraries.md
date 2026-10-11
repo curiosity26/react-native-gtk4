@@ -6,7 +6,7 @@ ports in [packages/](../packages): a package of their native code for
 GTK4, next to the library's own JavaScript. Install both; `run-linux` and
 `package-linux` autolink the port (see [native-modules.md](native-modules.md)).
 
-**On the React Native 0.83 line**, the worklets and Reanimated ports
+**On the React Native 0.83 to 0.85 lines**, the worklets and Reanimated ports
 aren't available: react-native-worklets 0.13 and react-native-reanimated
 4.7 need React Native 0.86 or later. Their rows and sections below are for
 the 0.86+ lines. gesture-handler works without them (callbacks run on JS).
@@ -33,7 +33,11 @@ npm install @react-native-async-storage/async-storage \
 npx react-native run-linux
 ```
 
-The ports' versions follow this package's. The Showcase has a page for each
+Each port's version starts with React Native's major.minor, like this
+package's: on React Native 0.87, install 0.87.x of both (`npm install`
+picks it: a port's peer range on this package is `0.87.x`). Their patches
+move separately, so a port can be at 0.87.3 next to this package at 0.87.1.
+The Showcase has a page for each
 (Storage, NetInfo, Safe Area, Icons): `cd examples/hello-world && npx
 react-native run-linux`. The repository's `rn-gtk-host` harness doesn't
 autolink, and its pages say so.
@@ -79,8 +83,8 @@ which has Metro act as if the port weren't installed).
 
 ## Gestures and animations: gesture-handler, worklets and Reanimated
 
-(worklets and Reanimated: React Native 0.86 and later; not on the 0.83
-line.)
+(worklets and Reanimated: React Native 0.86 and later; not on the
+0.83 to 0.85 lines.)
 
 The three Software Mansion libraries work together on Linux as on the
 other platforms, each with its port:

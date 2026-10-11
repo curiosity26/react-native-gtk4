@@ -187,3 +187,44 @@ gesture-handler, screens) work.
   template, Debug from Metro and Release on Wayland and X11, package-linux,
   and a native library from init-linux-library autolinked.
 - The same host sources still build against 0.87.1.
+
+## Trial: React Native 0.84.1 (October 2026)
+
+The 0.84 release line, branched from release/0.83 (each line from the one
+before it, so fixes merge forward): React Native 0.84.1, Hermes
+hermes-v250829098.0.9 (Hermes V1 again), React 19.2.3, CLI 20.1.0.
+
+**The script** found 10 changed upstream files under the overrides, all
+formatting and type names, and no new platform splits. Android's view
+config has keyDown and keyUp now, which Linux's lists too. Fantom's tester
+CMakeLists.txt is the same as 0.83's.
+
+**What broke, and the fixes:**
+
+1. **C++: the legacy Hermes inspector.** 0.84 still has
+   `hermes/inspector-modern/chrome` and compiles it unless
+   `HERMES_V1_ENABLED` is defined (react-native-flags.cmake does that when
+   the CMake variable is set); Hermes V1 doesn't have its headers. The
+   host's CMakeLists.txt sets the variable unless the Hermes headers have
+   legacy Hermes' inspector.
+2. **Native Animated put back older values.** From 0.84 the value an
+   animation ends on is committed through Fabric, but the animated nodes
+   manager's "unsynced direct props" aren't updated on that path, and its
+   mounting override patched the next mount with them: a held
+   TouchableOpacity faded, then went back to full opacity. The host turns
+   on `overrideBySynchronousMountPropsAtMountingAndroid`, which drops that
+   fallback; views with connected animated nodes still get their nodes'
+   current values.
+
+**What carried over from 0.83:** every compatibility helper, the
+font-scale commit hook (0.84 doesn't have the upstream fix either), and
+the ports. 0.84's codegen accepts `React.ComponentRef`, so
+react-native-screens is back to 4.29. Worklets and Reanimated still need
+0.86.
+
+**Results:**
+- `npm test` passes.
+- The harness's 24 self-tests pass on Wayland and X11.
+- The Showcase gives SMOKE OK on Wayland and X11.
+- `scripts/test-new-app.sh` passes (apps from the 0.84.1 template, Debug
+  and Release on Wayland and X11, package-linux, a native library).

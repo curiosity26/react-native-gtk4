@@ -10,7 +10,7 @@ jobs:
     # Ubuntu 24.04 ships GTK 4.14, our floor (same base as Linux Mint 22.3).
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install GTK4 and headless display servers
         run: |
           sudo apt-get update
@@ -30,7 +30,7 @@ jobs:
           scripts/run-headless.sh wayland -- spike/build/hello-world --self-test --screenshot spike/out/hello-wayland.png
       - name: Benchmark (software rendering, indicative only)
         run: FRAMES=60 scripts/bench-matrix.sh spike/build spike/out/bench
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: spike-output

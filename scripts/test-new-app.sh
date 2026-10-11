@@ -35,7 +35,7 @@ port=${METRO_PORT:-8095}
 shots=${SCREENSHOTS:-$work/screenshots}
 mkdir -p "$shots"
 rn_version=$(sed -n 's/^reactNative=//p' "$repo/rn-version.properties")
-cli_version=20.0.0
+cli_version=20.1.0
 timings=$work/timings.txt
 : >"$timings"
 

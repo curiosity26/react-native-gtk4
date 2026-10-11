@@ -37,7 +37,9 @@ set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -latomic")
 set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -latomic")
 # React Native and folly headers assume <cstdint> arrives transitively, which
 # libstdc++ 13 no longer does; folly also uses APIs newer libstdc++ deprecates.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -Wno-deprecated-declarations")
+# React Native 0.83's TimerManager.cpp calls std::find without <algorithm>,
+# which libstdc++ 14 (the GitHub runners') doesn't pull in either.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -include algorithm -Wno-deprecated-declarations")
 
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(WARNING "React Native's sources need clang (GCC rejects '#pragma mark' under -Werror)")
@@ -87,6 +89,13 @@ find_library(LIB_HERMES hermesvm HINTS ${RNGTK_DEPS_DIR}/hermes-build/lib
 add_library(hermes-engine::hermesvm INTERFACE IMPORTED)
 set_target_properties(hermes-engine::hermesvm PROPERTIES
   INTERFACE_LINK_LIBRARIES ${LIB_HERMES})
+# Hermes V1 (React Native 0.84 on) or legacy Hermes (0.83): React Native's
+# C++ compiles against V1 with HERMES_V1_ENABLED (react-native-flags.cmake
+# reads this; 0.87 always sets it). Only legacy Hermes has the old
+# inspector's headers.
+if(NOT EXISTS ${RNGTK_DEPS_DIR}/hermes-headers/hermes/inspector/RuntimeAdapter.h)
+  set(HERMES_V1_ENABLED ON)
+endif()
 
 # Third-party C++ libraries
 add_subdirectory(${FANTOM_TESTER_DIR}/third-party/boost boost)

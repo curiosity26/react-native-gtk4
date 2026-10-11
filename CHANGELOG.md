@@ -1,13 +1,13 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.83.0 (unreleased)
 
-The first release: React Native 0.87.1 for Linux on GTK4, as an
+The first release: React Native 0.83.10 for Linux on GTK4, as an
 out-of-tree platform like react-native-windows and react-native-macos.
 
 ### Core (Phase 1)
 
-- A GTK4 host for React Native 0.87.1: Hermes, Fabric and TurboModules,
+- A GTK4 host for React Native 0.83.10: Hermes, Fabric and TurboModules,
   React Native's C++ core built from source (ReactCxxPlatform, as React
   Native's Fantom tester).
 - `<View>` and `<Text>` drawn with GSK and Pango: borders, radii, shadows,
@@ -101,3 +101,15 @@ out-of-tree platform like react-native-windows and react-native-macos.
   services packages share (worklets' UI runtime).
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.
+
+### Releases (Phase 7)
+
+- Versions follow React Native's major.minor: this package and every
+  port are 0.87.x on React Native 0.87, each with its own patch, and the
+  ports' peer range on this package is `0.87.x`. Older React Native
+  lines are release branches (`release/0.83`) published under
+  `v0.83-stable`.
+- The release workflow, run by hand on `main` or a release line, gives
+  each package that changed since its last release the next patch,
+  commits the versions and changelogs, and publishes them. Pull requests
+  don't change versions.
