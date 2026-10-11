@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.85.0 (unreleased)
+## 0.85.0 (2026-10-11)
 
 The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
 
