@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.87.0 (unreleased)
 
 The first release: React Native 0.87.1 for Linux on GTK4, as an
 out-of-tree platform like react-native-windows and react-native-macos.
@@ -101,3 +101,14 @@ out-of-tree platform like react-native-windows and react-native-macos.
   services packages share (worklets' UI runtime).
 - `BackHandler`: Alt+Left, the Back key and the mouse's back button send
   `hardwareBackPress`, as on react-native-windows; `exitApp()` quits.
+
+### Releases (Phase 7)
+
+- Versions follow React Native's major.minor: this package and every
+  port are 0.87.x on React Native 0.87, each with its own patch, and the
+  ports' peer range on this package is `0.87.x`. Older React Native
+  lines are release branches (`release/0.83`) published under
+  `v0.83-stable`.
+- The release workflow publishes, from `main` or a release line, each
+  version GitHub Packages doesn't have yet; `scripts/release.js` checks,
+  bumps and plans versions.

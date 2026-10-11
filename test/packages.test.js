@@ -17,7 +17,8 @@ describe('library ports', () => {
     test(dir, () => {
       const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
       assert.equal(pkg.name, `@curiosity26/react-native-gtk4-${dir}`);
-      assert.equal(pkg.version, require('../package.json').version);
+      // Its own patch on React Native's major.minor (scripts/release.js check).
+      assert.equal(pkg.version.split('.').slice(0, 2).join('.'), require('../package.json').version.split('.').slice(0, 2).join('.'));
       assert.ok(pkg.files.includes('linux/'));
       const linux = require(path.join(root, 'react-native.config.js')).dependency.platforms.linux;
       const config = dependencyConfig(root, linux);
