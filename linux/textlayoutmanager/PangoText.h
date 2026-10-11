@@ -10,6 +10,26 @@
 
 namespace rngtk {
 
+// TextAlignment::End and TextDecorationStyle::Wavy, which React Native
+// 0.83 doesn't have (false there).
+template <class Alignment>
+constexpr bool is_alignment_end(Alignment alignment) {
+  if constexpr (requires { Alignment::End; }) {
+    return alignment == Alignment::End;
+  } else {
+    return false;
+  }
+}
+
+template <class Style>
+constexpr bool is_decoration_wavy(Style style) {
+  if constexpr (requires { Style::Wavy; }) {
+    return style == Style::Wavy;
+  } else {
+    return false;
+  }
+}
+
 // The font family RN text uses when a fragment names none.
 inline constexpr const char *kDefaultFontFamily = "Sans";
 

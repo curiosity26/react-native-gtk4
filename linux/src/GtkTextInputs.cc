@@ -63,10 +63,10 @@ GtkInputHints input_hints(const TextInputTraits &traits) {
 
 int text_align(const TextAttributes &a) {
   if (!a.alignment) return 0;
+  if (is_alignment_end(*a.alignment)) return 2;
   switch (*a.alignment) {
     case TextAlignment::Center: return 1;
-    case TextAlignment::Right:
-    case TextAlignment::End: return 2;
+    case TextAlignment::Right: return 2;
     default: return 0;
   }
 }

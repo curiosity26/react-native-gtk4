@@ -17,6 +17,26 @@ namespace rngtk {
 
 namespace {
 
+// The coordinator holds observers by shared_ptr (React Native 0.84 on) or
+// by reference (0.83; the tracking entry keeps the observer alive).
+template <class Coordinator, class Observer>
+void add_observer(Coordinator &coordinator, const std::shared_ptr<Observer> &observer) {
+  if constexpr (requires { coordinator.addObserver(observer); }) {
+    coordinator.addObserver(observer);
+  } else {
+    coordinator.addObserver(*observer);
+  }
+}
+
+template <class Coordinator, class Observer>
+void remove_observer(Coordinator &coordinator, const std::shared_ptr<Observer> &observer) {
+  if constexpr (requires { coordinator.removeObserver(observer); }) {
+    coordinator.removeObserver(observer);
+  } else {
+    coordinator.removeObserver(*observer);
+  }
+}
+
 RNImageFit image_fit(ImageResizeMode mode) {
   switch (mode) {
     case ImageResizeMode::Cover: return RN_IMAGE_COVER;
@@ -81,7 +101,7 @@ void GtkMountingManager::updateImage(GtkWidget *widget,
 
   // A new request (new source): swap observers.
   if (tracking.coordinator && tracking.observer) {
-    tracking.coordinator->removeObserver(tracking.observer);
+    remove_observer(*tracking.coordinator, tracking.observer);
   }
   tracking.coordinator = coordinator;
   tracking.loaded = false;
@@ -112,7 +132,7 @@ void GtkMountingManager::updateImage(GtkWidget *widget,
           }
         });
   }
-  if (coordinator) coordinator->addObserver(tracking.observer);
+  if (coordinator) add_observer(*coordinator, tracking.observer);
 }
 
 void GtkMountingManager::applyImage(Tag tag, GdkTexture *texture) {
@@ -169,7 +189,7 @@ void GtkMountingManager::forgetImage(Tag tag) {
   auto it = images_.find(tag);
   if (it == images_.end()) return;
   if (it->second.coordinator && it->second.observer) {
-    it->second.coordinator->removeObserver(it->second.observer);
+    remove_observer(*it->second.coordinator, it->second.observer);
   }
   images_.erase(it);
 }

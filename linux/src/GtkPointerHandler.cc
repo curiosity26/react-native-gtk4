@@ -23,6 +23,14 @@ namespace rngtk {
 
 namespace {
 
+// Events' timeStamp (not in React Native 0.83's events).
+template <class Event>
+void set_time_stamp(Event &event) {
+  if constexpr (requires { event.timeStamp; }) {
+    event.timeStamp = HighResTimeStamp::now();
+  }
+}
+
 using Offset = ViewEvents::Offset;
 
 constexpr size_t bit(Offset offset) { return static_cast<size_t>(offset); }
@@ -535,7 +543,7 @@ void GtkPointerHandler::dispatchTouch(const char *type, int id,
     touch.target = t.target.tag;
     touch.force = 0;
     touch.timestamp = Float(t.timeMs);
-    touch.timeStamp = HighResTimeStamp::now();
+    set_time_stamp(touch);
     return touch;
   };
 
@@ -628,7 +636,7 @@ PointerEvent GtkPointerHandler::pointerEvent(const char *type,
   event.altKey = input.modifiers & GDK_ALT_MASK;
   event.metaKey = input.modifiers & (GDK_META_MASK | GDK_SUPER_MASK);
   event.isPrimary = true;
-  event.timeStamp = HighResTimeStamp::now();
+  set_time_stamp(event);
 
   return event;
 }

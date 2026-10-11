@@ -23,22 +23,19 @@ function write(file, contents = '') {
 }
 
 function metroResolve(context, moduleName, platform) {
-  let base;
+  const bases = [];
   if (moduleName.startsWith('.')) {
-    base = path.resolve(path.dirname(context.originModulePath), moduleName);
+    bases.push(path.resolve(path.dirname(context.originModulePath), moduleName));
   } else {
+    // Each node_modules from the importing file up, as Metro looks.
     let dir = path.dirname(context.originModulePath);
     for (;;) {
-      const candidate = path.join(dir, 'node_modules', moduleName);
-      if (fs.existsSync(path.dirname(candidate))) {
-        base = candidate;
-        break;
-      }
+      bases.push(path.join(dir, 'node_modules', moduleName));
       if (dir === path.dirname(dir)) break;
       dir = path.dirname(dir);
     }
   }
-  if (base) {
+  for (const base of bases) {
     for (const ext of [`.${platform}.js`, '.native.js', '.js', '', '/index.js']) {
       const file = base + ext;
       if (fs.existsSync(file) && fs.statSync(file).isFile()) {
@@ -155,6 +152,20 @@ describe('createLinuxResolver', () => {
       );
     }
     assert.equal(resolve(from, 'react-native').filePath, path.join(rn, 'index.js'));
+  });
+
+  test("resolves overrides' other packages from react-native, where npm may nest them", () => {
+    const from = override('Libraries/Modal/Modal.linux.js');
+    write(path.join(rn, 'node_modules/@react-native/virtualized-lists/index.js'));
+    assert.equal(
+      resolve(from, '@react-native/virtualized-lists').filePath,
+      path.join(rn, 'node_modules/@react-native/virtualized-lists/index.js'),
+    );
+    write(path.join(app, 'node_modules/hoisted/index.js'));
+    assert.equal(
+      resolve(from, 'hoisted').filePath,
+      path.join(app, 'node_modules/hoisted/index.js'),
+    );
   });
 
   test("resolves the package's own JS imports (js/) from the app", () => {
