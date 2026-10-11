@@ -6,7 +6,7 @@ ports in [packages/](../packages): a package of their native code for
 GTK4, next to the library's own JavaScript. Install both; `run-linux` and
 `package-linux` autolink the port (see [native-modules.md](native-modules.md)).
 
-**On the React Native 0.83 line**, the worklets and Reanimated ports
+**On the React Native 0.83 to 0.85 lines**, the worklets and Reanimated ports
 aren't available: react-native-worklets 0.13 and react-native-reanimated
 4.7 need React Native 0.86 or later. Their rows and sections below are for
 the 0.86+ lines. gesture-handler works without them (callbacks run on JS).
@@ -79,8 +79,8 @@ which has Metro act as if the port weren't installed).
 
 ## Gestures and animations: gesture-handler, worklets and Reanimated
 
-(worklets and Reanimated: React Native 0.86 and later; not on the 0.83
-line.)
+(worklets and Reanimated: React Native 0.86 and later; not on the
+0.83 to 0.85 lines.)
 
 The three Software Mansion libraries work together on Linux as on the
 other platforms, each with its port:
