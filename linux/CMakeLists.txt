@@ -37,7 +37,9 @@ set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -latomic")
 set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -latomic")
 # React Native and folly headers assume <cstdint> arrives transitively, which
 # libstdc++ 13 no longer does; folly also uses APIs newer libstdc++ deprecates.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -Wno-deprecated-declarations")
+# React Native 0.83's TimerManager.cpp calls std::find without <algorithm>,
+# which libstdc++ 14 (the GitHub runners') doesn't pull in either.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint -include algorithm -Wno-deprecated-declarations")
 
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(WARNING "React Native's sources need clang (GCC rejects '#pragma mark' under -Werror)")
