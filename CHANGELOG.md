@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.83.0 (unreleased)
+## 0.83.0 (2026-10-11)
 
 The first release: React Native 0.83.10 for Linux on GTK4, as an
 out-of-tree platform like react-native-windows and react-native-macos.
