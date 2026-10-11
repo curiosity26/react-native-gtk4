@@ -228,3 +228,25 @@ react-native-screens is back to 4.29. Worklets and Reanimated still need
 - The Showcase gives SMOKE OK on Wayland and X11.
 - `scripts/test-new-app.sh` passes (apps from the 0.84.1 template, Debug
   and Release on Wayland and X11, package-linux, a native library).
+
+## Trial: React Native 0.85.3 (October 2026)
+
+The 0.85 release line, branched from release/0.84: React Native 0.85.3,
+Hermes hermes-v250829098.0.10, React 19.2.3, CLI 20.1.0, Metro 0.84.
+
+**The script** found 9 changed upstream files under the overrides: type
+names (`Readonly` for `$ReadOnly`), and `colorAttribute` back in
+`ReactNativeStyleAttributes` (ImageViewNativeComponent's local one is the
+same thing). No new platform splits; Fantom's tester CMakeLists.txt is the
+same as 0.84's.
+
+**What broke:** nothing. The host built against 0.85.3 as it was, with
+0.83's and 0.84's compatibility fixes; the font-scale commit hook stays
+(0.85 doesn't have the upstream fix), as does 0.84's Native Animated
+setting. Worklets and Reanimated still need 0.86.
+
+**Results:**
+- `npm test` passes.
+- The harness's 24 self-tests pass on Wayland and X11.
+- The Showcase gives SMOKE OK on Wayland and X11.
+- `scripts/test-new-app.sh` passes.
