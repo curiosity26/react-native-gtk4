@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.85.0 (unreleased)
+
+The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
+
+- React Native 0.85.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.10), Metro 0.84.
+- No host changes: the 0.84 fixes (font-scale commit hook, Native Animated mount props) carry over.
+- Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
 ## 0.84.0 (2026-10-11)
 
 The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
