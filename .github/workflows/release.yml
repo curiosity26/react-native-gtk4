@@ -1,24 +1,92 @@
 name: Release
 
-# On a version tag (v0.1.0): prebuilt host libraries for x86_64 and aarch64
-# (Debug for run-linux, Release for package-linux), a GitHub release with
-# them attached, and the npm package on GitHub Packages, which lists them
-# with their checksums (prebuilt-hosts.json), and the library ports in
-# packages/.
+# Releases the package and the library ports in packages/ to GitHub
+# Packages, from main (dist-tags latest and vX.Y-stable) or a release line,
+# release/X.Y (vX.Y-stable). See docs/releasing.md.
 #
-# Run by hand (workflow_dispatch) it's a dry run: it builds the prebuilt
-# hosts, packs the package and runs `npm publish --dry-run`, and publishes
+# Pull requests don't change versions; a release does. Each package whose
+# files changed since its last release tag on this line gets the next patch
+# (scripts/release.js plan), and the run commits those versions and their
+# changelog sections to the branch ("Release: ..."), then publishes them.
+#
+# Run it by hand on the branch (Actions, Release, Run workflow). With
+# "publish" ticked it releases: for the package, prebuilt host libraries
+# for x86_64 and aarch64 (Debug for run-linux, Release for package-linux)
+# and a GitHub release, v<version>, with them attached, which the package
+# lists with their checksums (prebuilt-hosts.json); for each port, a tag,
+# <name>@<version>. Unticked it's a dry run: it builds and packs
+# everything, runs `npm publish --dry-run`, and commits and publishes
 # nothing.
+#
+# Pull requests that touch the release machinery run the dry run, without
+# the hosts.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish (unticked, a dry run)
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - package.json
+      - packages/*/package.json
+      - rn-version.properties
+      - scripts/release.js
+      - .github/workflows/release.yml
+
+concurrency:
+  group: release-${{ github.ref }}
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      core: ${{ steps.plan.outputs.core }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the release tags
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@curiosity26'
+          package-manager-cache: false
+      - name: Every package on React Native's major.minor
+        run: scripts/release.js check
+      - name: What a release would publish
+        id: plan
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        run: |
+          scripts/release.js plan --json >plan.json
+          node -e '
+            const p = JSON.parse(require("fs").readFileSync("plan.json", "utf8"));
+            const core = p.packages.find(q => q.id === "core");
+            const rows = p.packages.map(q =>
+              `| ${q.name} | ${q.release ? `**${q.version}**` : "no release"} | ${q.last || "first on this line"} | ${q.changes.join("<br>")} |`);
+            const tags = p.distTags ? p.distTags.join(", ") : "none (not main or a release/X.Y branch: dry run only)";
+            console.log([
+              `### ${process.env.PUBLISH === "true" ? "Releasing" : "Dry run"}: ${p.branch}, React Native ${p.line}`,
+              "", `dist-tags: ${tags}`, "", "| package | release | since | changes |", "|---|---|---|---|", ...rows,
+            ].join("\n"));
+            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `core=${core.release}\nversion=${core.version}\n`);
+            if (process.env.PUBLISH === "true" && !p.distTags) {
+              console.error(`::error::release from main or release/${p.line}, not ${p.branch}`);
+              process.exit(1);
+            }
+          ' | tee -a "$GITHUB_STEP_SUMMARY"
+
   host:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && needs.plan.outputs.core == 'true'
     strategy:
       matrix:
         include:
@@ -28,8 +96,8 @@ jobs:
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Install the build dependencies
@@ -37,71 +105,82 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang cmake ninja-build \
             pkg-config python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev
+      - name: The release's version
+        run: npm pkg set version=${{ needs.plan.outputs.version }}
       - name: Build the hosts (Debug and Release)
         run: |
           scripts/prebuilt-host.js build dist
           scripts/prebuilt-host.js build dist --release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: host-${{ matrix.arch }}
           path: dist/*.tar.gz
           if-no-files-found: error
 
   publish:
-    needs: host
+    needs: [plan, host]
+    # The hosts are skipped when the package isn't being released.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.host.result != 'failure' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       packages: write
+    env:
+      NODE_AUTH_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish) && ' ' || '--dry-run' }}
+      VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the release tags
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: '@curiosity26'
-      - uses: actions/download-artifact@v4
+          package-manager-cache: false
+      - name: The release commit (versions and changelogs)
+        run: |
+          message=$(scripts/release.js version)
+          git diff --stat
+          if [[ -n $message && $DRY_RUN != --dry-run ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -qam "$message"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+      - name: Test
+        run: npm test
+      - uses: actions/download-artifact@v8
+        if: needs.host.result == 'success'
         with:
           pattern: host-*
           path: dist
           merge-multiple: true
-      - name: The tag is the package's version
-        if: github.event_name == 'push'
-        run: |
-          version=$(node -p "require('./package.json').version")
-          [[ "$GITHUB_REF_NAME" == "v$version" ]] || {
-            echo "tag $GITHUB_REF_NAME, but package.json has $version"
-            exit 1
-          }
       - name: List the prebuilt hosts in the package
+        if: needs.host.result == 'success'
         run: |
-          version=$(node -p "require('./package.json').version")
           scripts/prebuilt-host.js manifest dist \
-            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$version"
-      - name: Test
-        run: npm test
-      - name: Pack
-        run: npm pack --dry-run
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
       - name: Release notes
+        if: needs.plan.outputs.core == 'true'
         run: |
-          version=$(node -p "require('./package.json').version")
-          awk -v v="$version" '$0 ~ "^## " {p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md
+          awk -v v="$VERSION" '$0 ~ "^## " {p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md
           cat notes.md
-      - name: Publish (dry run)
-        if: github.event_name != 'push'
-        run: |
-          npm publish --dry-run
-          for p in packages/*/; do (cd "$p" && npm publish --dry-run); done
       - name: GitHub release with the prebuilt hosts
-        if: github.event_name == 'push'
+        if: needs.plan.outputs.core == 'true' && env.DRY_RUN != '--dry-run'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --title "$GITHUB_REF_NAME" --notes-file notes.md
-      - name: Publish to GitHub Packages
-        if: github.event_name == 'push'
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
+          LATEST: ${{ github.ref_name == 'main' }}
         run: |
-          npm publish
-          # The library ports (packages/), at the same version.
-          for p in packages/*/; do (cd "$p" && npm publish); done
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            # A run that stopped before publishing the package: this run's hosts.
+            gh release upload "v$VERSION" dist/*.tar.gz --clobber
+          else
+            gh release create "v$VERSION" dist/*.tar.gz --target "$(git rev-parse HEAD)" \
+              --title "v$VERSION" --notes-file notes.md --latest="$LATEST"
+          fi
+      - name: Publish the package
+        run: scripts/release.js publish core $DRY_RUN
+      - name: Publish the library ports
+        run: scripts/release.js publish libraries $DRY_RUN
