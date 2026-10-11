@@ -250,3 +250,39 @@ setting. Worklets and Reanimated still need 0.86.
 - The harness's 24 self-tests pass on Wayland and X11.
 - The Showcase gives SMOKE OK on Wayland and X11.
 - `scripts/test-new-app.sh` passes.
+
+## Trial: React Native 0.86.3 (October 2026)
+
+The 0.86 release line, branched from release/0.85: React Native 0.86.3,
+Hermes hermes-v250829098.0.17 (the same as 0.87's), React 19.2.3, CLI
+20.1.0, every package at 0.86.0.
+
+**Worklets and Reanimated are back.** react-native-worklets 0.13 and
+react-native-reanimated 4.7 work from 0.86, so `packages/worklets` and
+`packages/reanimated` return from main, with the Showcase's Worklets and
+Reanimated pages, their Gallery modules, the worklets Babel plugin and
+their three self-tests (rn-gtk-host builds them whenever
+`packages/reanimated` exists). BackHandler's listeners get a
+`HardwareBackPressEvent` again: 0.86 has it.
+
+**The script** found 14 changed upstream files under the overrides: type
+casts, and View's prop transformations behind
+`enableNativeViewPropTransformations` (off by default, so the Linux copy
+behaves the same). Fantom's tester CMakeLists.txt adds the viewtransition
+modules back; the host's CMakeLists.txt already adds them when present.
+
+**What broke:** nothing. The host built against 0.86.3 with the earlier
+lines' fixes, ports included. The font-scale commit hook stays (0.86
+doesn't have the upstream fix; 0.87 does), as does 0.84's Native Animated
+setting.
+
+**Results:**
+- `npm test` passes.
+- The harness's 27 self-tests pass on Wayland. On X11,
+  gallery-reanimated-layout-self-test's SlideInLeft step failed twice in
+  about 15 runs ("it started to the left": the first sample was already at
+  the end, as when the VM stalls for the whole 300 ms slide), and passed
+  in the 11 runs after.
+- The Showcase gives SMOKE OK on Wayland and X11, with the Worklets and
+  Reanimated pages (81 views; 77 on the 0.83 to 0.85 lines).
+- `scripts/test-new-app.sh` passes.
