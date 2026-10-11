@@ -3302,11 +3302,28 @@ void add_windows_steps() {
         return has_text(app.root, "B close-requested") && app.host->windowFor(b) &&
                window_count() == 2;
       }});
+  // B has just opened: its button may not be laid out yet (a click then
+  // misses it).
+  auto asked = std::make_shared<bool>(false);
   app.steps.push_back(Step{"  ...requestClose() from inside asks the same way, and it stays",
-                           [] { click_in_window(b, "ask-B"); },
-                           [] {
-                             return has_text(app.root, "B close-requested | B close-requested") &&
-                                    app.host->windowFor(b);
+                           [asked] { *asked = false; },
+                           [asked] {
+                             if (!*asked) {
+                               GtkWidget *v = by_id("ask-B");
+                               if (!v || gtk_widget_get_width(v) <= 0) return false;
+                               *asked = true;
+                               click_in_window(b, "ask-B");
+                               return false;
+                             }
+                             // Twice (the main window's focus events may come between).
+                             GtkWidget *events = by_id("events");
+                             std::string log = events && RN_IS_TEXT(events) ? rn_text_get_text(RN_TEXT(events)) : "";
+                             size_t asks = 0;
+                             for (size_t at = log.find("B close-requested"); at != std::string::npos;
+                                  at = log.find("B close-requested", at + 1)) {
+                               asks++;
+                             }
+                             return asks >= 2 && app.host->windowFor(b);
                            }});
   app.steps.push_back(Step{"  ...and the app closes it (from inside: useWindow().close())",
                            [] { click_in_window(b, "close-B"); },
@@ -4841,6 +4858,25 @@ double item_opacity(const char *id) {
   GtkWidget *v = item(id);
   return v ? gtk_widget_get_opacity(v) : -1.0;
 }
+// Runs `sample` on every frame from now until the step that started it is
+// done: steps run only while the host is idle (JS included), so they can
+// miss frames of an animation while JS is busy.
+int sampling_step = 0;
+void each_frame(std::function<void()> sample) {
+  struct Sampler {
+    int step;
+    std::function<void()> fn;
+  };
+  gtk_widget_add_tick_callback(
+      app.root,
+      [](GtkWidget *, GdkFrameClock *, gpointer data) -> gboolean {
+        auto *s = static_cast<Sampler *>(data);
+        if (s->step != sampling_step) return G_SOURCE_REMOVE;
+        s->fn();
+        return G_SOURCE_CONTINUE;
+      },
+      new Sampler{++sampling_step, std::move(sample)}, [](gpointer data) { delete static_cast<Sampler *>(data); });
+}
 }  // namespace reanimated_test
 
 void add_reanimated_steps() {
@@ -4857,6 +4893,7 @@ void add_reanimated_steps() {
           *track = Track{};
           track->start = left_of(id);
           click(button);
+          each_frame([track, id] { track->seen.insert(lround(left_of(id))); });
         },
         [track, id, distance, done, says] {
           double x = left_of(id);
@@ -4876,6 +4913,7 @@ void add_reanimated_steps() {
                              *track = Track{};
                              track->start = width_of("re-spring");
                              click("re-spring-go");
+                             each_frame([track] { track->seen.insert(lround(width_of("re-spring"))); });
                            },
                            [track, says] {
                              double w = width_of("re-spring");
@@ -4896,18 +4934,8 @@ void add_reanimated_steps() {
                              *track = Track{};
                              track->start = left_of("re-blocked");
                              click("re-block-go");
-                             // Steps wait for JS to be idle: the box's
-                             // positions come from a frame callback.
-                             gtk_widget_add_tick_callback(
-                                 app.root,
-                                 [](GtkWidget *, GdkFrameClock *, gpointer data) -> gboolean {
-                                   auto *t = static_cast<std::shared_ptr<Track> *>(data);
-                                   double x = left_of("re-blocked");
-                                   (*t)->seen.insert(lround(x));
-                                   return x - (*t)->start < 199.5 ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
-                                 },
-                                 new std::shared_ptr<Track>(track),
-                                 [](gpointer data) { delete static_cast<std::shared_ptr<Track> *>(data); });
+                             // JS is busy: the box's positions come from frames.
+                             each_frame([track] { track->seen.insert(lround(left_of("re-blocked"))); });
                            },
                            [track, says] {
                              double x = left_of("re-blocked");
@@ -5031,6 +5059,12 @@ void add_reanimated_layout_steps() {
                              *seen = Seen{};
                              seen->otherStart = item_left("rl-item-1");
                              click("rl-add");
+                             each_frame([seen] {
+                               double o = item_opacity("rl-item-3");
+                               if (o < 0) return;
+                               seen->values.insert(lround(o * 100));
+                               seen->others.insert(lround(item_left("rl-item-1")));
+                             });
                            },
                            [seen, says] {
                              double o = item_opacity("rl-item-3");
@@ -5048,6 +5082,13 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              *seen = Seen{};
                              click("rl-add-slide");
+                             each_frame([seen] {
+                               if (!item("rl-item-4")) return;
+                               double x = item_left("rl-item-4");
+                               if (!seen->appeared) seen->start = x;
+                               seen->appeared = true;
+                               seen->values.insert(lround(x));
+                             });
                            },
                            [seen] {
                              if (!item("rl-item-4")) return false;
@@ -5067,6 +5108,11 @@ void add_reanimated_layout_steps() {
                              *seen = Seen{};
                              seen->otherStart = item_left("rl-item-1");
                              click("rl-remove");
+                             each_frame([seen] {
+                               seen->others.insert(lround(item_left("rl-item-1")));
+                               double o = item_opacity("rl-item-3");
+                               if (o >= 0) seen->values.insert(lround(o * 100));
+                             });
                            },
                            [seen, says] {
                              double o = item_opacity("rl-item-3");
@@ -5086,6 +5132,9 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              *seen = Seen{};
                              click("rl-remove-last");
+                             each_frame([seen] {
+                               if (GtkWidget *v = item("rl-item-4")) seen->values.insert(lround(bounds_in_root(v).size.width));
+                             });
                            },
                            [seen] {
                              if (item("rl-item-4")) {
@@ -5101,6 +5150,9 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              *seen = Seen{};
                              click("rl-css-run");
+                             each_frame([seen] {
+                               if (by_id("rl-css-anim")) seen->values.insert(lround(width_of("rl-css-anim")));
+                             });
                            },
                            [seen, says] {
                              if (by_id("rl-css-anim")) seen->values.insert(lround(width_of("rl-css-anim")));
@@ -5117,6 +5169,11 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              *seen = Seen{};
                              click("rl-css-toggle");
+                             each_frame([seen] {
+                               seen->values.insert(lround(width_of("rl-css-transition")));
+                               GtkWidget *v = by_id("rl-css-transition");
+                               if (v) seen->others.insert(lround(gtk_widget_get_opacity(v) * 100));
+                             });
                            },
                            [seen, opacity_of] {
                              double w = width_of("rl-css-transition"), o = opacity_of("rl-css-transition");
@@ -5479,6 +5536,7 @@ void on_after_paint(GdkFrameClock *, gpointer) {
       }
       if (!app.host->isIdle() || !step.done()) break;
       check(true, step.name.c_str());
+      reanimated_test::sampling_step++;  // its frame samplers stop
       app.step++;
       app.step_started = false;
       break;
