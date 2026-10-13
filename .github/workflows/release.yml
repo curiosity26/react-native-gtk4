@@ -21,6 +21,13 @@ name: Release
 # everything, runs `npm publish --dry-run`, and commits and publishes
 # nothing.
 #
+# With the repository variable NPM_PUBLISH set to true, each run then
+# copies to npm (registry.npmjs.org) every version on GitHub Packages that
+# npm doesn't have, the same tarballs, and sets npm's dist-tags to GitHub
+# Packages': the npm job, authenticated by npm trusted publishing (or the
+# NPM_TOKEN secret, until it's set up). "npm only" skips the release and
+# just copies.
+#
 # Pull requests that touch the release machinery run the dry run, without
 # the hosts.
 on:
@@ -28,6 +35,10 @@ on:
     inputs:
       publish:
         description: Publish (unticked, a dry run)
+        type: boolean
+        default: false
+      npm_only:
+        description: npm only (copy what's on GitHub Packages to npm, release nothing)
         type: boolean
         default: false
   pull_request:
@@ -47,6 +58,7 @@ permissions:
 
 jobs:
   plan:
+    if: ${{ !inputs.npm_only }}
     runs-on: ubuntu-24.04
     outputs:
       core: ${{ steps.plan.outputs.core }}
@@ -225,3 +237,39 @@ jobs:
         run: scripts/release.js publish core $DRY_RUN
       - name: Publish the library ports
         run: scripts/release.js publish libraries $DRY_RUN
+
+  npm:
+    needs: [plan, publish]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' && vars.NPM_PUBLISH == 'true' &&
+      (needs.publish.result == 'success' || (inputs.npm_only && needs.plan.result == 'skipped')) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      id-token: write # npm trusted publishing, and provenance
+    env:
+      DRY_RUN: ${{ inputs.publish && ' ' || '--dry-run' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }} # with the release commit the publish job pushed
+          fetch-depth: 0 # the release tags, for provenance
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: npm with trusted publishing (and dist-tags by it)
+        run: npm install -g npm@11.21.0
+      - name: Copy GitHub Packages to npm
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          {
+            echo '@curiosity26:registry=https://npm.pkg.github.com'
+            echo '//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}'
+            # Without a trusted publisher on npm yet, the token.
+            if [[ -n $NPM_TOKEN ]]; then echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}'; fi
+          } >>~/.npmrc
+          scripts/release.js npm $DRY_RUN

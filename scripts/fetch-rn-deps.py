@@ -173,6 +173,16 @@ def main():
             extract(t, members, out, strip_first=True)
         shutil.copy(jni3p / name / "CMakeLists.txt", out)
 
+    # fmt 11.0's compile-time format check converts the FMT_STRING literal a
+    # second time, which clang 20 and later reject as not constant (Fedora,
+    # EL10). fmt 11.1 checks the view it already holds; do the same here.
+    base_h = ndk / "fmt" / "include" / "fmt" / "base.h"
+    text = base_h.read_text()
+    old = "detail::parse_format_string<true>(str_, checker(s));"
+    if old in text:
+        base_h.write_text(text.replace(
+            old, "detail::parse_format_string<true>(str_, checker(str_));"))
+
     # glog: fill in config tokens the way PrepareGlogTask does.
     out = ndk / "glog"
     if not out.exists():
