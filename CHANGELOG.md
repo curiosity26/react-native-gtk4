@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.87.1 (2026-10-13)
+
+- Prebuilt hosts without a token, and for Debian 13, Fedora 44 and EL10 (#59)
+
 ## 0.87.0 (2026-10-11)
 
 The first release: React Native 0.87.1 for Linux on GTK4, as an
