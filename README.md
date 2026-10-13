@@ -1,15 +1,11 @@
-<h1 align="center">React Native for Linux (GTK4)</h1>
+# React Native for Linux (GTK4)
 
-<p align="center">
-  Build native Linux desktop apps with React Native, rendered with GTK4.
-</p>
+Build native Linux desktop apps with React Native, rendered with GTK4.
 
-<p align="center">
-  <a href="https://github.com/curiosity26/react-native-gtk4/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
-  <a href="https://www.npmjs.com/package/@curiosity26/react-native-gtk4"><img src="https://img.shields.io/npm/v/@curiosity26/react-native-gtk4?color=brightgreen&label=npm" alt="npm version" /></a>
-  <a href="https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml"><img src="https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml/badge.svg" alt="JS tests" /></a>
-  <a href="docs/getting-started.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome" /></a>
-</p>
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/@curiosity26/react-native-gtk4?color=brightgreen&label=npm)](https://www.npmjs.com/package/@curiosity26/react-native-gtk4)
+[![JS tests](https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml/badge.svg)](https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/curiosity26/react-native-gtk4/pulls)
 
 > See the official [React Native website](https://reactnative.dev/) for an
 > introduction to React Native.
