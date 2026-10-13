@@ -8,6 +8,10 @@
     "url": "git+https://github.com/curiosity26/react-native-gtk4.git",
     "directory": "packages/vector-icons"
   },
+  "homepage": "https://github.com/curiosity26/react-native-gtk4/tree/main/packages/vector-icons#readme",
+  "bugs": {
+    "url": "https://github.com/curiosity26/react-native-gtk4/issues"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
