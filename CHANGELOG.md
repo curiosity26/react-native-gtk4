@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.86.1 (2026-10-13)
+
+- Prebuilt hosts without a token, and for Debian 13, Fedora 44/45 and EL10 (0.86, from 0.85) (#63)
+
 ## 0.86.0 (2026-10-11)
 
 The React Native 0.86 line: React Native 0.86.3, branched from 0.85.0.
