@@ -53,14 +53,14 @@ The workflow:
 - **plan**: `scripts/release.js check`, then what a release would
   publish.
 - **host**, when this package has a new version, for each system
-  (Ubuntu 24.04 on the runner; Debian 13, Fedora 44 and EL10 in
-  `debian:13`, `fedora:44` and `almalinux:10` containers) and
+  (Ubuntu 24.04 on the runner; Debian 13, Fedora 44 and 45, and EL10 in
+  `debian:13`, `fedora:44`, `fedora:45` and `almalinux:10` containers) and
   architecture (x86_64 on `ubuntu-24.04`, aarch64 on `ubuntu-24.04-arm`):
   `scripts/prebuilt-host.js build` builds React Native's dependencies,
   Hermes and the host library from source, Debug and Release, and packs
   each install into
   `react-native-gtk4-host-<version>-<system>-<arch>-<debug|release>.tar.gz`
-  (`<system>`: `ubuntu24.04`, `debian13`, `fedora44` or `el10`).
+  (`<system>`: `ubuntu24.04`, `debian13`, `fedora44`, `fedora45` or `el10`).
   The absolute paths in its SDK file become tokens that unpacking fills
   in.
 - **publish**: `scripts/release.js version` writes the new versions and
@@ -96,7 +96,7 @@ git tag, like `github:curiosity26/react-native-gtk4#v0.87.0`, fetches it
 from the GitHub release `v<version>`, which needs no token), the package's
 `linux/` is the one it was built from, the system is one they're built
 for (Ubuntu 24.04 and derivatives like Linux Mint 22, Debian 13 and LMDE
-7, Fedora 44, or EL10: RHEL, CentOS Stream, AlmaLinux, Rocky Linux), and
+7, Fedora 44 and 45, or EL10: RHEL, CentOS Stream, AlmaLinux, Rocky Linux), and
 `ldd` finds every library it links. Otherwise, or with
 `RNGTK_NO_PREBUILT=1`, they build the host from source as before. Apps
 with native libraries also fetch React Native's sources for the headers
