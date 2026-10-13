@@ -21,8 +21,11 @@ headers=$deps/hermes-headers
 if ((!headers_only)); then
 
 # Same compiler as React Native's core (clang), so the C++ ABI matches.
+# React Native 0.83's jsi.h uses uint64_t without <cstdint>, which newer
+# libstdc++ (GCC 15: Fedora, EL10's toolset) no longer pulls in.
 cmake -S "$src" -B "$build" -G Ninja --log-level=ERROR -Wno-dev \
   -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
+  -DCMAKE_CXX_FLAGS="-include cstdint ${CXXFLAGS:-}" \
   -DJSI_DIR="$deps/react-native/packages/react-native/ReactCommon/jsi" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHERMES_ENABLE_DEBUGGER=True \
