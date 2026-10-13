@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.85.3 (2026-10-13)
+
+- [0.85] Merge release/0.84: npm publishing (#69)
+- [0.85] Merge release/0.84: prebuilt host id fix (#75)
+- [0.85] Merge release/0.84: Hermes headers for prebuilt hosts (#80)
+
 ## 0.85.2 (2026-10-13)
 
 - Prebuilt hosts without a token, and for Debian 13, Fedora 44/45 and EL10 (0.85, from 0.84) (#62)
