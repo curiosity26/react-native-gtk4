@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4",
-  "version": "0.87.1",
+  "version": "0.87.2",
   "description": "React Native for Linux on GTK4, an out-of-tree platform like react-native-windows and react-native-macos",
   "license": "MIT",
   "repository": {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.87.2 (2026-10-13)
+
+- Prebuilt hosts: hash only the linux/ files the package ships (#71)
+
 ## 0.87.1 (2026-10-13)
 
 - Prebuilt hosts without a token, and for Debian 13, Fedora 44 and EL10 (#59)
