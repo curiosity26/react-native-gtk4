@@ -175,4 +175,30 @@ describe('run-linux helpers', () => {
     assert.match(paths.hostDir({RNGTK_CACHE_DIR: '/c'}), new RegExp(`^/c/${rn.replace(/\./g, '\\.')}/host/[0-9a-f]{12}$`));
     assert.equal(paths.hostSourceId(), paths.hostSourceId());
   });
+
+  test('hostSourceId covers only the linux/ files the npm package ships', () => {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-source-id-'));
+    const write = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), {recursive: true});
+      fs.writeFileSync(path.join(dir, rel), text);
+    };
+    try {
+      write('package.json', JSON.stringify({files: ['linux/', '!linux/src/main.cc', '!linux/tests/']}));
+      write('rn-version.properties', 'reactNative=0.0.0\n');
+      write('linux/CMakeLists.txt', 'project(x)\n');
+      write('linux/src/host.cc', 'int a;\n');
+      const installed = paths.hostSourceId(dir);
+      // A repo checkout also has the files the package leaves out.
+      write('linux/src/main.cc', 'int main() {}\n');
+      write('linux/tests/test.cc', 'int t;\n');
+      write('linux/build/CMakeCache.txt', 'x\n');
+      assert.equal(paths.hostSourceId(dir), installed);
+      write('linux/src/host.cc', 'int b;\n');
+      assert.notEqual(paths.hostSourceId(dir), installed);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 });
