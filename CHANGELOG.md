@@ -14,7 +14,7 @@ The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
 - No host changes: the 0.84 fixes (font-scale commit hook, Native Animated mount props) carry over.
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
 
-## 0.84.1 (unreleased)
+## 0.84.1 (2026-10-11)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland
   too (GDK only computed the new size on the compositor's next configure,
@@ -31,7 +31,7 @@ The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
 - Builds with libstdc++ 14 (React Native's TimerManager.cpp lacks `<algorithm>`).
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
 
-## 0.83.1 (unreleased)
+## 0.83.1 (2026-10-11)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland
   too (GDK only computed the new size on the compositor's next configure,

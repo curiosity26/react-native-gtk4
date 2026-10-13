@@ -21,7 +21,7 @@ const {ensureDeps, ensureHost, run} = require('../lib/cli/runLinux');
 
 function system() {
   const s = prebuilt.prebuiltSystem(parseOsRelease(fs.readFileSync('/etc/os-release', 'utf8')));
-  if (!s) throw new Error('prebuilt hosts are built on Ubuntu 24.04');
+  if (!s) throw new Error('prebuilt hosts are built on the systems prebuiltSystem names (lib/cli/prebuilt.js)');
   return s;
 }
 
