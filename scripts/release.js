@@ -25,16 +25,21 @@
  *       Writes those versions and changelog sections (the release commit).
  *   scripts/release.js publish core|libraries [--dry-run]
  *       Publishes them, sets their dist-tags and tags them.
+ *   scripts/release.js npm [--dry-run]
+ *       Copies every version on GitHub Packages that npm doesn't have to
+ *       npm (the same tarballs), and npm's dist-tags to GitHub Packages'.
  */
 'use strict';
 
 const {execFileSync} = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const SCOPE = '@curiosity26';
 const REGISTRY = 'https://npm.pkg.github.com';
+const NPM = 'https://registry.npmjs.org';
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -201,6 +206,54 @@ function published(name, version, exec = execFileSync) {
   }
 }
 
+/** The flag that points npm at a registry for our scope (it wins over --registry and publishConfig). */
+function on(registry) {
+  return `--${SCOPE}:registry=${registry}`;
+}
+
+const byVersion = (a, b) => {
+  const [x, y] = [a, b].map(v => v.split('.').map(Number));
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
+
+/** A package's versions and dist-tags on a registry; none when it isn't there. */
+function listing(name, registry, exec = execFileSync) {
+  try {
+    const out = exec('npm', ['view', name, 'versions', 'dist-tags', '--json', on(registry)], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const j = JSON.parse(out);
+    return {versions: [].concat(j.versions || []), tags: j['dist-tags'] || {}};
+  } catch (e) {
+    if (/E404|404 Not Found|is not in this registry/.test(`${e.stderr}${e.stdout}`)) return {versions: [], tags: {}};
+    throw new Error(`npm view ${name} (${registry}): ${e.stderr || e.message}`);
+  }
+}
+
+/**
+ * What makes npm match GitHub Packages for one package: the versions to
+ * copy, oldest first, each published under its line's dist-tag (npm wants
+ * one, and latest would move backwards), then the dist-tags to set.
+ */
+function npmPlan(gh, npm) {
+  const copy = gh.versions
+    .filter(v => !npm.versions.includes(v))
+    .sort(byVersion)
+    .map(v => ({version: v, tag: `v${v.split('.').slice(0, 2).join('.')}-stable`}));
+  // The dist-tags after copying: each copy moves its tag, and a package's
+  // first version is latest too.
+  const after = {...npm.tags};
+  if (!npm.versions.length && copy.length) after.latest = copy[0].version;
+  for (const c of copy) after[c.tag] = c.version;
+  const have = new Set([...npm.versions, ...copy.map(c => c.version)]);
+  const tags = Object.entries(gh.tags)
+    .filter(([t, v]) => after[t] !== v && have.has(v))
+    .map(([tag, version]) => ({tag, version}));
+  return {copy, tags};
+}
+
 function branch() {
   if (process.env.GITHUB_REF_NAME && process.env.GITHUB_REF_TYPE !== 'tag') return process.env.GITHUB_REF_NAME;
   return git(ROOT, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -273,12 +326,37 @@ function publish(which, dryRun) {
   }
 }
 
+function toNpm(dryRun) {
+  const head = git(ROOT, ['rev-parse', 'HEAD']);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-npm-'));
+  for (const p of packages()) {
+    const name = p.pkg.name;
+    const {copy, tags} = npmPlan(listing(name, REGISTRY), listing(name, NPM));
+    if (!copy.length && !tags.length) console.log(`${name}: npm has it all`);
+    for (const c of copy) {
+      // Provenance says this run built it from HEAD: true for a version
+      // released from HEAD, not for an older one.
+      let built = false;
+      try {
+        built = git(ROOT, ['rev-parse', `${tagPrefix(p)}${c.version}^{commit}`]) === head;
+      } catch {}
+      sh('npm', ['pack', `${name}@${c.version}`, '--pack-destination', tmp, on(REGISTRY)]);
+      const tgz = path.join(tmp, `${name.slice(1).replace('/', '-')}-${c.version}.tgz`);
+      sh('npm', ['publish', tgz, '--access', 'public', '--tag', c.tag, `--provenance=${built}`, on(NPM), ...(dryRun ? ['--dry-run'] : [])]);
+    }
+    for (const t of tags) {
+      if (dryRun) console.log(`(dry run) npm dist-tag add ${name}@${t.version} ${t.tag}`);
+      else sh('npm', ['dist-tag', 'add', `${name}@${t.version}`, t.tag, on(NPM)]);
+    }
+  }
+}
+
 function fail(message) {
   console.error(message);
   process.exit(1);
 }
 
-module.exports = {line, packages, peerRange, distTags, tagPrefix, pathspecs, next, problems, published, writeChangelog, moveToLine};
+module.exports = {line, packages, peerRange, distTags, tagPrefix, pathspecs, next, problems, published, listing, npmPlan, writeChangelog, moveToLine};
 
 if (require.main === module) {
   const [cmd, ...args] = process.argv.slice(2);
@@ -304,8 +382,10 @@ if (require.main === module) {
     version();
   } else if (cmd === 'publish' && ['core', 'libraries'].includes(args[0])) {
     publish(args[0], args.includes('--dry-run'));
+  } else if (cmd === 'npm') {
+    toNpm(args.includes('--dry-run'));
   } else {
-    console.error('usage: release.js check | line | plan [--json] | version | publish core|libraries [--dry-run]');
+    console.error('usage: release.js check | line | plan [--json] | version | publish core|libraries [--dry-run] | npm [--dry-run]');
     process.exit(2);
   }
 }
