@@ -2,7 +2,8 @@
 
 The package and the library ports in `packages/` are published to GitHub
 Packages by [.github/workflows/release.yml](../.github/workflows/release.yml),
-from `main` or from a release line.
+from `main` or from a release line, and copied from there to npm
+(registry.npmjs.org) once that's turned on ([npm](#npm)).
 
 ## Versions
 
@@ -86,6 +87,41 @@ scripts/release.js check    # the versioning rule
 scripts/release.js plan     # what a release from here would publish
 npm pack --dry-run          # what the package contains
 ```
+
+## npm
+
+GitHub Packages is where a release publishes; npm gets a copy. With the
+repository variable `NPM_PUBLISH` set to `true`, the workflow's last job,
+**npm**, runs `scripts/release.js npm`: for each package, every version on
+GitHub Packages that npm doesn't have is copied over, the same tarball
+(so `prebuilt-hosts.json`, its checksums and its GitHub release URLs come
+along unchanged), oldest first, then npm's dist-tags are set to GitHub
+Packages'. It doesn't depend on the branch: a run on any line copies every
+line's versions. A version released from the commit the run is on gets npm
+provenance; an older one doesn't (its build wasn't this run). A release
+that stopped before npm is finished by the next run, or by one with
+"npm only" ticked, which releases nothing and just copies.
+
+npm authenticates the job by trusted publishing (OIDC from GitHub
+Actions, no secret). npm only lets a trusted publisher be added to a
+package that exists, so the first copy uses a token:
+
+1. On npmjs.com, create a granular access token with read and write on
+   the `@curiosity26` scope's packages, and add it to the repository's
+   Actions secrets as `NPM_TOKEN`.
+2. Add the repository variable `NPM_PUBLISH` = `true` (Settings, Secrets
+   and variables, Actions, Variables).
+3. Run Release on `main` with "publish" and "npm only" ticked: every
+   package and version goes to npm.
+4. For each package on npmjs.com (Settings, Trusted publishing): GitHub
+   Actions, user `curiosity26`, repository `react-native-gtk4`, workflow
+   `release.yml`, no environment, and tick "Allow npm dist-tag".
+5. Delete the `NPM_TOKEN` secret and the token, and set each package's
+   publishing access to "Require two-factor authentication and disallow
+   tokens".
+
+`scripts/release.js npm --dry-run` shows locally what a run would copy
+(it needs a token that reads GitHub Packages).
 
 ## How apps use the prebuilt hosts
 
