@@ -8,6 +8,10 @@
     "url": "git+https://github.com/curiosity26/react-native-gtk4.git",
     "directory": "packages/svg"
   },
+  "homepage": "https://github.com/curiosity26/react-native-gtk4/tree/main/packages/svg#readme",
+  "bugs": {
+    "url": "https://github.com/curiosity26/react-native-gtk4/issues"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
