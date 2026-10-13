@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-async-storage",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "Linux (GTK4) native module for @react-native-async-storage/async-storage, for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {

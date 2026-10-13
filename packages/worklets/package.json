@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-worklets",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "Linux (GTK4) native side of react-native-worklets, for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {

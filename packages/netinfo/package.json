@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-netinfo",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "Linux (GTK4) native module for @react-native-community/netinfo (GNetworkMonitor), for @curiosity26/react-native-gtk4",
   "license": "MIT",
   "repository": {
