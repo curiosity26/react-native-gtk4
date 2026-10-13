@@ -42,17 +42,11 @@ npx react-native init-linux
 npx react-native run-linux        # or: npm run linux
 ```
 
-The package is published on GitHub Packages; tell npm where to find the
-`@curiosity26` scope first (`~/.npmrc` or the app's `.npmrc`):
-
-```
-@curiosity26:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=<a GitHub token with read:packages>
-```
-
-GitHub Packages wants a token even to install public packages: a
-[personal access token (classic)](https://github.com/settings/tokens/new?scopes=read:packages)
-with `read:packages` is enough.
+The package is on the public npm registry, so no token or `.npmrc` is
+needed. (Releases publish to GitHub Packages first and copy the same
+tarballs to npm; to install from GitHub Packages instead, point the
+`@curiosity26` scope at `https://npm.pkg.github.com` with a token that has
+`read:packages`.)
 
 The package's version is React Native's major.minor plus a patch of its
 own (0.87.x for React Native 0.87). `latest` is the newest React Native

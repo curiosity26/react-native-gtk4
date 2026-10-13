@@ -2,6 +2,18 @@
   "name": "@curiosity26/react-native-gtk4",
   "version": "0.87.3",
   "description": "React Native for Linux on GTK4, an out-of-tree platform like react-native-windows and react-native-macos",
+  "keywords": [
+    "react",
+    "react-native",
+    "react-native-gtk4",
+    "linux",
+    "gtk",
+    "gtk4",
+    "gnome",
+    "desktop",
+    "cross-platform",
+    "app-framework"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

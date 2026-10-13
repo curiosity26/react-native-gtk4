@@ -1,180 +1,138 @@
-# react-native-gtk4
+# React Native for Linux (GTK4)
 
-React Native for Linux, rendered with GTK4. An out-of-tree platform package
-in the spirit of [react-native-windows](https://github.com/microsoft/react-native-windows)
-and [react-native-macos](https://github.com/microsoft/react-native-macos),
-published as `@curiosity26/react-native-gtk4` on GitHub Packages.
+Build native Linux desktop apps with React Native, rendered with GTK4.
 
-**Status: Phases 1 (core), 2 (desktop) and 3 (desktop parity) complete.** The GTK host runs React Native
-0.87.1 (Hermes, Fabric). `<View>` and `<Text>` render RN's styling with GSK
-and Pango: borders, radii, shadows, transforms, filters, gradients, nested
-text. Mouse and touch input drive Pressable, the Touchables, Button and
-hover. ScrollView scrolls with GTK's kinetic scrolling, FlatList and
-SectionList virtualize 10k rows, and Image loads assets, http, files and
-data URIs. TextInput, Switch and ActivityIndicator are GTK's own
-controls (input methods, clipboard and undo included). See
-[docs/components.md](docs/components.md). Apps bundle for their own `linux`
-platform: `Platform.OS === 'linux'`, `.linux.js` files, and Linux
-`Platform.constants` (distro, GTK version, Wayland or X11). In development
-apps load from Metro, with reload, fast refresh, LogBox and React Native
-DevTools; `fetch`, `XMLHttpRequest` and `WebSocket` run on libsoup
-([docs/dev-loop.md](docs/dev-loop.md)). The CLI adds Linux to any React
-Native app: `init-linux` and `run-linux`.
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/@curiosity26/react-native-gtk4?color=brightgreen&label=npm)](https://www.npmjs.com/package/@curiosity26/react-native-gtk4)
+[![JS tests](https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml/badge.svg)](https://github.com/curiosity26/react-native-gtk4/actions/workflows/js.yml)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/curiosity26/react-native-gtk4/pulls)
 
-**Phase 2 (desktop):** dark mode (`Appearance`,
-`useColorScheme`, libadwaita `PlatformColor`s that follow the desktop's
-style, [docs/apis.md](docs/apis.md)); text selection by mouse; keyboard
-focus, Tab order, focus rings and key events, `onMouseEnter`/`Leave`,
-`onAuxClick` and `tooltip`, with react-native-windows / react-native-macos
-props ([docs/components.md](docs/components.md#keyboard)); accessibility
-for Orca through AT-SPI, and `AccessibilityInfo`
-([docs/components.md](docs/components.md#accessibility)); Linking, AppState,
-Clipboard, font scaling, I18nManager RTL ([docs/apis.md](docs/apis.md)).
+> See the official [React Native website](https://reactnative.dev/) for an
+> introduction to React Native.
 
-**Phase 3 (desktop parity):** `<Modal>` opens a window of its
-own over the app: full screen or a dialog-sized sheet, fade and slide,
-transparent, nested, a modal dialog to Orca
-([docs/components.md](docs/components.md#modal)). `Alert.alert` and
-`Alert.prompt` on a GTK alert dialog, and file dialogs (`Dialogs` from
-`@curiosity26/react-native-gtk4`) on the desktop's file chooser
-([docs/apis.md](docs/apis.md#alert)). Context menus on any view
-(`contextMenu`, `ContextMenu`) and the app's menu bar (`MenuBar`), with
-submenus, checkbox and radio items and shortcuts
-([docs/components.md](docs/components.md#context-menus)). More windows
-(`Windows.open`), each a registered component in the same JS runtime,
-with their own size for `useWindowDimensions`
-([docs/apis.md](docs/apis.md#windows)); title bars of the app's own
-(`<TitleBar>`) and transparent windows
-([docs/apis.md](docs/apis.md#window-styles)). Drag and drop with
-react-native-macos' props (`draggedTypes`, `onDrop`): files, links, text
-and images in, selected text and `draggable` images out
-([docs/components.md](docs/components.md#drag-and-drop)). Desktop
-notifications with buttons (`Notifications`,
-[docs/apis.md](docs/apis.md#notifications)). Native modules and
-components in C++ and GTK: `init-linux-library` makes a library's `linux/`
-folder, and `run-linux` autolinks it
-([docs/native-modules.md](docs/native-modules.md)).
+[React Native](https://reactnative.dev) is a framework for building native
+apps with React. **React Native for Linux** brings it to the Linux desktop
+on [GTK4](https://www.gtk.org), the way
+[react-native-windows](https://github.com/microsoft/react-native-windows)
+and [react-native-macos](https://github.com/microsoft/react-native-macos)
+bring it to Windows and macOS: an out-of-tree platform you add to an
+existing React Native app, sharing its JavaScript with iOS, Android,
+Windows and macOS.
 
-## Quick start
+It runs React Native's New Architecture (Fabric, TurboModules, Hermes)
+in a C++ host that talks to GTK directly: views draw with GSK, text is
+laid out with Pango, and inputs, switches, menus, dialogs and file
+choosers are GTK's own, so apps follow the desktop's theme, dark mode and
+accessibility (Orca).
+
+![A new React Native app on GTK4](docs/images/new-app-release-wayland.png)
+
+## Quick links
+
+- [Getting started](docs/getting-started.md)
+- [Components](docs/components.md) and [APIs](docs/apis.md)
+- [Community libraries](docs/libraries.md)
+- [Native modules and components](docs/native-modules.md)
+- [Packaging apps](docs/packaging.md): Flatpak, .deb, .rpm
+- [Upgrading React Native](docs/upgrading.md)
+- [Architecture](docs/architecture.md) and [roadmap](docs/roadmap.md)
+
+## Requirements
+
+- **A GNOME-based desktop with GTK 4.14 or newer**, on X11 or Wayland:
+  - Ubuntu 24.04 and Linux Mint 22 (Cinnamon)
+  - Debian 13
+  - Fedora 44 and 45
+  - Enterprise Linux 10 (RHEL, CentOS Stream, AlmaLinux, Rocky Linux)
+
+  x86_64 and aarch64. Other distributions with GTK 4.14 build from source.
+  KDE is out of scope.
+- **Node.js 22.13 or newer.**
+- **clang, CMake and Ninja**, plus GTK's and libsoup's development
+  packages. `run-linux` checks for them and prints the install command for
+  your distribution; see [getting started](docs/getting-started.md#prerequisites).
+
+## Getting started
+
+Add Linux to a React Native app:
 
 ```sh
 npx @react-native-community/cli@20.2.0 init MyApp --version 0.87.1
 cd MyApp
-npm install @curiosity26/react-native-gtk4    # from GitHub Packages (see below)
-npx react-native init-linux                   # adds linux/, Metro's linux platform, "npm run linux"
-npx react-native run-linux                    # builds, starts Metro, opens the window
-npx react-native run-linux --release          # a self-contained build in linux/build/Release
+npm install @curiosity26/react-native-gtk4
+npx react-native init-linux      # adds linux/, Metro's linux platform, "npm run linux"
+npx react-native run-linux       # builds, starts Metro, opens the window
 ```
 
-The first `run-linux` builds React Native's C++ core and Hermes into
-`~/.cache/react-native-gtk4`, shared by all your apps; after that an app
-builds in seconds. Prerequisites per distribution, what each command does,
-and troubleshooting: [docs/getting-started.md](docs/getting-started.md).
+On the distributions above, `run-linux` downloads a prebuilt host library,
+so the first build takes seconds. Elsewhere it builds React Native's C++
+core and Hermes once into `~/.cache/react-native-gtk4`, shared by all your
+apps. `run-linux --release` makes a self-contained build, and
+`package-linux` turns it into a Flatpak, .deb or .rpm.
 
-The package is on GitHub Packages: add
-`@curiosity26:registry=https://npm.pkg.github.com` and a token with
-`read:packages` to `~/.npmrc` ([docs/getting-started.md](docs/getting-started.md#create-an-app)).
-Its version follows React Native's: 0.87.x for React Native 0.87, with
-older lines on `v0.83-stable` and so on.
+Apps bundle for their own `linux` platform: `Platform.OS === 'linux'` and
+`.linux.js` files. In development they load from Metro with fast refresh,
+LogBox and React Native DevTools.
 
-![A new React Native app on GTK4 (Release build, Wayland)](docs/images/new-app-release-wayland.png)
+Full walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
-## Working on this repository
+## React Native versions
 
-The example app in `examples/hello-world` runs on the repository's own
-host, `rn-gtk-host`, which also drives the self-tests and galleries. See
-[docs/building-react-native.md](docs/building-react-native.md) and
-[docs/architecture.md](docs/architecture.md).
+Each React Native minor version has its own line. The package's version is
+React Native's major.minor plus a patch of its own, and each line has a
+`v<major>.<minor>-stable` dist-tag:
+
+| React Native | Package | Install |
+| --- | --- | --- |
+| 0.87 | 0.87.x | `npm install @curiosity26/react-native-gtk4` (`latest`) |
+| 0.86 | 0.86.x | `npm install @curiosity26/react-native-gtk4@v0.86-stable` |
+| 0.85 | 0.85.x | `npm install @curiosity26/react-native-gtk4@v0.85-stable` |
+| 0.84 | 0.84.x | `npm install @curiosity26/react-native-gtk4@v0.84-stable` |
+| 0.83 | 0.83.x | `npm install @curiosity26/react-native-gtk4@v0.83-stable` |
+
+`main` tracks the newest React Native; older lines live on `release/0.83`
+to `release/0.86`. Reanimated and Worklets need React Native 0.86 or newer.
+
+## Community libraries
+
+Libraries with JavaScript only work as they are. For popular libraries
+with native code, this repository has Linux ports in
+[packages/](packages); install the port next to the library and
+`run-linux` autolinks it:
+
+| Library | Linux package |
+| --- | --- |
+| @react-native-async-storage/async-storage | `@curiosity26/react-native-gtk4-async-storage` |
+| @react-native-community/netinfo | `@curiosity26/react-native-gtk4-netinfo` |
+| react-native-safe-area-context | `@curiosity26/react-native-gtk4-safe-area-context` |
+| react-native-gesture-handler | `@curiosity26/react-native-gtk4-gesture-handler` |
+| react-native-screens | `@curiosity26/react-native-gtk4-screens` |
+| react-native-worklets | `@curiosity26/react-native-gtk4-worklets` |
+| react-native-reanimated | `@curiosity26/react-native-gtk4-reanimated` |
+| react-native-svg | `@curiosity26/react-native-gtk4-svg` |
+| react-native-webview | `@curiosity26/react-native-gtk4-webview` |
+| react-native-vector-icons | `@curiosity26/react-native-gtk4-vector-icons` |
+
+What each port covers, and React Navigation on Linux:
+[docs/libraries.md](docs/libraries.md).
+
+## Contributing
+
+The repository's own host, `rn-gtk-host`, runs the example app in
+`examples/hello-world` (the Showcase) and the self-tests:
 
 ```sh
 npm run start:hello-world   # terminal 1: Metro
-npm run dev:hello-world     # terminal 2: the app; Ctrl+R reloads, Ctrl+D dev menu
-npm test                    # Metro config and CLI unit tests
+npm run dev:showcase        # terminal 2: the Showcase; Ctrl+R reloads, Ctrl+D dev menu
+npm test                    # CLI, Metro config and release script tests
 scripts/test-new-app.sh     # end to end: new apps from the npm tarball
 ```
 
-![Hello World on GTK4 under Wayland](docs/images/hello-world-linux-wayland.png)
+Building React Native from source: [docs/building-react-native.md](docs/building-react-native.md).
+How releases are cut and published: [docs/releasing.md](docs/releasing.md).
+Issues and pull requests are welcome on
+[GitHub](https://github.com/curiosity26/react-native-gtk4/issues).
 
-## Targets
+## License
 
-- GNOME on Ubuntu/Debian and Fedora, and Linux Mint Cinnamon.
-- GTK 4.14 or newer (Ubuntu 24.04 / Mint 22.3). Newer GTK features are
-  runtime-checked.
-- X11 and Wayland are both first-class (Mint Cinnamon defaults to X11).
-- KDE is out of scope for this package.
-
-## Architecture
-
-New architecture only: a C++20 host on React Native's `ReactCxxPlatform`
-with Hermes, built with CMake, talking to the GTK C API directly. Fabric
-mount instructions land on GTK widgets that place children at Yoga frames
-and draw React Native styles with GSK. Text is measured with Pango, off the
-main thread.
-
-`linux/` builds the host as `librngtk_host.so` (CMake target
-`ReactNativeGtk::host`), which holds React Native's core. Apps call one
-function, `rngtk::runApp` ([linux/include/rngtk/App.h](linux/include/rngtk/App.h)):
-an app's `linux/main.cc` fills in its id, title and component, and its
-autolinked libraries' packages, and calls it. Native libraries build
-against React Native's C++, which the library exports, through
-`ReactNativeGtk::sdk` ([docs/native-modules.md](docs/native-modules.md)). The repository's test harness, `rn-gtk-host`, links the same sources
-directly. Threads: [docs/architecture.md](docs/architecture.md).
-
-## Phase 0 spike
-
-`spike/` is the first step: the host widgets a React Native `<View>` and
-`<Text>` will mount into, a Hello World, and a 1k/10k widget-count benchmark.
-Results and findings: [docs/phase0-results.md](docs/phase0-results.md).
-
-```sh
-sudo apt install libgtk-4-dev cmake ninja-build g++   # Ubuntu 24.04
-npm run spike:build
-spike/build/hello-world                  # opens the window
-spike/build/widget-benchmark --count 10000
-```
-
-Headless checks (needs `xvfb`, `mutter`, `weston`):
-
-```sh
-npm run spike:test:x11
-npm run spike:test:wayland
-scripts/bench-matrix.sh                  # writes spike/out/bench/results.md
-BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
-```
-
-## Roadmap
-
-0. Bootstrap: GTK host widgets, Hello World, widget benchmark, then the
-   React Native runtime build (Fantom / ReactCxxPlatform) mounting into them.
-   **Done.**
-1. Core components, dev loop (Metro, fast refresh), CLI (`init-linux`,
-   `run-linux`, app template, shared build cache). **Done.**
-2. Platform APIs, desktop props, accessibility. **Done.**
-3. Desktop parity: modals, windows, menus, drag and drop, dialogs,
-   notifications; native module template and autolinking. (No system
-   tray: stock GNOME has none.) **Done.**
-4. Packaging and community library ports: `package-linux` with the app's
-   identity in app.json, an installable tree with a `.desktop` file,
-   AppStream MetaInfo and icons, Flatpak, .deb and .rpm
-   ([docs/packaging.md](docs/packaging.md)); prebuilt hosts and the npm
-   release ([docs/releasing.md](docs/releasing.md)); ports of
-   async-storage, netinfo, safe-area-context, vector-icons, svg and
-   webview ([docs/libraries.md](docs/libraries.md)); upgrading React
-   Native ([docs/upgrading.md](docs/upgrading.md)). **Done.**
-5. Window customization: `transparent: true` for `Windows.open` and the
-   main window, and `titleBar: 'default' | 'hidden' | 'custom'` with a
-   `<TitleBar>` component that renders React content into the window's
-   title bar (`gtk_window_set_titlebar`, dragging through
-   GtkWindowHandle, window controls following `gtk-decoration-layout`).
-   Documented differences: no blur or vibrancy on GNOME, and Wayland
-   can't position windows or keep them on top.
-6. Gesture handler, Reanimated and Screens: react-native-screens' web
-   variants (native-stack as on the web), then react-native-gesture-handler
-   on GTK's gesture controllers, then react-native-reanimated (and
-   react-native-worklets) on their shared C++, with the host API they need
-   (the UIManager, the runtime executor, direct prop updates). See
-   [docs/library-assessments.md](docs/library-assessments.md).
-7. Releases: the package and the ports published to GitHub Packages from
-   `main` and each release line (`release/0.83`), versioned on React
-   Native's major.minor with their own patches
-   ([docs/releasing.md](docs/releasing.md)).
+React Native for Linux is [MIT licensed](LICENSE).
