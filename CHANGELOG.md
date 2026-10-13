@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.85.2 (2026-10-13)
+
+- Prebuilt hosts without a token, and for Debian 13, Fedora 44/45 and EL10 (0.85, from 0.84) (#62)
+
 ## 0.85.1 (2026-10-11)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland
