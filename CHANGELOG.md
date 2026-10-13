@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.84.2 (2026-10-13)
+
+- Prebuilt hosts without a token, and for Debian 13, Fedora 44/45 and EL10 (0.84, from 0.83) (#61)
+- Hosts build on Fedora 44/45 and EL10 with React Native 0.84 (from 0.83) (#65)
+
 ## 0.84.1 (2026-10-11)
 
 - Fix: `setSize` on a window that's already shown resizes it on Wayland
