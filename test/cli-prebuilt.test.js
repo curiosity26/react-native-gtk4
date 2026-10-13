@@ -22,7 +22,7 @@ const manifest = {
 };
 
 describe('prebuilt hosts', () => {
-  test('are for Ubuntu 24.04, Debian 13, Fedora 44, EL10 and what is based on them', () => {
+  test('are for Ubuntu 24.04, Debian 13, Fedora 44 and 45, EL10 and what is based on them', () => {
     const sys = prebuilt.prebuiltSystem;
     assert.equal(sys(NOBLE), 'ubuntu24.04');
     assert.equal(sys(MINT), 'ubuntu24.04');
@@ -32,6 +32,7 @@ describe('prebuilt hosts', () => {
     assert.equal(sys({ID: 'linuxmint', ID_LIKE: 'debian', VERSION_ID: '7', DEBIAN_CODENAME: 'trixie'}), 'debian13');
     assert.equal(sys({ID: 'debian', VERSION_ID: '12', VERSION_CODENAME: 'bookworm'}), null);
     assert.equal(sys({ID: 'fedora', VERSION_ID: '44'}), 'fedora44');
+    assert.equal(sys({ID: 'fedora', VERSION_ID: '45'}), 'fedora45');
     assert.equal(sys({ID: 'fedora', VERSION_ID: '42'}), null);
     assert.equal(sys({ID: 'rhel', ID_LIKE: 'fedora', VERSION_ID: '10.0'}), 'el10');
     assert.equal(sys({ID: 'centos', ID_LIKE: 'rhel fedora', VERSION_ID: '10'}), 'el10');
