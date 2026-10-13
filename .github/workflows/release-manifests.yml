@@ -1,0 +1,39 @@
+name: Release manifests
+
+# Attaches prebuilt-hosts.json to GitHub releases made before the release
+# workflow attached it, so packages installed from those tags find their
+# prebuilt hosts: for each version, the manifest in the package published
+# to GitHub Packages. See docs/releasing.md.
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: Versions, space-separated (e.g. 0.83.0 0.83.1 0.87.0)
+        required: true
+
+jobs:
+  attach:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: read
+    env:
+      NODE_AUTH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      VERSIONS: ${{ inputs.versions }}
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@curiosity26'
+          package-manager-cache: false
+      - name: Attach each package's manifest to its release
+        run: |
+          for v in $VERSIONS; do
+            dir=$(mktemp -d)
+            (cd "$dir" && npm pack "@curiosity26/react-native-gtk4@$v" --silent >/dev/null && tar -xzf ./*.tgz package/prebuilt-hosts.json)
+            jq -e --arg v "$v" '.version == $v' "$dir/package/prebuilt-hosts.json" >/dev/null
+            gh release upload "v$v" "$dir/package/prebuilt-hosts.json" --clobber --repo "$GITHUB_REPOSITORY"
+            echo "v$v: attached prebuilt-hosts.json"
+          done
