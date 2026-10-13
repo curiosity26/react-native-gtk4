@@ -177,4 +177,37 @@ describe('release versions', () => {
     assert.equal(release.published('x', '1.0.0', err('npm error code E404')), false);
     assert.throws(() => release.published('x', '1.0.0', err('npm error code E401')), /E401/);
   });
+
+  test("npm gets GitHub Packages' versions, oldest first, under their lines' tags", () => {
+    const gh = {versions: ['0.83.0', '0.87.0', '0.83.1', '0.87.1'], tags: {latest: '0.87.1', 'v0.87-stable': '0.87.1', 'v0.83-stable': '0.83.1'}};
+    // A new package: the copies set every tag but latest (the first one).
+    assert.deepEqual(release.npmPlan(gh, {versions: [], tags: {}}), {
+      copy: [
+        {version: '0.83.0', tag: 'v0.83-stable'},
+        {version: '0.83.1', tag: 'v0.83-stable'},
+        {version: '0.87.0', tag: 'v0.87-stable'},
+        {version: '0.87.1', tag: 'v0.87-stable'},
+      ],
+      tags: [{tag: 'latest', version: '0.87.1'}],
+    });
+    // Up to date: nothing.
+    assert.deepEqual(release.npmPlan(gh, gh), {copy: [], tags: []});
+    // An older version copied late moves its tag back, so it's set again.
+    const npm = {versions: ['0.83.1', '0.87.0', '0.87.1'], tags: {latest: '0.87.1', 'v0.87-stable': '0.87.1', 'v0.83-stable': '0.83.1'}};
+    assert.deepEqual(release.npmPlan(gh, npm), {
+      copy: [{version: '0.83.0', tag: 'v0.83-stable'}],
+      tags: [{tag: 'v0.83-stable', version: '0.83.1'}],
+    });
+  });
+
+  test("a registry's listing: one version, or a 404 as none", () => {
+    assert.deepEqual(release.listing('x', 'r', () => '{"versions": "0.87.0", "dist-tags": {"latest": "0.87.0"}}'), {
+      versions: ['0.87.0'],
+      tags: {latest: '0.87.0'},
+    });
+    const e404 = () => {
+      throw Object.assign(new Error('npm'), {stderr: 'npm error code E404', stdout: ''});
+    };
+    assert.deepEqual(release.listing('x', 'r', e404), {versions: [], tags: {}});
+  });
 });
