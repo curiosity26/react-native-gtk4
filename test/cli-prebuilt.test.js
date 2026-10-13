@@ -22,12 +22,23 @@ const manifest = {
 };
 
 describe('prebuilt hosts', () => {
-  test('are for Ubuntu 24.04 and what is based on it', () => {
-    assert.equal(prebuilt.prebuiltSystem(NOBLE), 'ubuntu24.04');
-    assert.equal(prebuilt.prebuiltSystem(MINT), 'ubuntu24.04');
-    assert.equal(prebuilt.prebuiltSystem({ID: 'ubuntu', VERSION_CODENAME: 'plucky'}), null);
-    assert.equal(prebuilt.prebuiltSystem({ID: 'fedora', VERSION_ID: '42'}), null);
-    assert.equal(prebuilt.prebuiltSystem({ID: 'debian', VERSION_CODENAME: 'trixie'}), null);
+  test('are for Ubuntu 24.04, Debian 13, Fedora 44 and 45, EL10 and what is based on them', () => {
+    const sys = prebuilt.prebuiltSystem;
+    assert.equal(sys(NOBLE), 'ubuntu24.04');
+    assert.equal(sys(MINT), 'ubuntu24.04');
+    assert.equal(sys({ID: 'ubuntu', VERSION_CODENAME: 'plucky'}), null);
+    assert.equal(sys({ID: 'pop', ID_LIKE: 'ubuntu debian', UBUNTU_CODENAME: 'jammy'}), null);
+    assert.equal(sys({ID: 'debian', VERSION_ID: '13', VERSION_CODENAME: 'trixie'}), 'debian13');
+    assert.equal(sys({ID: 'linuxmint', ID_LIKE: 'debian', VERSION_ID: '7', DEBIAN_CODENAME: 'trixie'}), 'debian13');
+    assert.equal(sys({ID: 'debian', VERSION_ID: '12', VERSION_CODENAME: 'bookworm'}), null);
+    assert.equal(sys({ID: 'fedora', VERSION_ID: '44'}), 'fedora44');
+    assert.equal(sys({ID: 'fedora', VERSION_ID: '45'}), 'fedora45');
+    assert.equal(sys({ID: 'fedora', VERSION_ID: '42'}), null);
+    assert.equal(sys({ID: 'rhel', ID_LIKE: 'fedora', VERSION_ID: '10.0'}), 'el10');
+    assert.equal(sys({ID: 'centos', ID_LIKE: 'rhel fedora', VERSION_ID: '10'}), 'el10');
+    assert.equal(sys({ID: 'almalinux', ID_LIKE: 'rhel centos fedora', VERSION_ID: '10.0'}), 'el10');
+    assert.equal(sys({ID: 'rocky', ID_LIKE: 'rhel centos fedora', VERSION_ID: '9.6'}), null);
+    assert.equal(sys({ID: 'arch'}), null);
   });
 
   test('findPrebuilt matches the package, the system, the architecture and the build', () => {
@@ -40,9 +51,39 @@ describe('prebuilt hosts', () => {
     assert.equal(find({release: false, arch: 'x86_64'}).sha256, 'ba7');
     assert.match(find({release: false, arch: 'aarch64'}).reason, /no prebuilt/);
     assert.match(find({release: true, arch: 'aarch64', sourceId: 'changed'}).reason, /isn't the one/);
-    assert.match(find({release: true, arch: 'aarch64', osRelease: {ID: 'fedora'}}).reason, /Ubuntu 24\.04/);
+    assert.match(find({release: true, arch: 'aarch64', osRelease: {ID: 'arch'}}).reason, /Ubuntu 24\.04/);
     assert.match(find({release: true, arch: 'aarch64', env: {RNGTK_NO_PREBUILT: '1'}}).reason, /RNGTK_NO_PREBUILT/);
     assert.match(find({release: true, manifest: null}).reason, /no prebuilt hosts/);
+  });
+
+  test('a package without a manifest fetches its release\'s, where prebuilts could be used', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-prebuilt-'));
+    try {
+      const fetched = [];
+      const fetch = () => {
+        fetched.push(true);
+        return {...manifest, hostSourceId: 'other'};
+      };
+      const logs = [];
+      const install = o =>
+        prebuilt.installPrebuilt(dir, '/deps', {release: true, run: () => {}, log: m => logs.push(m), fetch, manifest: null, sourceId: 'abc123', arch: 'aarch64', env: {}, ...o});
+      assert.equal(install({osRelease: NOBLE}), null);
+      assert.equal(fetched.length, 1);
+      assert.match(logs.pop(), /isn't the one/);
+      install({osRelease: {ID: 'arch'}});
+      install({osRelease: NOBLE, env: {RNGTK_NO_PREBUILT: '1'}});
+      install({osRelease: NOBLE, manifest: {...manifest, hostSourceId: 'other'}});
+      assert.equal(fetched.length, 1);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  test('the release manifest is on the GitHub release of the version', () => {
+    assert.equal(
+      prebuilt.releaseManifestUrl('0.83.1'),
+      'https://github.com/curiosity26/react-native-gtk4/releases/download/v0.83.1/prebuilt-hosts.json',
+    );
   });
 
   test('relocate fills in where the host and the dependencies are', () => {
