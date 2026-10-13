@@ -114,8 +114,10 @@ with the template's; `--app-id org.example.MyApp` sets the application id.
   flatpak/                             flatpak-builder's state and source archives (package-linux --format flatpak)
 ```
 
-**Prebuilt hosts.** On Ubuntu 24.04 and distributions based on it (Linux
-Mint 22), a released package downloads the host library prebuilt (from
+**Prebuilt hosts.** On Ubuntu 24.04 (and Linux Mint 22), Debian 13 (and
+LMDE 7), Fedora 44, and Enterprise Linux 10 (RHEL, CentOS Stream,
+AlmaLinux, Rocky Linux), a released package, or one installed from a
+release's git tag, downloads the host library prebuilt (from
 the GitHub release, checked against the checksums the package lists)
 instead of fetching React Native and building Hermes and the host: the
 first app takes seconds. Apps with native libraries also fetch React
