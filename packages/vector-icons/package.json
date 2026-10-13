@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4-vector-icons",
-  "version": "0.87.1",
+  "version": "0.87.2",
   "description": "Linux (GTK4) font loading for react-native-vector-icons and @react-native-vector-icons/*, for @curiosity26/react-native-gtk4",
   "keywords": [
     "react-native",
