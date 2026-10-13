@@ -13,7 +13,8 @@ name: Release
 # "publish" ticked it releases: for the package, prebuilt host libraries
 # for x86_64 and aarch64 (Debug for run-linux, Release for package-linux)
 # and a GitHub release, v<version>, with them attached, which the package
-# lists with their checksums (prebuilt-hosts.json); for each port, a tag,
+# lists with their checksums (prebuilt-hosts.json, attached to the release
+# too, for installs from a git tag); for each port, a tag,
 # <name>@<version>. Unticked it's a dry run: it builds and packs
 # everything, runs `npm publish --dry-run`, and commits and publishes
 # nothing.
@@ -175,9 +176,9 @@ jobs:
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             # A run that stopped before publishing the package: this run's hosts.
-            gh release upload "v$VERSION" dist/*.tar.gz --clobber
+            gh release upload "v$VERSION" dist/*.tar.gz prebuilt-hosts.json --clobber
           else
-            gh release create "v$VERSION" dist/*.tar.gz --target "$(git rev-parse HEAD)" \
+            gh release create "v$VERSION" dist/*.tar.gz prebuilt-hosts.json --target "$(git rev-parse HEAD)" \
               --title "v$VERSION" --notes-file notes.md --latest="$LATEST"
           fi
       - name: Publish the package

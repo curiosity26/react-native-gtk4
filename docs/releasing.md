@@ -65,8 +65,8 @@ The workflow:
   (`Release: core 0.87.1, svg 0.87.3`) and pushes; runs the tests; for
   this package, writes `prebuilt-hosts.json` (the four tarballs' sha256,
   the package's host source id, the release's download URL), creates the
-  GitHub release `v<version>` on the release commit with the tarballs and
-  the CHANGELOG.md section as notes (the repository's latest release only
+  GitHub release `v<version>` on the release commit with the tarballs,
+  `prebuilt-hosts.json` and the CHANGELOG.md section as notes (the repository's latest release only
   from `main`), and publishes it; then publishes each port with a new
   version and tags it `<name>@<version>`. Each goes out under the branch's
   dist-tags.
@@ -88,11 +88,18 @@ npm pack --dry-run          # what the package contains
 
 `run-linux` and `package-linux` look for a prebuilt host before building
 one (lib/cli/prebuilt.js). They use it when the package has
-`prebuilt-hosts.json` (only published packages do), the package's
+`prebuilt-hosts.json` (published packages do; a package installed from a
+git tag, like `github:curiosity26/react-native-gtk4#v0.87.0`, fetches it
+from the GitHub release `v<version>`, which needs no token), the package's
 `linux/` is the one it was built from, the system is Ubuntu 24.04 or
 based on it, and `ldd` finds every library it links. Otherwise, or with
 `RNGTK_NO_PREBUILT=1`, they build the host from source as before. Apps
 with native libraries also fetch React Native's sources for the headers
 (`fetch-rn-deps.py`, then `build-hermes.sh --headers-only`).
+
+Releases from before the manifest was attached to them get it from
+[.github/workflows/release-manifests.yml](../.github/workflows/release-manifests.yml):
+run it by hand with the versions, and it copies each published package's
+`prebuilt-hosts.json` onto its GitHub release.
 
 To move to a new React Native version, see [upgrading.md](upgrading.md).

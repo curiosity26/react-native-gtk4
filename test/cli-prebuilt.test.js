@@ -45,6 +45,36 @@ describe('prebuilt hosts', () => {
     assert.match(find({release: true, manifest: null}).reason, /no prebuilt hosts/);
   });
 
+  test('a package without a manifest fetches its release\'s, where prebuilts could be used', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-prebuilt-'));
+    try {
+      const fetched = [];
+      const fetch = () => {
+        fetched.push(true);
+        return {...manifest, hostSourceId: 'other'};
+      };
+      const logs = [];
+      const install = o =>
+        prebuilt.installPrebuilt(dir, '/deps', {release: true, run: () => {}, log: m => logs.push(m), fetch, manifest: null, sourceId: 'abc123', arch: 'aarch64', env: {}, ...o});
+      assert.equal(install({osRelease: NOBLE}), null);
+      assert.equal(fetched.length, 1);
+      assert.match(logs.pop(), /isn't the one/);
+      install({osRelease: {ID: 'fedora', VERSION_ID: '44'}});
+      install({osRelease: NOBLE, env: {RNGTK_NO_PREBUILT: '1'}});
+      install({osRelease: NOBLE, manifest: {...manifest, hostSourceId: 'other'}});
+      assert.equal(fetched.length, 1);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  test('the release manifest is on the GitHub release of the version', () => {
+    assert.equal(
+      prebuilt.releaseManifestUrl('0.83.1'),
+      'https://github.com/curiosity26/react-native-gtk4/releases/download/v0.83.1/prebuilt-hosts.json',
+    );
+  });
+
   test('relocate fills in where the host and the dependencies are', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rngtk-prebuilt-'));
     try {
