@@ -2,6 +2,15 @@
   "name": "@curiosity26/react-native-gtk4-vector-icons",
   "version": "0.87.1",
   "description": "Linux (GTK4) font loading for react-native-vector-icons and @react-native-vector-icons/*, for @curiosity26/react-native-gtk4",
+  "keywords": [
+    "react-native",
+    "react-native-gtk4",
+    "linux",
+    "gtk4",
+    "react-native-vector-icons",
+    "@react-native-vector-icons",
+    "icons"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
