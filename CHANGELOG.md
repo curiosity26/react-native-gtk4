@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.83.4 (2026-10-13)
+
+- [0.83] Prebuilt hosts: fetch the Hermes headers even without autolinked libraries (#78)
+
 ## 0.83.3 (2026-10-13)
 
 - [0.83] Prebuilt hosts: hash only the linux/ files the package ships (#72)
