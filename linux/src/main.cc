@@ -3401,6 +3401,15 @@ graphene_point_t center_in(SurfaceId window, const char *id) {
 }
 
 // The GtkWindowControls under `widget`.
+// The width a widget was given, with its CSS margins: what
+// gtk_widget_measure's sizes compare with (gtk_widget_get_width leaves the
+// margins out).
+int allocated_width(GtkWidget *widget) {
+  GtkAllocation a;
+  gtk_widget_get_allocation(widget, &a);
+  return a.width;
+}
+
 std::vector<GtkWidget *> window_controls(GtkWidget *widget) {
   std::vector<GtkWidget *> out;
   std::function<void(GtkWidget *)> walk = [&](GtkWidget *w) {
@@ -3452,7 +3461,7 @@ void add_titlebar_steps() {
                              nullptr);
           now += gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c))
                      ? " empty"
-                     : " " + std::to_string(gtk_widget_get_width(c)) + "/" + std::to_string(natural) + "px";
+                     : " " + std::to_string(allocated_width(c)) + "/" + std::to_string(natural) + "px";
         }
         if (now != seen) printf("  %s\n", (seen = now).c_str());
         if (controls.size() != 2) return false;
@@ -3464,7 +3473,7 @@ void add_titlebar_steps() {
           bool empty = gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c));
           // (This window isn't resizable: no maximize button; the frame
           // is measured for one that is.)
-          if (!empty && (natural <= 0 || gtk_widget_get_width(c) < natural)) return false;
+          if (!empty && (natural <= 0 || allocated_width(c) < natural)) return false;
           some |= !empty;
         }
         char *layout = nullptr;
