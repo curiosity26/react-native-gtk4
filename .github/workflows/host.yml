@@ -7,13 +7,12 @@ name: Host
 # by ccache.
 
 on:
-  push:
-    branches: [main]
+  # Pull requests only: what merges has already passed here.
   pull_request:
 
 concurrency:
   group: host-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   self-tests:
