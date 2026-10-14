@@ -3443,6 +3443,18 @@ void add_titlebar_steps() {
       [] {},
       [] {
         auto controls = window_controls(by_id("titlebar"));
+        // What it sees, each time that changes (for a timeout's log).
+        static std::string seen;
+        std::string now = std::to_string(controls.size()) + " controls:";
+        for (GtkWidget *c : controls) {
+          int natural = 0, unused;
+          gtk_widget_measure(c, GTK_ORIENTATION_HORIZONTAL, -1, &unused, &natural, nullptr,
+                             nullptr);
+          now += gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c))
+                     ? " empty"
+                     : " " + std::to_string(gtk_widget_get_width(c)) + "/" + std::to_string(natural) + "px";
+        }
+        if (now != seen) printf("  %s\n", (seen = now).c_str());
         if (controls.size() != 2) return false;
         bool some = false;
         for (GtkWidget *c : controls) {

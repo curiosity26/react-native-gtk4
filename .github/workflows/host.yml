@@ -2,7 +2,7 @@ name: Host
 
 # Builds rn-gtk-host (the GTK host and its test harness) and runs every
 # gallery self-test (ctest) headless, under GNOME's compositor (Wayland) and
-# Xvfb (X11). React Native, Hermes and the third-party C++ libraries are
+# Xvfb with mutter as its window manager (X11). React Native, Hermes and the third-party C++ libraries are
 # cached by the versions and scripts that make them; the host's own objects
 # by ccache.
 
@@ -32,15 +32,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             clang cmake ninja-build pkg-config python3 ccache \
             libgtk-4-dev libadwaita-1-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev \
-            xvfb xauth mutter dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 \
+            xvfb xauth x11-utils mutter dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 \
             fonts-dejavu-core
       - uses: actions/setup-node@v7
         with:
           node-version: 24
 
+      # (restore and save apart: a cache step saves only when the whole job
+      # passes, and these are worth keeping when a self-test fails.)
       - name: Restore React Native, Hermes and the C++ dependencies
         id: deps
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: third-party/deps
           key: deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rn-version.properties', 'scripts/fetch-rn-deps.py', 'scripts/build-hermes.sh', 'scripts/codegen-deps/**') }}
@@ -49,6 +51,12 @@ jobs:
         run: |
           python3 scripts/fetch-rn-deps.py
           scripts/build-hermes.sh
+      - name: Save them
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: third-party/deps
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Bundle the example
         run: |
@@ -56,7 +64,8 @@ jobs:
           npm run bundle:hello-world
 
       - name: Restore ccache
-        uses: actions/cache@v5
+        id: ccache
+        uses: actions/cache/restore@v5
         with:
           path: .ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
@@ -68,9 +77,15 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build/linux
           ccache --show-stats
+      - name: Save ccache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v5
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Self-tests on Wayland (mutter)
         run: scripts/run-headless.sh wayland -- ctest --test-dir build/linux --output-on-failure
       - name: Self-tests on X11 (Xvfb)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dbus-run-session -- scripts/run-headless.sh x11 -- ctest --test-dir build/linux --output-on-failure
+        run: scripts/run-headless.sh x11 -- ctest --test-dir build/linux --output-on-failure
