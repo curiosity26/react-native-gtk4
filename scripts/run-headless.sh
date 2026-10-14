@@ -19,6 +19,7 @@ case "$backend" in
       env GDK_BACKEND=x11 "$@"
     ;;
   wayland)
+    export RNGTK_SCRIPTS=$(cd "$(dirname "$0")" && pwd)
     exec dbus-run-session -- bash -c '
       set -euo pipefail
       sock=wayland-rngtk-$$
@@ -27,10 +28,13 @@ case "$backend" in
       mpid=$!
       for _ in $(seq 100); do [[ -S "$XDG_RUNTIME_DIR/$sock" ]] && break; sleep 0.1; done
       [[ -S "$XDG_RUNTIME_DIR/$sock" ]] || { cat "$XDG_RUNTIME_DIR/mutter.log"; exit 1; }
+      # A keyboard on the seat, or mutter never activates a window.
+      coproc kbd { "${PYTHON:-python3}" "$RNGTK_SCRIPTS/mutter-keyboard.py"; }
+      read -r -u "${kbd[0]}" ready || { echo "mutter-keyboard.py failed" >&2; exit 1; }
       set +e
       WAYLAND_DISPLAY=$sock GDK_BACKEND=wayland "$@"
       status=$?
-      kill $mpid 2>/dev/null; wait $mpid 2>/dev/null
+      kill $kbd_PID $mpid 2>/dev/null; wait $mpid 2>/dev/null
       exit $status
     ' bash "$@"
     ;;

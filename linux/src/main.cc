@@ -1618,7 +1618,9 @@ void add_controls_steps() {
         int secure = ink("secure"), plain = ink("plain");
         if (secure < 0 || plain < 0) return false;
         printf("  ink: secure %d px, plain %d px\n", secure, plain);
-        if (!(secure < plain / 2)) check(false, "secure input draws less ink");
+        // Bullets draw less ink than "WWWWWW" in some fonts and more in
+        // others (DejaVu's are large): the same text would draw the same.
+        if (std::abs(secure - plain) * 4 < plain) check(false, "secure input draws other ink than plain");
         return true;
       }});
   static float multi_before = 0;
