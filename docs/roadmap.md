@@ -103,22 +103,9 @@ folder, and `run-linux` autolinks it
 
 ## The Phase 0 spike
 
-`spike/` is the first step: the host widgets a React Native `<View>` and
-`<Text>` will mount into, a Hello World, and a 1k/10k widget-count benchmark.
-Results and findings: [phase0-results.md](phase0-results.md).
-
-```sh
-sudo apt install libgtk-4-dev cmake ninja-build g++   # Ubuntu 24.04
-npm run spike:build
-spike/build/hello-world                  # opens the window
-spike/build/widget-benchmark --count 10000
-```
-
-Headless checks (needs `xvfb`, `mutter`, `weston`):
-
-```sh
-npm run spike:test:x11
-npm run spike:test:wayland
-scripts/bench-matrix.sh                  # writes spike/out/bench/results.md
-BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
-```
+Phase 0 was a standalone spike: the host widgets a React Native `<View>` and
+`<Text>` mount into, a Hello World, and a 1k/10k widget-count benchmark.
+Results and findings: [phase0-results.md](phase0-results.md). The widgets
+grew into `linux/widgets/`, and the spike's apps were removed once the real
+host replaced them; they remain in the git history (`spike/` before the
+removal commit).

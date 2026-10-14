@@ -1,4 +1,4 @@
-// Small helpers shared by the spike apps: screenshots, pixel probes, stats.
+// Small helpers for rn-gtk-host's self-tests: screenshots, pixel probes, stats.
 #pragma once
 
 #include <gtk/gtk.h>
