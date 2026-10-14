@@ -4718,7 +4718,9 @@ class Module final : public rngtk::CxxModule<Module> {
     auto next = std::make_shared<std::function<void(double)>>();
     *next = [run, next](double t) {
       if (run->count == 0) run->first = t;
-      else if (t <= run->last) run->increasing = false;
+      // (Never backwards. Two frames close together can share a time: GDK
+      // smooths frame times, so an unthrottled X11 clock repeats one.)
+      else if (t < run->last) run->increasing = false;
       run->last = t;
       run->count++;
       if (--run->left > 0) {
