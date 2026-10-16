@@ -78,7 +78,8 @@ The workflow:
 A package's tag is made once it's published, so a run that stops halfway
 can be run again: a release commit without its tags goes out at its
 versions, and what's already on GitHub Packages is skipped. The run pushes
-to the branch, so the branch has to accept pushes from GitHub Actions.
+the release commit to the branch: with the release app's token when the
+app is set up ([Branch protection](#branch-protection)), else GITHUB_TOKEN.
 
 Locally:
 
@@ -87,6 +88,35 @@ scripts/release.js check    # the versioning rule
 scripts/release.js plan     # what a release from here would publish
 npm pack --dry-run          # what the package contains
 ```
+
+## Branch protection
+
+`main` and `release/*` take changes only through pull requests whose checks
+pass: the rulesets in [.github/rulesets](../.github/rulesets) block direct
+pushes, force pushes and deletion, and require the JS tests (`test`) and,
+on `main`, the host build and self-tests (`self-tests`, from
+[host.yml](../.github/workflows/host.yml); the lines get it once it's
+cherry-picked into them). No approving review is required.
+
+The one direct push is the release commit. GITHUB_TOKEN can't be put on a
+ruleset's bypass list, so the release pushes it as a GitHub App of the
+repository's own that is. Setting it up, once (before turning the rulesets
+on, or releases can't push):
+
+1. Create the app at <https://github.com/settings/apps/new>: any name
+   (e.g. `rngtk-release`), the repository as its homepage, Webhook
+   "Active" unticked, Repository permissions: Contents "Read and write",
+   only on this account.
+2. On the app's page: note its App ID, "Generate a private key" (a `.pem`
+   file downloads), and "Install App" on this repository only.
+3. Repository Settings, Secrets and variables, Actions: a variable
+   `RELEASE_APP_ID` (the App ID) and a secret `RELEASE_APP_PRIVATE_KEY`
+   (the `.pem` file's contents).
+4. Repository Settings, Rules, Rulesets, New ruleset, Import a ruleset:
+   `.github/rulesets/main.json`, then `.github/rulesets/release-lines.json`.
+   In each, Bypass list, Add bypass, the app; then Create.
+
+A release dry run then shows "The release app's token" step passing.
 
 ## npm
 
