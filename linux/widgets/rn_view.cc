@@ -829,7 +829,7 @@ static bool contains(GtkWidget *widget, graphene_point_t p) {
 }
 
 // Widgets mounted for React views (they carry a tag; RNView/RNText also
-// count, for the spike). GTK widgets in between or inside (a scroll
+// count). GTK widgets in between or inside (a scroll
 // view's scrolled window, a text input's GtkText) are passed through but
 // never hit themselves.
 static bool is_react_widget(GtkWidget *widget) {

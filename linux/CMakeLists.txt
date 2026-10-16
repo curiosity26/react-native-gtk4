@@ -45,7 +45,7 @@ endif()
 
 # In this repository (not in the npm package) the self-test harness and
 # examples come along.
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../spike/src/harness.cc)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harness/harness.cc)
   set(RNGTK_IN_REPO ON)
 else()
   set(RNGTK_IN_REPO OFF)
@@ -305,7 +305,7 @@ function(rngtk_relax_upstream_warnings dir)
 endfunction()
 rngtk_relax_upstream_warnings(${CMAKE_CURRENT_SOURCE_DIR})
 
-# GTK widgets (also used by the Phase 0 spike)
+# GTK widgets
 add_library(rngtk_widgets STATIC widgets/rn_view.cc widgets/rn_text.cc
             widgets/rn_scroll_view.cc widgets/rn_text_input.cc
             widgets/rn_css.cc)
@@ -536,8 +536,8 @@ if(NOT RNGTK_BUILD_HARNESS)
   return()
 endif()
 
-add_executable(rn-gtk-host src/main.cc ../spike/src/harness.cc)
-target_include_directories(rn-gtk-host PRIVATE ../spike/src)
+add_executable(rn-gtk-host src/main.cc harness/harness.cc)
+target_include_directories(rn-gtk-host PRIVATE harness)
 # The native library template's module and component (GalleryNativeModule),
 # registered as a package the way autolinking registers an app's.
 set(RNGTK_TEMPLATE_LIBRARY ${CMAKE_CURRENT_SOURCE_DIR}/../template-library/linux)

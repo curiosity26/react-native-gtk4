@@ -1618,7 +1618,9 @@ void add_controls_steps() {
         int secure = ink("secure"), plain = ink("plain");
         if (secure < 0 || plain < 0) return false;
         printf("  ink: secure %d px, plain %d px\n", secure, plain);
-        if (!(secure < plain / 2)) check(false, "secure input draws less ink");
+        // Bullets draw less ink than "WWWWWW" in some fonts and more in
+        // others (DejaVu's are large): the same text would draw the same.
+        if (std::abs(secure - plain) * 4 < plain) check(false, "secure input draws other ink than plain");
         return true;
       }});
   static float multi_before = 0;
@@ -3399,6 +3401,15 @@ graphene_point_t center_in(SurfaceId window, const char *id) {
 }
 
 // The GtkWindowControls under `widget`.
+// The width a widget was given, with its CSS margins: what
+// gtk_widget_measure's sizes compare with (gtk_widget_get_width leaves the
+// margins out).
+int allocated_width(GtkWidget *widget) {
+  GtkAllocation a;
+  gtk_widget_get_allocation(widget, &a);
+  return a.width;
+}
+
 std::vector<GtkWidget *> window_controls(GtkWidget *widget) {
   std::vector<GtkWidget *> out;
   std::function<void(GtkWidget *)> walk = [&](GtkWidget *w) {
@@ -3441,6 +3452,18 @@ void add_titlebar_steps() {
       [] {},
       [] {
         auto controls = window_controls(by_id("titlebar"));
+        // What it sees, each time that changes (for a timeout's log).
+        static std::string seen;
+        std::string now = std::to_string(controls.size()) + " controls:";
+        for (GtkWidget *c : controls) {
+          int natural = 0, unused;
+          gtk_widget_measure(c, GTK_ORIENTATION_HORIZONTAL, -1, &unused, &natural, nullptr,
+                             nullptr);
+          now += gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c))
+                     ? " empty"
+                     : " " + std::to_string(allocated_width(c)) + "/" + std::to_string(natural) + "px";
+        }
+        if (now != seen) printf("  %s\n", (seen = now).c_str());
         if (controls.size() != 2) return false;
         bool some = false;
         for (GtkWidget *c : controls) {
@@ -3450,7 +3473,7 @@ void add_titlebar_steps() {
           bool empty = gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(c));
           // (This window isn't resizable: no maximize button; the frame
           // is measured for one that is.)
-          if (!empty && (natural <= 0 || gtk_widget_get_width(c) < natural)) return false;
+          if (!empty && (natural <= 0 || allocated_width(c) < natural)) return false;
           some |= !empty;
         }
         char *layout = nullptr;
@@ -4695,7 +4718,9 @@ class Module final : public rngtk::CxxModule<Module> {
     auto next = std::make_shared<std::function<void(double)>>();
     *next = [run, next](double t) {
       if (run->count == 0) run->first = t;
-      else if (t <= run->last) run->increasing = false;
+      // (Never backwards. Two frames close together can share a time: GDK
+      // smooths frame times, so an unthrottled X11 clock repeats one.)
+      else if (t < run->last) run->increasing = false;
       run->last = t;
       run->count++;
       if (--run->left > 0) {

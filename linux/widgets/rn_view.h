@@ -6,7 +6,7 @@
 // and snapshot draws RN styles with GSK: background, gradients, per-side
 // borders with per-corner radii, box shadows, outline, filters, clipping.
 //
-// Plain GTK: no React Native types, so the Phase 0 spike builds it too.
+// Plain GTK: no React Native types.
 #pragma once
 
 #include <gtk/gtk.h>
