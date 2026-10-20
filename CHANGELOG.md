@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.87.5 (2026-10-20)
+
+- CI: build the host and run every self-test on PRs (replaces the Phase 0 spike) (#84)
+
 ## 0.87.4 (2026-10-13)
 
 - New README in the style of react-native-windows/macos, plan moved to docs/roadmap.md, npm keywords (#83)

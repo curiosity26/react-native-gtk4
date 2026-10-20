@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4",
-  "version": "0.87.4",
+  "version": "0.87.5",
   "description": "React Native for Linux on GTK4, an out-of-tree platform like react-native-windows and react-native-macos",
   "keywords": [
     "react",
@@ -66,7 +66,8 @@
     "start:hello-world": "npm --prefix examples/hello-world start",
     "dev:hello-world": "scripts/dev-hello-world.sh",
     "dev:showcase": "scripts/dev-hello-world.sh --module Showcase --width 1100 --height 780",
-    "test:dev-loop": "scripts/test-dev-loop.sh",    "test:new-app": "scripts/test-new-app.sh",
+    "test:dev-loop": "scripts/test-dev-loop.sh",
+    "test:new-app": "scripts/test-new-app.sh",
     "package:showcase": "cd examples/hello-world && npx react-native package-linux"
   },
   "peerDependencies": {
