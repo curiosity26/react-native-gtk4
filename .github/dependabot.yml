@@ -1,0 +1,97 @@
+# Dependabot only raises alerts and security PRs on the default branch
+# (main). The release lines carry their own lockfiles, which drift from
+# main's, so each one gets a weekly patch-only version-update run here.
+#
+# - Patch updates only: minor/major bumps belong to scripts/upgrade-rn.sh.
+# - The React Native core packages never move on their own; a line's RN
+#   version changes only through upgrade-rn.sh.
+# - dependency-type "all" includes transitive packages, so a fix in a
+#   nested dependency (e.g. braces under metro) reaches the lockfiles.
+# - One grouped PR per line per week.
+#
+# When a new release line is cut, add an entry for it below.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /examples/hello-world
+      - /scripts/codegen-deps
+    target-branch: release/0.83
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react-native
+      - dependency-name: "@react-native/*"
+      - dependency-name: react
+    groups:
+      release-0.83-patches:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(release/0.83)"
+
+  - package-ecosystem: npm
+    directories:
+      - /examples/hello-world
+      - /scripts/codegen-deps
+    target-branch: release/0.84
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react-native
+      - dependency-name: "@react-native/*"
+      - dependency-name: react
+    groups:
+      release-0.84-patches:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(release/0.84)"
+
+  - package-ecosystem: npm
+    directories:
+      - /examples/hello-world
+      - /scripts/codegen-deps
+    target-branch: release/0.85
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react-native
+      - dependency-name: "@react-native/*"
+      - dependency-name: react
+    groups:
+      release-0.85-patches:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(release/0.85)"
+
+  - package-ecosystem: npm
+    directories:
+      - /examples/hello-world
+      - /scripts/codegen-deps
+    target-branch: release/0.86
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react-native
+      - dependency-name: "@react-native/*"
+      - dependency-name: react
+    groups:
+      release-0.86-patches:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(release/0.86)"
