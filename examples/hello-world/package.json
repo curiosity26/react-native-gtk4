@@ -17,10 +17,10 @@
     "@curiosity26/react-native-gtk4-webview": "file:../../packages/webview",
     "@react-native-async-storage/async-storage": "3.1.1",
     "@react-native-community/netinfo": "12.0.1",
-    "@react-native-vector-icons/fontawesome6": "13.1.4",
-    "@react-native-vector-icons/ionicons": "13.1.4",
+    "@react-native-vector-icons/fontawesome6": "13.1.5",
+    "@react-native-vector-icons/ionicons": "13.1.5",
     "@react-navigation/bottom-tabs": "7.20.0",
-    "@react-navigation/native": "7.5.0",
+    "@react-navigation/native": "7.5.1",
     "@react-navigation/native-stack": "7.20.0",
     "react": "19.2.0",
     "react-native": "0.83.10",
@@ -31,7 +31,7 @@
     "react-native-webview": "14.0.1"
   },
   "devDependencies": {
-    "@react-native-community/cli": "20.0.0",
+    "@react-native-community/cli": "20.0.2",
     "@react-native/babel-preset": "0.83.10",
     "@react-native/metro-config": "0.83.10",
     "metro": "^0.83.6"
