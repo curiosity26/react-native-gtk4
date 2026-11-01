@@ -12,6 +12,9 @@
 // GTK 4.14 doesn't follow the portal's color-scheme itself, so the app's
 // GtkSettings get gtk-application-prefer-dark-theme to match (and a
 // "-dark" theme is swapped for its light variant while the app is light).
+// GTK 4.20+ uses gtk-interface-color-scheme instead, and the theme's
+// gtk.gresource is kept registered so the theme survives GTK re-parsing it
+// when the scheme changes (Yaru's menus and popovers).
 #pragma once
 
 #include <gio/gio.h>

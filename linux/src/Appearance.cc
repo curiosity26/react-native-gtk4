@@ -6,6 +6,10 @@
 
 #include <cctype>
 #include <cmath>
+#include <initializer_list>
+#include <set>
+#include <string>
+#include <vector>
 
 namespace rngtk {
 
@@ -97,8 +101,93 @@ bool settingsPreferDark(GtkSettings *settings) {
   return preferDark;
 }
 
+std::string buildPath(std::initializer_list<const char *> parts) {
+  std::string path;
+  for (const char *part : parts) {
+    if (!path.empty() && path.back() != '/') path += '/';
+    path += part;
+  }
+  return path;
+}
+
+// Finds the theme's CSS file the way gtk_css_provider_load_named() does:
+// <dir>/themes/<name>/gtk-4.<n>/<file>, newest even minor first, in the
+// user's data dir, ~/.themes, the system data dirs, then GTK's prefix.
+std::string findThemeFolder(const std::string &name, const std::string &file) {
+  std::vector<std::string> bases = {
+      buildPath({g_get_user_data_dir(), "themes"}),
+      buildPath({g_get_home_dir(), ".themes"})};
+  for (const char *const *dir = g_get_system_data_dirs(); *dir; ++dir)
+    bases.push_back(buildPath({*dir, "themes"}));
+  const char *prefix = g_getenv("GTK_DATA_PREFIX");
+  bases.push_back(buildPath({prefix ? prefix : "/usr", "share", "themes"}));
+  int minor = int(gtk_get_minor_version());
+  if (minor % 2) minor++;
+  for (const std::string &base : bases) {
+    std::string themeDir = buildPath({base.c_str(), name.c_str()});
+    if (!g_file_test(themeDir.c_str(), G_FILE_TEST_IS_DIR)) continue;
+    for (int i = minor; i >= 0; i -= 2) {
+      std::string sub = "gtk-4." + std::to_string(i);
+      std::string folder = buildPath({themeDir.c_str(), sub.c_str()});
+      std::string path = buildPath({folder.c_str(), file.c_str()});
+      if (g_file_test(path.c_str(), G_FILE_TEST_EXISTS)) return folder;
+    }
+  }
+  return "";
+}
+
+// GTK 4.20+ re-parses the theme's stylesheet whenever the color scheme
+// handed to it changes (gtk-interface-color-scheme, set by us, by GDK from
+// the portal, or by libadwaita's style manager). The re-parse starts with
+// gtk_css_provider_reset(), which unregisters the gtk.gresource GTK loaded
+// from the theme's folder, so a theme whose gtk.css only @imports its real
+// stylesheet from that resource loses all its styling. Yaru does that:
+// "Failed to import: ... /com/ubuntu/themes/Yaru-purple-dark/4.0/gtk.css
+// does not exist", and menus and popovers draw unstyled. (Adwaita is built
+// into GTK and has no gresource.) A second registration of the same file,
+// kept for the life of the app, keeps those imports working.
+void pinThemeResource(GtkSettings *settings) {
+  // The theme and variant GTK loads (gtksettings.c get_theme_name()).
+  std::string name, variant;
+  if (const char *env = g_getenv("GTK_THEME"); env && *env) {
+    name = env;
+    size_t colon = name.rfind(':');
+    if (colon != std::string::npos) {
+      variant = name.substr(colon + 1);
+      name.resize(colon);
+    }
+  } else {
+    name = themeName(settings);
+    gboolean preferDark = FALSE;
+    int contrast = 0;
+    g_object_get(settings, "gtk-application-prefer-dark-theme", &preferDark,
+                 "gtk-interface-contrast", &contrast, nullptr);
+    if (contrast == 2)  // GTK_INTERFACE_CONTRAST_MORE
+      variant = preferDark ? "hc-dark" : "hc";
+    else if (preferDark)
+      variant = "dark";
+  }
+  if (name.empty()) return;
+  std::string folder = findThemeFolder(
+      name, variant.empty() ? "gtk.css" : "gtk-" + variant + ".css");
+  if (folder.empty()) return;
+  std::string file = buildPath({folder.c_str(), "gtk.gresource"});
+  static std::set<std::string> pinned;
+  if (pinned.count(file)) return;
+  GError *error = nullptr;
+  GResource *resource = g_resource_load(file.c_str(), &error);
+  if (!resource) {
+    g_clear_error(&error);  // no gresource: nothing to lose
+    return;
+  }
+  g_resources_register(resource);  // kept for the life of the app
+  pinned.insert(file);
+  LOG(INFO) << "Appearance: keeping " << file << " registered";
+}
+
 void setSettingsDark(GtkSettings *settings, bool dark) {
   if (hasColorScheme(settings)) {
+    pinThemeResource(settings);
     g_object_set(settings, "gtk-interface-color-scheme", dark ? 2 : 3,
                  nullptr);
   } else {
@@ -265,6 +354,9 @@ void Appearance::apply(bool notify) {
     settingTheme_ = false;
     swappedTheme_ = swap;
   }
+  // The theme GTK has loaded now, before anything else changes the color
+  // scheme (the portal through GDK, libadwaita).
+  if (hasColorScheme(settings_)) pinThemeResource(settings_);
   if (changed && notify && onChange_) onChange_();
 }
 
