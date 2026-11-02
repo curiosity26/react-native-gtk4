@@ -3374,8 +3374,13 @@ void add_windows_steps() {
           gtk_window_close(GTK_WINDOW(app.window));
           return false;
         }
-        return !gtk_widget_get_visible(app.window) &&
-               has_text(app.root, "main close-requested | main closed") && window_count() == 2;
+        // In that order; GTK 4.22 on Wayland reports the hidden window's
+        // blur between them.
+        GtkWidget *events = by_id("events");
+        std::string log = events && RN_IS_TEXT(events) ? rn_text_get_text(RN_TEXT(events)) : "";
+        size_t asked = log.find("main close-requested");
+        return !gtk_widget_get_visible(app.window) && asked != std::string::npos &&
+               log.find("main closed", asked) != std::string::npos && window_count() == 2;
       }});
   app.steps.push_back(Step{
       "closing the last window quits the app",
