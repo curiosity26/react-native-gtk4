@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.83.5 (2026-11-02)
+
+- [0.83] Support GTK 4.20+ and Ubuntu 26.04 prebuilts (from #95, #96) (#98)
+- [0.83] CI: host self-tests on Ubuntu 24.04 and 26.04 (#102)
+
 ## 0.83.4 (2026-10-13)
 
 - [0.83] Prebuilt hosts: fetch the Hermes headers even without autolinked libraries (#78)
