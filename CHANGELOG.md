@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.87.6 (2026-11-02)
+
+- Support GTK 4.20+ fully (Yaru theming, dark variants, 26.04 self-tests and CI) (#95)
+- Prebuilt hosts for Ubuntu 26.04 (#96)
+
 ## 0.87.5 (2026-10-20)
 
 - CI: build the host and run every self-test on PRs (replaces the Phase 0 spike) (#84)
