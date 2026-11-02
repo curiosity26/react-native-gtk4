@@ -3991,8 +3991,22 @@ void add_notifications_steps() {
                gtk_widget_get_visible(app.window);
       }});
   app.steps.push_back(Step{"showing the same id again replaces it",
-                           [] { click("notify"); },
+                           [] {},
                            [] {
+                             // Once the window the last step showed again is
+                             // mapped and laid out (Xwayland can take a few
+                             // frames): a click before that misses the button.
+                             static bool shown = false;
+                             if (!shown) {
+                               GtkWidget *b = by_id("notify");
+                               if (!gtk_widget_get_mapped(app.window) || !b ||
+                                   !gtk_widget_get_mapped(b) || gtk_widget_get_width(b) <= 0)
+                                 return false;
+                               shown = true;
+                               printf("  window shown; %zu notifications so far\n", fake.notes.size());
+                               click("notify");
+                               return false;
+                             }
                              // Again once the server has numbered the first.
                              static bool again = false;
                              if (fake.notes.size() == 3 && !again) {
