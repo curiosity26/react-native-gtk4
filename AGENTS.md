@@ -29,11 +29,15 @@ itself first.
 - Regular expressions: use `escapeRegExp` from `lib/cli/escape.js`. Never
   `s.replace(/\./g, '\\.')` or `s.replace('.', '\\.')` (a string pattern
   replaces only the first match).
-- Generated files: escape the backslash too, in the same pass or first.
+- Generated files: escape the backslash too.
   - CMake quoted arguments: `\`, `"` and `$` (see `cmakePath` in
     `lib/cli/autolinking.js`).
-  - Desktop entries: `desktopValue` (`\\`, `\n`, `\t`), then `\;` inside
-    lists (`lib/cli/appInfo.js`).
+  - Desktop entries: `desktopValue` (`\\`, `\n`, `\t`) and `desktopList`
+    (the same plus `\;`) in `lib/cli/appInfo.js`.
+- Escape every special character in one `replace` with a character class
+  that includes the backslash (`/[\\"$]/g`, or a class plus a lookup
+  table). CodeQL doesn't credit escaping done by an earlier helper call,
+  so `desktopValue(s).replace(/;/g, '\\;')` is still flagged.
   - C/C++ string literals and shell: don't interpolate outside strings;
     pass them as data (arguments, environment) or check them against a
     strict pattern first (`cIdentifier` makes identifiers).
