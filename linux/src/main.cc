@@ -2058,11 +2058,19 @@ void run_probe(std::vector<std::string> extra = {}) {
       nullptr);
 }
 
+// at-spi2-core 2.60 (Ubuntu 26.04) renamed ATSPI_ROLE_PUSH_BUTTON to
+// ATSPI_ROLE_BUTTON: same role (43), but its name is "button", not
+// "push button".
+bool same_role(const std::string &got, const char *want) {
+  if (got == want) return true;
+  return !strcmp(want, "push button") && got == "button";
+}
+
 const folly::dynamic *probe_node(const std::string &name, const char *role = nullptr) {
   if (!probe.result.count("nodes")) return nullptr;
   for (const auto &n : probe.result["nodes"]) {
     if (n.count("name") && n["name"].asString() == name &&
-        (!role || n["role"].asString() == role)) {
+        (!role || same_role(n["role"].asString(), role))) {
       return &n;
     }
   }
