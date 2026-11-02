@@ -4989,7 +4989,10 @@ void add_reanimated_steps() {
   auto track = std::make_shared<Track>();
 
   // An animation moving `id` by `distance` px until the page says `done`.
-  auto moves = [&, track, says](const char *button, const char *id, double distance, std::string done) {
+  // `minSeen`: the positions it has to be seen at on the way. A withDecay
+  // fling at 4000 px/s covers its 200 px in ~50 ms, 3-5 frames.
+  auto moves = [&, track, says](const char *button, const char *id, double distance, std::string done,
+                                size_t minSeen = 5) {
     app.steps.push_back(Step{
         std::string(button) + ": the box moves " + std::to_string(int(distance)) + " px, frame by frame",
         [track, button, id] {
@@ -4998,7 +5001,7 @@ void add_reanimated_steps() {
           click(button);
           each_frame([track, id] { track->seen.insert(lround(left_of(id))); });
         },
-        [track, id, distance, done, says] {
+        [track, id, distance, done, says, minSeen] {
           double x = left_of(id);
           track->seen.insert(lround(x));
           track->frames++;
@@ -5006,7 +5009,7 @@ void add_reanimated_steps() {
           printf("  %zu positions over %d frames, moved %.1f px\n", track->seen.size(), track->frames,
                  x - track->start);
           check(std::abs(x - track->start - distance) < 1.5, "  ends where the animation does");
-          check(track->seen.size() >= 5, "  seen on the way (UI-thread frames)");
+          check(track->seen.size() >= minSeen, "  seen on the way (UI-thread frames)");
           return true;
         }});
   };
@@ -5028,7 +5031,7 @@ void add_reanimated_steps() {
                              check(track->seen.size() >= 5, "  sizes on the way");
                              return true;
                            }});
-  moves("re-decay-go", "re-decay", 200, "decay done at 200");
+  moves("re-decay-go", "re-decay", 200, "decay done at 200", 3);
   // The press starts the animation, then blocks JS for 900 ms: the 300 ms
   // animation ends on the UI runtime before JS can render again (JS can't
   // have moved the box).
