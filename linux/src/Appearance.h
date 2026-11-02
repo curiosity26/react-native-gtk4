@@ -12,6 +12,11 @@
 // GTK 4.14 doesn't follow the portal's color-scheme itself, so the app's
 // GtkSettings get gtk-application-prefer-dark-theme to match (and a
 // "-dark" theme is swapped for its light variant while the app is light).
+// GTK 4.20+ uses gtk-interface-color-scheme instead, and the theme's
+// gtk.gresource is kept registered so the theme survives GTK re-parsing it
+// when the scheme changes (Yaru's menus and popovers). A dark app on a
+// light classic theme gets the theme's "-dark" sibling there (Yaru-purple
+// -> Yaru-purple-dark), since such themes ignore prefers-color-scheme.
 #pragma once
 
 #include <gio/gio.h>
@@ -55,16 +60,19 @@ class Appearance {
                              const char *signal, GVariant *params,
                              gpointer self);
   static void onThemeName(GObject *, GParamSpec *, gpointer self);
+  static void onDisplaySetting(GdkDisplay *, const char *name, gpointer self);
   bool readPortal();
   void applyPortalValue(const char *key, GVariant *value);
   void updateSystem();
   void apply(bool notify);
 
+  GdkDisplay *display_;
   GtkSettings *settings_;
   OnChange onChange_;
   GDBusConnection *bus_{nullptr};
   guint portalSignal_{0};
   gulong themeHandler_{0};
+  gulong displayHandler_{0};
   bool followSystem_;
   const char *source_ = "none";
   // The portal's color-scheme (-1: no portal) and the user's GTK setting.
@@ -73,9 +81,12 @@ class Appearance {
   bool systemDark_{false};
   Scheme override_{Scheme::Unspecified};
   // The theme the desktop set, and whether we replaced it with its light
-  // variant.
+  // variant (or, on GTK 4.20+, its dark one).
   std::string systemTheme_;
   bool swappedTheme_{false};
+  // GTK 4.20+: gtk-application-prefer-dark-theme set for a light theme
+  // that has a gtk-dark.css but no "-dark" sibling.
+  bool preferDarkVariant_{false};
   bool settingTheme_{false};
   bool applied_{false};
   std::atomic<bool> dark_{false};

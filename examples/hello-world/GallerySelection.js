@@ -45,5 +45,7 @@ const styles = StyleSheet.create({
   para: {fontFamily: 'monospace', fontSize: 18, color: '#000000', alignSelf: 'flex-start'},
   status: {fontSize: 14, color: '#333333'},
   wrapper: {padding: 10, backgroundColor: '#EEEEEE', alignSelf: 'flex-start'},
-  scroller: {height: 120, borderWidth: 1, borderColor: '#CCCCCC'},
+  // (flexGrow 0: ScrollView grows by default; at 120 the lines always
+  // overflow it, whatever fonts the system has.)
+  scroller: {height: 120, flexGrow: 0, borderWidth: 1, borderColor: '#CCCCCC'},
 });

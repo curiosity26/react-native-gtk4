@@ -1047,10 +1047,19 @@ void add_images_steps() {
 
 bool is_appearance() { return opts.module == "GalleryAppearance"; }
 
+// GTK's dark variant is on: gtk-interface-color-scheme is "dark" on GTK
+// 4.20+ (the host sets that there), gtk-application-prefer-dark-theme on
+// older GTK.
 bool prefer_dark() {
+  GtkSettings *settings = gtk_settings_get_default();
+  if (g_object_class_find_property(G_OBJECT_GET_CLASS(settings),
+                                   "gtk-interface-color-scheme")) {
+    int scheme = 0;
+    g_object_get(settings, "gtk-interface-color-scheme", &scheme, nullptr);
+    return scheme == 2;  // GTK_INTERFACE_COLOR_SCHEME_DARK
+  }
   gboolean dark = FALSE;
-  g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
-               &dark, nullptr);
+  g_object_get(settings, "gtk-application-prefer-dark-theme", &dark, nullptr);
   return dark;
 }
 
@@ -2047,11 +2056,19 @@ void run_probe(std::vector<std::string> extra = {}) {
       nullptr);
 }
 
+// at-spi2-core 2.60 (Ubuntu 26.04) renamed ATSPI_ROLE_PUSH_BUTTON to
+// ATSPI_ROLE_BUTTON: same role (43), but its name is "button", not
+// "push button".
+bool same_role(const std::string &got, const char *want) {
+  if (got == want) return true;
+  return !strcmp(want, "push button") && got == "button";
+}
+
 const folly::dynamic *probe_node(const std::string &name, const char *role = nullptr) {
   if (!probe.result.count("nodes")) return nullptr;
   for (const auto &n : probe.result["nodes"]) {
     if (n.count("name") && n["name"].asString() == name &&
-        (!role || n["role"].asString() == role)) {
+        (!role || same_role(n["role"].asString(), role))) {
       return &n;
     }
   }
@@ -3342,8 +3359,13 @@ void add_windows_steps() {
           gtk_window_close(GTK_WINDOW(app.window));
           return false;
         }
-        return !gtk_widget_get_visible(app.window) &&
-               has_text(app.root, "main close-requested | main closed") && window_count() == 2;
+        // In that order; GTK 4.22 on Wayland reports the hidden window's
+        // blur between them.
+        GtkWidget *events = by_id("events");
+        std::string log = events && RN_IS_TEXT(events) ? rn_text_get_text(RN_TEXT(events)) : "";
+        size_t asked = log.find("main close-requested");
+        return !gtk_widget_get_visible(app.window) && asked != std::string::npos &&
+               log.find("main closed", asked) != std::string::npos && window_count() == 2;
       }});
   app.steps.push_back(Step{
       "closing the last window quits the app",
@@ -3515,23 +3537,33 @@ void add_titlebar_steps() {
         }
         return true;
       }});
+  static bool dragged = false;
   app.steps.push_back(Step{
       "  ...its title bar drags that window",
       [] {
         auto *p = app.host->pointerHandlerFor(ownId);
         p->setRealInputEnabled(false);
         p->clearLastWindowAction();
-        GtkWidget *tb = by_id("child-titlebar");
-        GtkWidget *root = app.host->rootFor(ownId);
-        graphene_rect_t b{};
-        (void)gtk_widget_compute_bounds(tb, root, &b);
-        // Past the start buttons, left of the title.
-        graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
-        send_in(ownId, P::Down, at);
-        send_in(ownId, P::Move, {at.x + 20, at.y + 20});
-        send_in(ownId, P::Up, {at.x + 20, at.y + 20});
+        dragged = false;
       },
-      [] { return app.host->pointerHandlerFor(ownId)->lastWindowAction() == "move"; }});
+      [] {
+        if (!dragged) {
+          // Once the new window has laid out its title bar (under mutter
+          // 50 the step can come before its first allocation).
+          GtkWidget *tb = by_id("child-titlebar");
+          GtkWidget *root = app.host->rootFor(ownId);
+          graphene_rect_t b{};
+          if (!tb || !root || !gtk_widget_compute_bounds(tb, root, &b) || b.size.width <= 0)
+            return false;
+          dragged = true;
+          // Past the start buttons, left of the title.
+          graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
+          send_in(ownId, P::Down, at);
+          send_in(ownId, P::Move, {at.x + 20, at.y + 20});
+          send_in(ownId, P::Up, {at.x + 20, at.y + 20});
+        }
+        return app.host->pointerHandlerFor(ownId)->lastWindowAction() == "move";
+      }});
   app.steps.push_back(Step{
       "transparent + titleBar 'none': no frame; only the views paint",
       [] { click("open-clear"); },
@@ -3923,8 +3955,22 @@ void add_notifications_steps() {
                gtk_widget_get_visible(app.window);
       }});
   app.steps.push_back(Step{"showing the same id again replaces it",
-                           [] { click("notify"); },
+                           [] {},
                            [] {
+                             // Once the window the last step showed again is
+                             // mapped and laid out (Xwayland can take a few
+                             // frames): a click before that misses the button.
+                             static bool shown = false;
+                             if (!shown) {
+                               GtkWidget *b = by_id("notify");
+                               if (!gtk_widget_get_mapped(app.window) || !b ||
+                                   !gtk_widget_get_mapped(b) || gtk_widget_get_width(b) <= 0)
+                                 return false;
+                               shown = true;
+                               printf("  window shown; %zu notifications so far\n", fake.notes.size());
+                               click("notify");
+                               return false;
+                             }
                              // Again once the server has numbered the first.
                              static bool again = false;
                              if (fake.notes.size() == 3 && !again) {
