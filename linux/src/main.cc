@@ -4001,9 +4001,21 @@ void add_notifications_steps() {
                                click("notify");
                                return false;
                              }
-                             // Again once the server has numbered the first.
+                             // What the server got, as it comes (for a failure).
+                             static size_t seen = 2;
+                             for (; seen < fake.notes.size(); seen++) {
+                               printf("  notification %zu: id %u, replaces %u\n", seen,
+                                      fake.notes[seen].id, fake.notes[seen].replaces);
+                             }
+                             // Again once GLib has the server's number for the
+                             // first: the server records it before it replies,
+                             // and GLib reads the reply on its D-Bus thread, so
+                             // a show right away can go out without it.
+                             static gint64 numbered = 0;
                              static bool again = false;
                              if (fake.notes.size() == 3 && !again) {
+                               if (!numbered) numbered = g_get_monotonic_time();
+                               if (g_get_monotonic_time() - numbered < 250 * 1000) return false;
                                again = true;
                                click("notify");
                              }
