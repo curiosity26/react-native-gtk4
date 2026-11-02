@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.86.3 (2026-11-02)
+
+- [0.86] Merge release/0.85: GTK 4.20+ support and Ubuntu 26.04 prebuilts (#101)
+- [0.86] Merge release/0.85: Host CI on Ubuntu 24.04 and 26.04 (#106)
+
 ## 0.86.2 (2026-10-13)
 
 - [0.86] Merge release/0.85: npm publishing (#70)
