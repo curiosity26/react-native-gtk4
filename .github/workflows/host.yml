@@ -2,22 +2,38 @@ name: Host
 
 # Builds rn-gtk-host (the GTK host and its test harness) and runs every
 # gallery self-test (ctest) headless, under GNOME's compositor (Wayland) and
-# Xvfb with mutter as its window manager (X11). React Native, Hermes and the third-party C++ libraries are
-# cached by the versions and scripts that make them; the host's own objects
-# by ccache.
+# X11, on Ubuntu 24.04 (GTK 4.14, our floor) and 26.04 (GTK 4.22, the
+# current LTS). X11 is Xvfb with mutter as its window manager on 24.04, and
+# Xwayland under mutter on 26.04 (mutter 49+ has no X11 mode). React
+# Native, Hermes and the third-party C++ libraries are cached per Ubuntu by
+# the versions and scripts that make them; the host's own objects by ccache.
 
 on:
   # Pull requests only: what merges has already passed here.
   pull_request:
+
+# Reads the repository; nothing here writes with the token.
+permissions:
+  contents: read
 
 concurrency:
   group: host-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  self-tests:
-    # Ubuntu 24.04 ships GTK 4.14, our floor (same base as Linux Mint 22.3).
-    runs-on: ubuntu-24.04
+  self-tests-os:
+    name: self-tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GTK 4.14, our floor (same base as Linux Mint 22.3).
+          - os: ubuntu-24.04
+            x11: x11
+          # GTK 4.22: gtk-interface-color-scheme, at-spi2-core 2.60.
+          - os: ubuntu-26.04
+            x11: xwayland
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -32,7 +48,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             clang cmake ninja-build pkg-config python3 ccache \
             libgtk-4-dev libadwaita-1-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev \
-            xvfb xauth x11-utils mutter dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 \
+            xvfb xauth x11-utils xwayland mutter dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 \
             fonts-dejavu-core
       - uses: actions/setup-node@v7
         with:
@@ -45,7 +61,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: third-party/deps
-          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rn-version.properties', 'scripts/fetch-rn-deps.py', 'scripts/build-hermes.sh', 'scripts/codegen-deps/**') }}
+          key: deps-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('rn-version.properties', 'scripts/fetch-rn-deps.py', 'scripts/build-hermes.sh', 'scripts/codegen-deps/**') }}
       - name: Fetch React Native and build Hermes
         if: steps.deps.outputs.cache-hit != 'true'
         run: |
@@ -68,8 +84,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .ccache
-          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
-          restore-keys: ccache-${{ runner.os }}-${{ runner.arch }}-
+          key: ccache-${{ matrix.os }}-${{ runner.arch }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.os }}-${{ runner.arch }}-
       - name: Build rn-gtk-host
         id: build
         run: |
@@ -86,6 +102,16 @@ jobs:
 
       - name: Self-tests on Wayland (mutter)
         run: scripts/run-headless.sh wayland -- ctest --test-dir build/linux --output-on-failure
-      - name: Self-tests on X11 (Xvfb)
+      - name: Self-tests on X11 (${{ matrix.x11 == 'x11' && 'Xvfb' || 'Xwayland' }})
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: scripts/run-headless.sh x11 -- ctest --test-dir build/linux --output-on-failure
+        run: scripts/run-headless.sh ${{ matrix.x11 }} -- ctest --test-dir build/linux --output-on-failure
+
+  # The check the rulesets require (.github/rulesets): passes when the
+  # self-tests passed on every Ubuntu above.
+  self-tests:
+    needs: self-tests-os
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every Ubuntu passed
+        run: test "${{ needs.self-tests-os.result }}" = success
