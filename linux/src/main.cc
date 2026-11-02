@@ -763,6 +763,7 @@ Step after_frames(std::string name, int frames, std::function<bool()> pred) {
 struct ScrollTiming {
   std::vector<double> frames;
   gint64 last = 0;
+  gint64 startUs = 0;
   size_t maxViews = 0;
   double cpuStartMs = 0;
 } timing;
@@ -906,6 +907,7 @@ void add_lists_steps() {
         [] {
           rn_scroll_view_scroll_to(scroll_by_id("flatlist"), 0, 0, FALSE);
           timing = ScrollTiming{};
+          timing.startUs = g_get_monotonic_time();
           timing.cpuStartMs = thread_cpu_ms();
         },
         [&mm, notch] {
@@ -914,10 +916,15 @@ void add_lists_steps() {
           if (timing.last) timing.frames.push_back((now - timing.last) / 1000.0);
           timing.last = now;
           timing.maxViews = std::max(timing.maxViews, mm.mountedViewCount());
-          if (timing.frames.size() < 240) {
+          // 240 frames, or what a slow machine (software GL on a CI
+          // runner) draws in 15 s: this measures, it doesn't judge, and
+          // the step times out at 20 s.
+          bool budget = g_get_monotonic_time() - timing.startUs > 15 * G_USEC_PER_SEC;
+          if (timing.frames.size() < 240 && !budget) {
             wheel("flatlist", 0, notch);
             return false;
           }
+          if (timing.frames.empty()) return false;
                     double cpu = thread_cpu_ms() - timing.cpuStartMs;
           auto stats = rngtk::summarize(timing.frames);
           printf("  scrolled %.0f px in %zu frames (%.0f px/frame): frame p50 "
