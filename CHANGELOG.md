@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.87.7 (2026-11-02)
+
+- Rulesets: release lines require the host self-tests; three self-test fixes (#103)
+- Reanimated self-test: the decay step needs 3 positions on the way (#107)
+- Fix CodeQL alerts; scan with advanced setup that skips Flow overrides (#108)
+
 ## 0.87.6 (2026-11-02)
 
 - Support GTK 4.20+ fully (Yaru theming, dark variants, 26.04 self-tests and CI) (#95)
