@@ -15,8 +15,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-4-dev cmake ninja-build g++ xvfb xauth mutter weston \
-            dbus-x11 fonts-dejavu-core
+            libgtk-4-dev cmake ninja-build g++ xvfb xauth x11-utils mutter weston \
+            dbus-x11 python3-gi fonts-dejavu-core
       - name: Build
         run: npm run spike:build
       - name: Test on X11 (Xvfb)
