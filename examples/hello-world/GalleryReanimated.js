@@ -88,7 +88,7 @@ export function ReanimatedAnimations() {
           label="withDecay"
           onPress={() => {
             decay.value = 0;
-            decay.value = withDecay({velocity: 1500, clamp: [0, 200]}, done => {
+            decay.value = withDecay({velocity: 4000, clamp: [0, 200]}, done => {
               runOnJS(show)('decay', `decay done at ${Math.round(decay.value)}`);
             });
           }}
