@@ -22,10 +22,13 @@ const manifest = {
 };
 
 describe('prebuilt hosts', () => {
-  test('are for Ubuntu 24.04, Debian 13, Fedora 44 and 45, EL10 and what is based on them', () => {
+  test('are for Ubuntu 24.04 and 26.04, Debian 13, Fedora 44 and 45, EL10 and what is based on them', () => {
     const sys = prebuilt.prebuiltSystem;
     assert.equal(sys(NOBLE), 'ubuntu24.04');
     assert.equal(sys(MINT), 'ubuntu24.04');
+    assert.equal(sys({ID: 'ubuntu', VERSION_ID: '26.04', VERSION_CODENAME: 'resolute', UBUNTU_CODENAME: 'resolute'}),
+                 'ubuntu26.04');
+    assert.equal(sys({ID: 'zorin', ID_LIKE: 'ubuntu debian', UBUNTU_CODENAME: 'resolute'}), 'ubuntu26.04');
     assert.equal(sys({ID: 'ubuntu', VERSION_CODENAME: 'plucky'}), null);
     assert.equal(sys({ID: 'pop', ID_LIKE: 'ubuntu debian', UBUNTU_CODENAME: 'jammy'}), null);
     assert.equal(sys({ID: 'debian', VERSION_ID: '13', VERSION_CODENAME: 'trixie'}), 'debian13');

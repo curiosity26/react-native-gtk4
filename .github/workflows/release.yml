@@ -11,8 +11,8 @@ name: Release
 #
 # Run it by hand on the branch (Actions, Release, Run workflow). With
 # "publish" ticked it releases: for the package, prebuilt host libraries
-# for x86_64 and aarch64 on Ubuntu 24.04, Debian 13, Fedora 44 and 45, and
-# EL10
+# for x86_64 and aarch64 on Ubuntu 24.04 and 26.04, Debian 13, Fedora 44
+# and 45, and EL10
 # (Debug for run-linux, Release for package-linux)
 # and a GitHub release, v<version>, with them attached, which the package
 # lists with their checksums (prebuilt-hosts.json, attached to the release
@@ -106,7 +106,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x86_64, aarch64]
-        system: [ubuntu24.04, debian13, fedora44, fedora45, el10]
+        system: [ubuntu24.04, ubuntu26.04, debian13, fedora44, fedora45, el10]
         include:
           - arch: x86_64
             runner: ubuntu-24.04
@@ -119,6 +119,18 @@ jobs:
               sudo apt-get update &&
               sudo apt-get install -y --no-install-recommends clang cmake ninja-build
               pkg-config python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev
+          - system: ubuntu26.04
+            install: >-
+              sudo apt-get update &&
+              sudo apt-get install -y --no-install-recommends clang cmake ninja-build
+              pkg-config python3 libgtk-4-dev libsoup-3.0-dev libssl-dev libicu-dev libreadline-dev
+          # (Ubuntu 26.04 on its own runners.)
+          - system: ubuntu26.04
+            arch: x86_64
+            runner: ubuntu-26.04
+          - system: ubuntu26.04
+            arch: aarch64
+            runner: ubuntu-26.04-arm
           - system: debian13
             container: debian:13
             install: >-
