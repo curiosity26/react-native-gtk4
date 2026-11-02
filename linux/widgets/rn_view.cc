@@ -206,6 +206,18 @@ bool backface_visible(GtkWidget *widget) {
   return !m || graphene_matrix_get_value(m, 2, 2) >= 0;
 }
 
+// The view's transform shrinks it below 1% (scale(0) as a zoom starts or
+// ends, rotateY(90deg)): it draws nothing visible, and drawing its text
+// that small trips GTK 4.22's GL renderer on X11 ("pango_font_map_
+// reload_font: assertion 'scale > 0' failed", then GObject criticals).
+bool collapsed(GtkWidget *widget) {
+  const graphene_matrix_t *m = widget_transform(widget);
+  if (!m) return false;
+  float area = graphene_matrix_get_value(m, 0, 0) * graphene_matrix_get_value(m, 1, 1) -
+               graphene_matrix_get_value(m, 0, 1) * graphene_matrix_get_value(m, 1, 0);
+  return std::fabs(area) < 1e-4f;  // 1% of the size on both axes
+}
+
 void push_clip(GtkSnapshot *snapshot, const GskRoundedRect &r, bool rounded) {
   if (rounded) {
     gtk_snapshot_push_rounded_clip(snapshot, &r);
@@ -605,7 +617,7 @@ static void rn_view_snapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   if (s.clip_children) push_clip(snapshot, outline, rounded);
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child;
        child = gtk_widget_get_next_sibling(child)) {
-    if (!GTK_IS_NATIVE(child)) gtk_widget_snapshot_child(widget, child, snapshot);
+    if (!GTK_IS_NATIVE(child) && !collapsed(child)) gtk_widget_snapshot_child(widget, child, snapshot);
   }
   if (s.clip_children) gtk_snapshot_pop(snapshot);
 
