@@ -1047,10 +1047,19 @@ void add_images_steps() {
 
 bool is_appearance() { return opts.module == "GalleryAppearance"; }
 
+// GTK's dark variant is on: gtk-interface-color-scheme is "dark" on GTK
+// 4.20+ (the host sets that there), gtk-application-prefer-dark-theme on
+// older GTK.
 bool prefer_dark() {
+  GtkSettings *settings = gtk_settings_get_default();
+  if (g_object_class_find_property(G_OBJECT_GET_CLASS(settings),
+                                   "gtk-interface-color-scheme")) {
+    int scheme = 0;
+    g_object_get(settings, "gtk-interface-color-scheme", &scheme, nullptr);
+    return scheme == 2;  // GTK_INTERFACE_COLOR_SCHEME_DARK
+  }
   gboolean dark = FALSE;
-  g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
-               &dark, nullptr);
+  g_object_get(settings, "gtk-application-prefer-dark-theme", &dark, nullptr);
   return dark;
 }
 
