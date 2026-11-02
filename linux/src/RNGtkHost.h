@@ -126,8 +126,9 @@ class RNGtkHost {
   // 'url' event, or the initial URL before JS runs.
   void openURL(const std::string &url);
   // Tests: the AppState as if the window changed (0 active, 1 inactive,
-  // 2 background).
-  void setAppStateForTesting(int state) { setAppState(state); }
+  // 2 background). JS hears it even when the host already has that state:
+  // the real window may have changed while JS wasn't listening yet.
+  void setAppStateForTesting(int state) { setAppState(state, true); }
 
   // Windows (AppWindows.cc), main thread unless noted. A window's id is its
   // surface's id (a root tag): the main window's is the one run() got.
@@ -230,7 +231,7 @@ class RNGtkHost {
   void quitIfNoWindows();
   void storeMetrics(facebook::react::SurfaceId id, float width, float height);
   facebook::react::LayoutConstraints constraintsFor(float width, float height) const;
-  void setAppState(int state);
+  void setAppState(int state, bool always = false);
   // The surfaces' layout: size, RTL direction, font scale.
   facebook::react::LayoutConstraints layoutConstraints() const;
   facebook::react::LayoutContext layoutContext() const;
