@@ -27,6 +27,11 @@ The React Native 0.86 line: React Native 0.86.3, branched from 0.85.0.
   too (GDK only computed the new size on the compositor's next configure,
   which might not come).
 
+## 0.85.4 (2026-11-02)
+
+- [0.85] Merge release/0.84: GTK 4.20+ support and Ubuntu 26.04 prebuilts (#100)
+- [0.85] Merge release/0.84: Host CI on Ubuntu 24.04 and 26.04 (#105)
+
 ## 0.85.3 (2026-10-13)
 
 - [0.85] Merge release/0.84: npm publishing (#69)
@@ -50,6 +55,11 @@ The React Native 0.85 line: React Native 0.85.3, branched from 0.84.0.
 - React Native 0.85.3, React 19.2.3, Hermes V1 (hermes-v250829098.0.10), Metro 0.84.
 - No host changes: the 0.84 fixes (font-scale commit hook, Native Animated mount props) carry over.
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.84.4 (2026-11-02)
+
+- [0.84] Merge release/0.83: GTK 4.20+ support and Ubuntu 26.04 prebuilts (#99)
+- [0.84] Merge release/0.83: Host CI on Ubuntu 24.04 and 26.04 (#104)
 
 ## 0.84.3 (2026-10-13)
 
@@ -77,6 +87,11 @@ The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
   mount (a held TouchableOpacity went back to full opacity).
 - Builds with libstdc++ 14 (React Native's TimerManager.cpp lacks `<algorithm>`).
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
+
+## 0.83.5 (2026-11-02)
+
+- [0.83] Support GTK 4.20+ and Ubuntu 26.04 prebuilts (from #95, #96) (#98)
+- [0.83] CI: host self-tests on Ubuntu 24.04 and 26.04 (#102)
 
 ## 0.83.4 (2026-10-13)
 

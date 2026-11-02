@@ -128,16 +128,18 @@ Results and findings: [docs/phase0-results.md](docs/phase0-results.md).
 
 ```sh
 sudo apt install libgtk-4-dev cmake ninja-build g++   # Ubuntu 24.04
-npm run spike:build
+cmake -S spike -B spike/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build spike/build
 spike/build/hello-world                  # opens the window
 spike/build/widget-benchmark --count 10000
 ```
 
-Headless checks (needs `xvfb`, `mutter`, `weston`):
+Headless checks (needs `xvfb`, `x11-utils`, `mutter`, `python3-gi`; CI no
+longer runs them: the Host workflow's self-tests cover these widgets):
 
 ```sh
-npm run spike:test:x11
-npm run spike:test:wayland
+scripts/run-headless.sh x11 -- ctest --test-dir spike/build --output-on-failure
+scripts/run-headless.sh wayland -- ctest --test-dir spike/build --output-on-failure
 scripts/bench-matrix.sh                  # writes spike/out/bench/results.md
 BACKENDS=native scripts/bench-matrix.sh  # on a real desktop session
 ```
