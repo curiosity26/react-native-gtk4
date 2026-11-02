@@ -54,14 +54,16 @@ The workflow:
 - **plan**: `scripts/release.js check`, then what a release would
   publish.
 - **host**, when this package has a new version, for each system
-  (Ubuntu 24.04 on the runner; Debian 13, Fedora 44 and 45, and EL10 in
-  `debian:13`, `fedora:44`, `fedora:45` and `almalinux:10` containers) and
-  architecture (x86_64 on `ubuntu-24.04`, aarch64 on `ubuntu-24.04-arm`):
+  (Ubuntu 24.04 and 26.04 on their own runners; Debian 13, Fedora 44 and
+  45, and EL10 in `debian:13`, `fedora:44`, `fedora:45` and `almalinux:10`
+  containers on the 24.04 ones) and architecture (x86_64 on `ubuntu-24.04`
+  or `ubuntu-26.04`, aarch64 on their `-arm` runners):
   `scripts/prebuilt-host.js build` builds React Native's dependencies,
   Hermes and the host library from source, Debug and Release, and packs
   each install into
   `react-native-gtk4-host-<version>-<system>-<arch>-<debug|release>.tar.gz`
-  (`<system>`: `ubuntu24.04`, `debian13`, `fedora44`, `fedora45` or `el10`).
+  (`<system>`: `ubuntu24.04`, `ubuntu26.04`, `debian13`, `fedora44`,
+  `fedora45` or `el10`).
   The absolute paths in its SDK file become tokens that unpacking fills
   in.
 - **publish**: `scripts/release.js version` writes the new versions and
