@@ -313,7 +313,16 @@ class RNGtkHost::PackageHost final : public rngtk::Host {
   }
   double frameTime() override {
     GdkFrameClock *clock = host_.overlay_ ? gtk_widget_get_frame_clock(GTK_WIDGET(host_.overlay_)) : nullptr;
-    return double(clock ? gdk_frame_clock_get_frame_time(clock) : g_get_monotonic_time()) / 1000.0;
+    gint64 now = g_get_monotonic_time();
+    gint64 frame = clock ? gdk_frame_clock_get_frame_time(clock) : now;
+    // Between frames GDK keeps the last frame's time, which goes stale
+    // while frames pause (an X11 window waiting on the compositor, a busy
+    // machine). An animation started then (a Reanimated entering animation
+    // from the mount) would begin in the past and be over by its first
+    // frame. So: the frame's time while it's current, else now, as
+    // CACurrentMediaTime and System.nanoTime are on iOS and Android.
+    constexpr gint64 kStaleUs = 50 * 1000;
+    return double(now - frame > kStaleUs ? now : frame) / 1000.0;
   }
   void setNativePropsForTag(int tag, folly::dynamic props) override {
     host_.mountingManager_->synchronouslyUpdateViewOnUIThread(tag, props);
