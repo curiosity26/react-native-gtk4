@@ -32,6 +32,11 @@ The React Native 0.84 line: React Native 0.84.1, branched from 0.83.0.
 - Builds with libstdc++ 14 (React Native's TimerManager.cpp lacks `<algorithm>`).
 - Reanimated and Worklets are still not on this line; they need React Native 0.86.
 
+## 0.83.5 (2026-11-02)
+
+- [0.83] Support GTK 4.20+ and Ubuntu 26.04 prebuilts (from #95, #96) (#98)
+- [0.83] CI: host self-tests on Ubuntu 24.04 and 26.04 (#102)
+
 ## 0.83.4 (2026-10-13)
 
 - [0.83] Prebuilt hosts: fetch the Hermes headers even without autolinked libraries (#78)
