@@ -299,8 +299,15 @@ void GtkMountingManager::updateAccessibility(GtkWidget *widget,
     }
   }
   if (labels) {
-    gtk_accessible_update_relation(acc, GTK_ACCESSIBLE_RELATION_LABELLED_BY,
-                                   labels, -1);
+    // (The varargs gtk_accessible_update_relation takes each reference
+    // on its own, NULL-terminated, not a GList; the GtkAccessibleList value
+    // works from GTK 4.14 on.)
+    GtkAccessibleRelation relation = GTK_ACCESSIBLE_RELATION_LABELLED_BY;
+    GValue value = G_VALUE_INIT;
+    g_value_init(&value, GTK_ACCESSIBLE_LIST);
+    g_value_take_boxed(&value, gtk_accessible_list_new_from_list(labels));
+    gtk_accessible_update_relation_value(acc, 1, &relation, &value);
+    g_value_unset(&value);
     // GTK 4.14 doesn't name an element from the relation: the labelling
     // views' text becomes its name too.
     if (props->accessibilityLabel.empty()) {
