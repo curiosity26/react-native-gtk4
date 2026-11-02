@@ -41,6 +41,10 @@
           {
             "context": "test",
             "integration_id": 15368
+          },
+          {
+            "context": "self-tests",
+            "integration_id": 15368
           }
         ]
       }

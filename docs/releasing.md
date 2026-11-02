@@ -95,11 +95,12 @@ npm pack --dry-run          # what the package contains
 
 `main` and `release/*` take changes only through pull requests whose checks
 pass: the rulesets in [.github/rulesets](../.github/rulesets) block direct
-pushes, force pushes and deletion, and require the JS tests (`test`) and,
-on `main`, the host build and self-tests (`self-tests`, from
+pushes, force pushes and deletion, and require the JS tests (`test`) and
+the host build and self-tests (`self-tests`, from
 [host.yml](../.github/workflows/host.yml), which passes when they passed on
-both Ubuntu 24.04 and 26.04; the lines get it once it's cherry-picked into
-them). No approving review is required.
+both Ubuntu 24.04 and 26.04; each release line has its own copy of
+host.yml). No approving review is required. After a change to a ruleset
+file, import it again on the Rulesets page.
 
 The one direct push is the release commit. GITHUB_TOKEN can't be put on a
 ruleset's bypass list, so the release pushes it as a GitHub App of the
