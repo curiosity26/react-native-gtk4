@@ -11,6 +11,10 @@ on:
   # Pull requests only: what merges has already passed here.
   pull_request:
 
+# Reads the repository; nothing here writes with the token.
+permissions:
+  contents: read
+
 concurrency:
   group: host-${{ github.ref }}
   cancel-in-progress: true
