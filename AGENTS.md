@@ -9,7 +9,7 @@ user docs are in [docs/](docs/); this file is about not breaking things.
   ones; fixes land on `main` first, then go to `release/0.83` and merge
   forward (0.83 → 0.84 → 0.85 → 0.86). See [docs/releasing.md](docs/releasing.md).
 - `main` and `release/*` are protected: changes go through pull requests
-  with the `test` (and on `main`, `self-tests`) checks green.
+  with the `test` and `self-tests` checks green.
 
 ## Security: CodeQL code scanning
 
