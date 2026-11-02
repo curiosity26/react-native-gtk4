@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.83.6 (2026-11-02)
+
+- deps(release/0.83): Bump the release-0-83-patches group across 2 directories with 37 updates (#111)
+- [0.83] Remove the spike CI job (#112)
+- [0.83] Fix CodeQL alerts; scan with advanced setup that skips Flow overrides (from #108) (#117)
+
 ## 0.83.5 (2026-11-02)
 
 - [0.83] Support GTK 4.20+ and Ubuntu 26.04 prebuilts (from #95, #96) (#98)
