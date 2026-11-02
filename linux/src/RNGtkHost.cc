@@ -974,9 +974,9 @@ void RNGtkHost::updateAppState() {
   setAppState(active ? 0 : shown ? 1 : 2);
 }
 
-void RNGtkHost::setAppState(int state) {
+void RNGtkHost::setAppState(int state, bool always) {
   int before = platform_->appState.exchange(state);
-  if (before == state || !loaded_ || !reactHost_) return;
+  if ((before == state && !always) || !loaded_ || !reactHost_) return;
   reactHost_->emitDeviceEvent(folly::dynamic::array(
       "appStateDidChange", folly::dynamic::object("app_state", appStateName(state))));
   // Android's focus/blur (AppState 'focus' and 'blur' listeners).
