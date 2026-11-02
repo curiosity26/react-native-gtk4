@@ -3573,23 +3573,33 @@ void add_titlebar_steps() {
         }
         return true;
       }});
+  static bool dragged = false;
   app.steps.push_back(Step{
       "  ...its title bar drags that window",
       [] {
         auto *p = app.host->pointerHandlerFor(ownId);
         p->setRealInputEnabled(false);
         p->clearLastWindowAction();
-        GtkWidget *tb = by_id("child-titlebar");
-        GtkWidget *root = app.host->rootFor(ownId);
-        graphene_rect_t b{};
-        (void)gtk_widget_compute_bounds(tb, root, &b);
-        // Past the start buttons, left of the title.
-        graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
-        send_in(ownId, P::Down, at);
-        send_in(ownId, P::Move, {at.x + 20, at.y + 20});
-        send_in(ownId, P::Up, {at.x + 20, at.y + 20});
+        dragged = false;
       },
-      [] { return app.host->pointerHandlerFor(ownId)->lastWindowAction() == "move"; }});
+      [] {
+        if (!dragged) {
+          // Once the new window has laid out its title bar (under mutter
+          // 50 the step can come before its first allocation).
+          GtkWidget *tb = by_id("child-titlebar");
+          GtkWidget *root = app.host->rootFor(ownId);
+          graphene_rect_t b{};
+          if (!tb || !root || !gtk_widget_compute_bounds(tb, root, &b) || b.size.width <= 0)
+            return false;
+          dragged = true;
+          // Past the start buttons, left of the title.
+          graphene_point_t at{b.origin.x + b.size.width / 2, b.origin.y + 6};
+          send_in(ownId, P::Down, at);
+          send_in(ownId, P::Move, {at.x + 20, at.y + 20});
+          send_in(ownId, P::Up, {at.x + 20, at.y + 20});
+        }
+        return app.host->pointerHandlerFor(ownId)->lastWindowAction() == "move";
+      }});
   app.steps.push_back(Step{
       "transparent + titleBar 'none': no frame; only the views paint",
       [] { click("open-clear"); },
