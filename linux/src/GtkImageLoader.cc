@@ -174,7 +174,13 @@ void GtkImageLoader::decode(const std::string &uri,
       GdkPixbuf *pixbuf = gdk_pixbuf_new_from_stream(stream, nullptr, &error);
       g_object_unref(stream);
       if (pixbuf) {
-        texture = gdk_texture_new_for_pixbuf(pixbuf);
+        // (gdk_texture_new_for_pixbuf is deprecated since GTK 4.20.)
+        GBytes *pixels = gdk_pixbuf_read_pixel_bytes(pixbuf);
+        texture = gdk_memory_texture_new(
+            gdk_pixbuf_get_width(pixbuf), gdk_pixbuf_get_height(pixbuf),
+            gdk_pixbuf_get_has_alpha(pixbuf) ? GDK_MEMORY_R8G8B8A8 : GDK_MEMORY_R8G8B8,
+            pixels, size_t(gdk_pixbuf_get_rowstride(pixbuf)));
+        g_bytes_unref(pixels);
         g_object_unref(pixbuf);
       }
     }
