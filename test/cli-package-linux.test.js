@@ -120,6 +120,18 @@ describe('desktop entry and MetaInfo', () => {
     );
   });
 
+  test('desktopEntry escapes backslashes, semicolons and newlines in values and lists', () => {
+    const entry = desktopEntry({
+      ...info,
+      displayName: 'A\\B',
+      summary: 'one\ntwo',
+      keywords: ['semi;colon', 'back\\slash;'],
+    });
+    assert.match(entry, /^Name=A\\\\B$/m);
+    assert.match(entry, /^Comment=one\\ntwo$/m);
+    assert.ok(entry.includes('Keywords=semi\\;colon;back\\\\slash\\;;\n'), entry);
+  });
+
   test('metainfo', () => {
     const xml = metainfo(info, {date: '2026-10-09'});
     assert.match(xml, /<id>org\.example\.MyApp<\/id>/);

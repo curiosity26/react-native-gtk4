@@ -131,6 +131,8 @@ scripts/test-new-app.sh     # end to end: new apps from the npm tarball
 
 Building React Native from source: [docs/building-react-native.md](docs/building-react-native.md).
 How releases are cut and published: [docs/releasing.md](docs/releasing.md).
+Rules for changes, including the security checks CodeQL runs on every pull
+request: [AGENTS.md](AGENTS.md).
 Issues and pull requests are welcome on
 [GitHub](https://github.com/curiosity26/react-native-gtk4/issues).
 
