@@ -41,6 +41,7 @@ accessibility (Orca).
 
 - **A GNOME-based desktop with GTK 4.14 or newer**, on X11 or Wayland:
   - Ubuntu 24.04 and Linux Mint 22 (Cinnamon)
+  - Ubuntu 26.04
   - Debian 13
   - Fedora 44 and 45
   - Enterprise Linux 10 (RHEL, CentOS Stream, AlmaLinux, Rocky Linux)
