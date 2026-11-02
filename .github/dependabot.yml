@@ -31,6 +31,7 @@ updates:
       - dependency-name: react
       # Our own ports, linked from packages/ with file: (not on a registry).
       - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.83-patches:
         patterns: ["*"]
@@ -54,6 +55,7 @@ updates:
       - dependency-name: react
       # Our own ports, linked from packages/ with file: (not on a registry).
       - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.84-patches:
         patterns: ["*"]
@@ -77,6 +79,7 @@ updates:
       - dependency-name: react
       # Our own ports, linked from packages/ with file: (not on a registry).
       - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.85-patches:
         patterns: ["*"]
@@ -100,6 +103,7 @@ updates:
       - dependency-name: react
       # Our own ports, linked from packages/ with file: (not on a registry).
       - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.86-patches:
         patterns: ["*"]
