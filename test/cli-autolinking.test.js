@@ -58,6 +58,8 @@ describe('dependencyConfig', () => {
   test('C identifiers', () => {
     assert.equal(cIdentifier('react-native-gtk.calendar'), 'react_native_gtk_calendar');
     assert.equal(cIdentifier('3d-thing'), 'lib_3d_thing');
+    assert.equal(cIdentifier('@scope/__a--b__'), 'scope_a_b');
+    assert.equal(cIdentifier('_'.repeat(50000) + '!'), 'lib_');
   });
 });
 
@@ -77,6 +79,11 @@ describe('generated files', () => {
     assert.match(text, /if\(NOT TARGET react_native_a\)/);
     assert.ok(text.includes(`add_subdirectory("${lib.sourceDir}" "\${CMAKE_BINARY_DIR}/autolinked/react_native_a")`));
     assert.match(text, /list\(APPEND RNGTK_AUTOLINKED_TARGETS react_native_a\)/);
+  });
+
+  test('autolinking.cmake takes any source path literally', () => {
+    const text = autolinkingCmake([{...library('react-native-a').linux, sourceDir: '/p/a"b\\c${HOME}/linux'}]);
+    assert.ok(text.includes('add_subdirectory("/p/a\\"b\\\\c\\${HOME}/linux" '), text);
   });
 
   test('autolinking.cc returns each package', () => {
