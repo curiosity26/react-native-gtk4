@@ -6,6 +6,7 @@
 
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <set>
 #include <string>
@@ -57,6 +58,22 @@ std::string themeName(GtkSettings *settings) {
   std::string s = name ? name : "";
   g_free(name);
   return s;
+}
+
+// The desktop's theme as GDK reads it (XSettings, or the portal on
+// Wayland). Once we set gtk-theme-name ourselves, GtkSettings keeps our
+// value and stops following the desktop's, so its own property can't
+// tell us the desktop changed theme.
+std::string desktopTheme(GdkDisplay *display, GtkSettings *settings) {
+  GValue value = G_VALUE_INIT;
+  g_value_init(&value, G_TYPE_STRING);
+  std::string theme;
+  if (gdk_display_get_setting(display, "gtk-theme-name", &value) &&
+      g_value_get_string(&value)) {
+    theme = g_value_get_string(&value);
+  }
+  g_value_unset(&value);
+  return theme.empty() ? themeName(settings) : theme;
 }
 
 // A portal value comes as a variant, inside another one from Read().
@@ -200,10 +217,11 @@ void setSettingsDark(GtkSettings *settings, bool dark) {
 
 Appearance::Appearance(GdkDisplay *display, bool followSystem,
                        OnChange onChange)
-    : settings_(gtk_settings_get_for_display(display)),
+    : display_(display),
+      settings_(gtk_settings_get_for_display(display)),
       onChange_(std::move(onChange)),
       followSystem_(followSystem) {
-  systemTheme_ = themeName(settings_);
+  systemTheme_ = desktopTheme(display, settings_);
   // The user's own setting (settings.ini, XSettings), before we set it.
   userPreferDark_ = settingsPreferDark(settings_);
   if (followSystem) {
@@ -227,12 +245,15 @@ Appearance::Appearance(GdkDisplay *display, bool followSystem,
   // The desktop changes the theme (Ubuntu's dark style picks Yaru-dark).
   themeHandler_ = g_signal_connect(settings_, "notify::gtk-theme-name",
                                    G_CALLBACK(onThemeName), this);
+  displayHandler_ = g_signal_connect(display, "setting-changed",
+                                     G_CALLBACK(onDisplaySetting), this);
   apply(false);
 }
 
 Appearance::~Appearance() {
   if (portalSignal_) g_dbus_connection_signal_unsubscribe(bus_, portalSignal_);
   if (themeHandler_) g_signal_handler_disconnect(settings_, themeHandler_);
+  if (displayHandler_) g_signal_handler_disconnect(display_, displayHandler_);
   g_clear_object(&bus_);
 }
 
@@ -322,6 +343,18 @@ void Appearance::onThemeName(GObject *, GParamSpec *, gpointer data) {
   self->apply(true);
 }
 
+// The desktop changed theme (GDK's setting). GtkSettings already passed
+// it on, and onThemeName ran, unless we had swapped the theme.
+void Appearance::onDisplaySetting(GdkDisplay *, const char *name, gpointer data) {
+  if (strcmp(name, "gtk-theme-name") != 0) return;
+  auto *self = static_cast<Appearance *>(data);
+  std::string theme = desktopTheme(self->display_, self->settings_);
+  if (theme == self->systemTheme_) return;
+  self->systemTheme_ = theme;
+  self->updateSystem();
+  self->apply(true);
+}
+
 void Appearance::setOverride(Scheme scheme) {
   override_ = scheme;
   apply(true);
@@ -345,14 +378,38 @@ void Appearance::apply(bool notify) {
   // GTK's own widgets: the theme's dark variant, or its light one when
   // the desktop's theme is a dark theme and the app is light.
   setSettingsDark(settings_, dark);
-  bool swap = !dark && isDarkTheme(systemTheme_);
-  if (swap != swappedTheme_) {
+  std::string theme = systemTheme_;
+  bool preferDarkVariant = false;
+  if (!dark && isDarkTheme(systemTheme_)) {
+    theme = lightVariant(systemTheme_);
+  } else if (dark && hasColorScheme(settings_) && !isDarkTheme(systemTheme_)) {
+    // GTK 4.20+ hands a classic theme only prefers-color-scheme, which
+    // Yaru doesn't use: its dark look is the "<theme>-dark" sibling, or
+    // the theme's own gtk-dark.css, which GTK still loads for
+    // gtk-application-prefer-dark-theme (libadwaita warns about that one,
+    // so it's only the fallback). Adwaita is built in and needs neither.
+    std::string sibling = systemTheme_ + "-dark";
+    if (!findThemeFolder(sibling, "gtk.css").empty()) {
+      theme = sibling;
+    } else if (!findThemeFolder(systemTheme_, "gtk-dark.css").empty()) {
+      preferDarkVariant = true;
+    }
+  }
+  bool swap = theme != systemTheme_;
+  if (swap && theme != themeName(settings_)) {
     settingTheme_ = true;
-    g_object_set(settings_, "gtk-theme-name",
-                 (swap ? lightVariant(systemTheme_) : systemTheme_).c_str(),
-                 nullptr);
+    g_object_set(settings_, "gtk-theme-name", theme.c_str(), nullptr);
     settingTheme_ = false;
-    swappedTheme_ = swap;
+  } else if (!swap && swappedTheme_) {
+    // Follow the desktop's theme again.
+    settingTheme_ = true;
+    gtk_settings_reset_property(settings_, "gtk-theme-name");
+    settingTheme_ = false;
+  }
+  swappedTheme_ = swap;
+  if (preferDarkVariant != preferDarkVariant_) {
+    g_object_set(settings_, "gtk-application-prefer-dark-theme", preferDarkVariant, nullptr);
+    preferDarkVariant_ = preferDarkVariant;
   }
   // The theme GTK has loaded now, before anything else changes the color
   // scheme (the portal through GDK, libadwaita).
