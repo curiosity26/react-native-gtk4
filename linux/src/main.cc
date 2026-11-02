@@ -5128,10 +5128,14 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              *seen = Seen{};
                              click("rl-add-slide");
+                             // (start: the leftmost position seen. The new
+                             // item can be laid out where it ends up for a
+                             // frame before the animation's first frame moves
+                             // it a window's width to the left.)
                              each_frame([seen] {
                                if (!item("rl-item-4")) return;
                                double x = item_left("rl-item-4");
-                               if (!seen->appeared) seen->start = x;
+                               if (!seen->appeared || x < seen->start) seen->start = x;
                                seen->appeared = true;
                                seen->values.insert(lround(x));
                              });
@@ -5139,11 +5143,14 @@ void add_reanimated_layout_steps() {
                            [seen] {
                              if (!item("rl-item-4")) return false;
                              double x = item_left("rl-item-4");
-                             if (!seen->appeared) seen->start = x;
+                             if (!seen->appeared || x < seen->start) seen->start = x;
                              seen->appeared = true;
                              seen->values.insert(lround(x));
                              double final_x = item_left("rl-item-2") + 98;
-                             if (std::abs(x - final_x) > 0.5) return false;
+                             // Done once it slid in from off to the left (it
+                             // starts a window's width, 940, left of it), not
+                             // when it's laid out there before it starts.
+                             if (std::abs(x - final_x) > 0.5 || seen->start > final_x - 400) return false;
                              printf("  from %.0f to %.0f over %zu positions\n", seen->start, x, seen->values.size());
                              check(seen->start < x - 50, "  it started to the left");
                              check(seen->values.size() >= 4, "  it moved frame by frame");
