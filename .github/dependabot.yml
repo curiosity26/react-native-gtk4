@@ -8,6 +8,8 @@
 # - dependency-type "all" includes transitive packages, so a fix in a
 #   nested dependency (e.g. braces under metro) reaches the lockfiles.
 # - One grouped PR per line per week.
+# - Our own @curiosity26/* ports are file: links into packages/; Dependabot
+#   can't look them up on a registry, so they're ignored.
 #
 # When a new release line is cut, add an entry for it below.
 version: 2
@@ -27,6 +29,9 @@ updates:
       - dependency-name: react-native
       - dependency-name: "@react-native/*"
       - dependency-name: react
+      # Our own ports, linked from packages/ with file: (not on a registry).
+      - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.83-patches:
         patterns: ["*"]
@@ -48,6 +53,9 @@ updates:
       - dependency-name: react-native
       - dependency-name: "@react-native/*"
       - dependency-name: react
+      # Our own ports, linked from packages/ with file: (not on a registry).
+      - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.84-patches:
         patterns: ["*"]
@@ -69,6 +77,9 @@ updates:
       - dependency-name: react-native
       - dependency-name: "@react-native/*"
       - dependency-name: react
+      # Our own ports, linked from packages/ with file: (not on a registry).
+      - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.85-patches:
         patterns: ["*"]
@@ -90,6 +101,9 @@ updates:
       - dependency-name: react-native
       - dependency-name: "@react-native/*"
       - dependency-name: react
+      # Our own ports, linked from packages/ with file: (not on a registry).
+      - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
     groups:
       release-0.86-patches:
         patterns: ["*"]
