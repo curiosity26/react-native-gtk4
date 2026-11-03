@@ -1,0 +1,11 @@
+# CodeQL configuration for .github/workflows/codeql.yml.
+name: react-native-gtk4
+
+paths-ignore:
+  # Flow-typed copies of React Native's own Libraries/ files. They use Flow
+  # syntax CodeQL's JavaScript parser can't read (`x as T` casts, `readonly`
+  # properties, variance on keyword keys like `+default`), so analysing them
+  # only produces "Unexpected token" parse errors. They are UI glue with no
+  # input handling; keep new security-relevant code (CLI, scripts) out of
+  # overrides/ so it stays scanned. See AGENTS.md.
+  - overrides/**
