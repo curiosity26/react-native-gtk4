@@ -21,11 +21,24 @@ headers=$deps/hermes-headers
 if ((!headers_only)); then
 
 # Same compiler as React Native's core (clang), so the C++ ABI matches.
+cc=${CC:-clang}
+cxx=${CXX:-clang++}
+
 # React Native 0.83's jsi.h uses uint64_t without <cstdint>, which newer
 # libstdc++ (GCC 15: Fedora, EL10's toolset) no longer pulls in.
+cxxflags="-include cstdint ${CXXFLAGS:-}"
+
+# clang 20+ flags Hermes's deliberate memcpy of PinnedHermesValue (a plain
+# 64-bit value) with -Wnontrivial-memcall, once per file that includes
+# HermesValue-inline.h. Turn it off where the compiler knows the warning;
+# older clang would warn about an unknown option instead.
+if "$cxx" -Werror -Wnontrivial-memcall -x c++ -fsyntax-only /dev/null 2>/dev/null; then
+  cxxflags="$cxxflags -Wno-nontrivial-memcall"
+fi
+
 cmake -S "$src" -B "$build" -G Ninja --log-level=ERROR -Wno-dev \
-  -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
-  -DCMAKE_CXX_FLAGS="-include cstdint ${CXXFLAGS:-}" \
+  -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
+  -DCMAKE_CXX_FLAGS="$cxxflags" \
   -DJSI_DIR="$deps/react-native/packages/react-native/ReactCommon/jsi" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHERMES_ENABLE_DEBUGGER=True \
