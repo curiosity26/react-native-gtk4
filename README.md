@@ -95,6 +95,9 @@ scripts/test-new-app.sh     # end to end: new apps from the npm tarball
 
 ![Hello World on GTK4 under Wayland](docs/images/hello-world-linux-wayland.png)
 
+Rules for changes, including the security checks CodeQL runs on every pull
+request: [AGENTS.md](AGENTS.md).
+
 ## Targets
 
 - GNOME on Ubuntu/Debian and Fedora, and Linux Mint Cinnamon.
