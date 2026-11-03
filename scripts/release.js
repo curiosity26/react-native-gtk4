@@ -36,6 +36,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const {escapeRegExp} = require('../lib/cli/escape');
+
 const ROOT = path.join(__dirname, '..');
 const SCOPE = '@curiosity26';
 const REGISTRY = 'https://npm.pkg.github.com';
@@ -113,7 +115,7 @@ function next(p, ln, root = ROOT) {
   const prefix = tagPrefix(p);
   const tags = git(root, ['tag', '--merged', 'HEAD', '--list', `${prefix}${ln}.*`])
     .split('\n')
-    .filter(t => new RegExp(`^${prefix.replace(/[.@]/g, '\\$&')}${ln.replace('.', '\\.')}\\.\\d+$`).test(t))
+    .filter(t => new RegExp(`^${escapeRegExp(prefix + ln)}\\.\\d+$`).test(t))
     .sort((a, b) => patchOf(a.slice(prefix.length)) - patchOf(b.slice(prefix.length)));
   const last = tags.pop();
   const current = p.pkg.version;
@@ -149,7 +151,7 @@ function problems(root = ROOT) {
   const out = [];
   for (const p of list) {
     const {name, version} = p.pkg;
-    if (!new RegExp(`^${ln.replace('.', '\\.')}\\.\\d+$`).test(version || '')) {
+    if (!new RegExp(`^${escapeRegExp(ln)}\\.\\d+$`).test(version || '')) {
       out.push(`${name} is ${version}: it should be ${ln}.<patch> (React Native ${ln})`);
     }
     for (const [dep, range] of Object.entries(p.pkg.peerDependencies || {})) {

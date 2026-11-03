@@ -15,6 +15,7 @@ const {
 } = require('../lib/cli/prereqs');
 const {appArgs, terminalCommand} = require('../lib/cli/runLinux');
 const paths = require('../lib/cli/paths');
+const {escapeRegExp} = require('../lib/cli/escape');
 
 const OS_RELEASE = {
   ubuntu: 'PRETTY_NAME="Ubuntu 24.04.5 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"\nID=ubuntu\nID_LIKE=debian\n',
@@ -172,7 +173,7 @@ describe('run-linux helpers', () => {
     assert.equal(paths.cacheRoot({RNGTK_CACHE_DIR: '/c'}), '/c');
     assert.equal(paths.depsDir({RNGTK_CACHE_DIR: '/c'}), path.join('/c', rn, 'deps'));
     assert.equal(paths.depsDir({RNGTK_DEPS_DIR: '/d'}), '/d');
-    assert.match(paths.hostDir({RNGTK_CACHE_DIR: '/c'}), new RegExp(`^/c/${rn.replace(/\./g, '\\.')}/host/[0-9a-f]{12}$`));
+    assert.match(paths.hostDir({RNGTK_CACHE_DIR: '/c'}), new RegExp(`^/c/${escapeRegExp(rn)}/host/[0-9a-f]{12}$`));
     assert.equal(paths.hostSourceId(), paths.hostSourceId());
   });
 
