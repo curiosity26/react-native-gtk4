@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.85.5 (2026-11-03)
+
+- deps(release/0.85): Bump the release-0-85-patches group across 2 directories with 43 updates (#114)
+- [0.85] Merge release/0.84: remove the spike CI job (#116)
+- [0.85] Merge release/0.84: CodeQL fixes (#121)
+
 ## 0.85.4 (2026-11-02)
 
 - [0.85] Merge release/0.84: GTK 4.20+ support and Ubuntu 26.04 prebuilts (#100)
