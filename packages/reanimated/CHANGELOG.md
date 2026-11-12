@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.88.0 (unreleased)
+## 0.88.0 (2026-11-12)
 
 The React Native 0.88 line: unchanged from the 0.87 line, for React Native 0.88.
 
