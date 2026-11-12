@@ -1,5 +1,5 @@
 /**
- * Linux override of react-native/Libraries/Alert/Alert (RN 0.87.1).
+ * Linux override of react-native/Libraries/Alert/Alert (RN 0.88.1).
  *
  * Alert.alert and Alert.prompt both show a GTK message dialog through the
  * host's AlertManager (linux/src/Dialogs.cc), modal over the app's active

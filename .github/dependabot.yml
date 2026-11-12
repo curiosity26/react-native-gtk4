@@ -109,3 +109,27 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "deps(release/0.86)"
+
+  - package-ecosystem: npm
+    directories:
+      - /examples/hello-world
+      - /scripts/codegen-deps
+    target-branch: release/0.87
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: react-native
+      - dependency-name: "@react-native/*"
+      - dependency-name: react
+      # Our own ports, linked from packages/ with file: (not on a registry).
+      - dependency-name: "@curiosity26/*"
+      - dependency-name: "../../packages/*" # how Dependabot names them in errors
+    groups:
+      release-0.87-patches:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps(release/0.87)"

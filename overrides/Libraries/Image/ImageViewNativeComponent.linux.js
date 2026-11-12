@@ -1,6 +1,6 @@
 /**
  * Linux override of react-native/Libraries/Image/ImageViewNativeComponent
- * (RN 0.87.1, imports rewritten to react-native-upstream/...).
+ * (RN 0.88.1, imports rewritten to react-native-upstream/...).
  *
  * The only change: Linux uses Android's RCTImageView view config. Image on
  * Linux is Image.android.js (see Image.linux.js), which sends Android's

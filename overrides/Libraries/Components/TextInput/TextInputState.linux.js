@@ -1,6 +1,6 @@
 /**
  * Linux override of react-native/Libraries/Components/TextInput/TextInputState
- * (RN 0.87.1, imports rewritten to react-native-upstream/...).
+ * (RN 0.88.1, imports rewritten to react-native-upstream/...).
  *
  * focusTextInput/blurTextInput send the focus/blur commands only for 'ios'
  * and 'android'; Linux sends the iOS ones (its TextInput is the iOS native

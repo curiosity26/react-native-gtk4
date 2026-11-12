@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.88.0 (unreleased)
+
+The React Native 0.88 line: unchanged from the 0.87 line, for React Native 0.88.
+
 ## 0.87.2 (2026-10-13)
 
 - New README in the style of react-native-windows/macos, plan moved to docs/roadmap.md, npm keywords (#83)

@@ -1,5 +1,5 @@
 /**
- * Linux override of react-native/Libraries/Components/View/View (RN 0.87.1,
+ * Linux override of react-native/Libraries/Components/View/View (RN 0.88.1,
  * imports rewritten to react-native-upstream/...).
  *
  * Adds the `contextMenu` prop: menu items with onSelect callbacks, sent to

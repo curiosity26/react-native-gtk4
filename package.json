@@ -1,6 +1,6 @@
 {
   "name": "@curiosity26/react-native-gtk4",
-  "version": "0.87.7",
+  "version": "0.88.0",
   "description": "React Native for Linux on GTK4, an out-of-tree platform like react-native-windows and react-native-macos",
   "keywords": [
     "react",
@@ -71,6 +71,6 @@
     "package:showcase": "cd examples/hello-world && npx react-native package-linux"
   },
   "peerDependencies": {
-    "react-native": "0.87.1"
+    "react-native": "0.88.1"
   }
 }

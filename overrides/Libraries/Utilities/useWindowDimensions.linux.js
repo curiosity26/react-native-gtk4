@@ -1,6 +1,6 @@
 /**
  * Linux override of react-native/Libraries/Utilities/useWindowDimensions
- * (RN 0.87.1).
+ * (RN 0.88.1).
  *
  * An app can have several windows (Windows from @curiosity26/react-native-
  * gtk4), each a surface of its own: the hook reports the window the

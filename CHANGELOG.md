@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.88.0 (unreleased)
+
+The React Native 0.88 line: React Native 0.88.1, from 0.87.7. The 0.87
+line continues on `release/0.87` (dist-tag `v0.87-stable`).
+
+- React Native 0.88.1, React 19.3.0, Hermes hermes-v260318099.0.5, Metro 0.87.
+- TextInput follows React Native 0.88's: blurs a focused input before
+  unregistering it on unmount.
+
 ## 0.87.7 (2026-11-02)
 
 - Rulesets: release lines require the host self-tests; three self-test fixes (#103)
