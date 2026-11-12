@@ -8,6 +8,10 @@ user docs are in [docs/](docs/); this file is about not breaking things.
 - `main` tracks the latest React Native. `release/X.Y` lines track older
   ones; fixes land on `main` first, then go to `release/0.83` and merge
   forward (0.83 → 0.84 → 0.85 → 0.86). See [docs/releasing.md](docs/releasing.md).
+- `release/0.87` was cut from `main` when `main` moved to React Native 0.88,
+  so it already has `main`'s fixes up to then; later ones are cherry-picked
+  onto it. Don't merge `release/0.86` into it (0.83-0.86 carry line-only
+  workarounds that 0.87 doesn't need).
 - `main` and `release/*` are protected: changes go through pull requests
   with the `test` and `self-tests` checks green.
 

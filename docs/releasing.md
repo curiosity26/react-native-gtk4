@@ -20,7 +20,8 @@ packages to all of this.
 
 | Branch | React Native | npm dist-tags |
 |---|---|---|
-| `main` | the latest (0.87) | `latest`, `v0.87-stable` |
+| `main` | the latest (0.88) | `latest`, `v0.88-stable` |
+| `release/0.87` | 0.87 | `v0.87-stable` |
 | `release/0.83` | 0.83 | `v0.83-stable` |
 
 Each release line is branched from the one before it (`release/0.84` from

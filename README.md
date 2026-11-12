@@ -58,7 +58,7 @@ accessibility (Orca).
 Add Linux to a React Native app:
 
 ```sh
-npx @react-native-community/cli@20.2.0 init MyApp --version 0.87.1
+npx @react-native-community/cli@20.2.0 init MyApp --version 0.88.1
 cd MyApp
 npm install @curiosity26/react-native-gtk4
 npx react-native init-linux      # adds linux/, Metro's linux platform, "npm run linux"
@@ -85,14 +85,15 @@ React Native's major.minor plus a patch of its own, and each line has a
 
 | React Native | Package | Install |
 | --- | --- | --- |
-| 0.87 | 0.87.x | `npm install @curiosity26/react-native-gtk4` (`latest`) |
+| 0.88 | 0.88.x | `npm install @curiosity26/react-native-gtk4` (`latest`) |
+| 0.87 | 0.87.x | `npm install @curiosity26/react-native-gtk4@v0.87-stable` |
 | 0.86 | 0.86.x | `npm install @curiosity26/react-native-gtk4@v0.86-stable` |
 | 0.85 | 0.85.x | `npm install @curiosity26/react-native-gtk4@v0.85-stable` |
 | 0.84 | 0.84.x | `npm install @curiosity26/react-native-gtk4@v0.84-stable` |
 | 0.83 | 0.83.x | `npm install @curiosity26/react-native-gtk4@v0.83-stable` |
 
 `main` tracks the newest React Native; older lines live on `release/0.83`
-to `release/0.86`. Reanimated and Worklets need React Native 0.86 or newer.
+to `release/0.87`. Reanimated and Worklets need React Native 0.86 or newer.
 
 ## Community libraries
 
